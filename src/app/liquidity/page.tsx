@@ -75,6 +75,7 @@ export default function LiquidityPage() {
     const [priceUpper, setPriceUpper] = useState('');
     const [clPoolPrice, setClPoolPrice] = useState<number | null>(null);
     const [clPoolAddress, setClPoolAddress] = useState<string | null>(null);
+    const [initialPrice, setInitialPrice] = useState(''); // For new pool creation
 
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
@@ -525,14 +526,25 @@ export default function LiquidityPage() {
             }
 
             // If pool exists, use sqrtPriceX96 = 0 (skip createPool)
-            // If pool doesn't exist, calculate sqrtPriceX96 from amounts to create it
+            // If pool doesn't exist, calculate sqrtPriceX96 from initialPrice to create it
             let sqrtPriceX96 = BigInt(0);
             if (!poolExists) {
-                const price = Number(amount1Wei) / Number(amount0Wei);
+                // Use initialPrice if set, otherwise calculate from amounts
+                let price: number;
+                if (initialPrice && parseFloat(initialPrice) > 0) {
+                    // initialPrice is token1/token0 (tokenB per tokenA)
+                    // Need to adjust based on sorted order
+                    const userPrice = parseFloat(initialPrice);
+                    // If tokenA is token0 (isAFirst), price is correct; if tokenA is token1, invert
+                    price = isAFirst ? userPrice : 1 / userPrice;
+                } else {
+                    // Fall back to amounts ratio
+                    price = Number(amount1Wei) / Number(amount0Wei);
+                }
                 const sqrtPrice = Math.sqrt(price);
                 // 2^96 = 79228162514264337593543950336
                 sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 79228162514264337593543950336));
-                console.log('Creating new pool with sqrtPriceX96:', sqrtPriceX96.toString());
+                console.log('Creating new pool with sqrtPriceX96:', sqrtPriceX96.toString(), 'price:', price);
             } else {
                 console.log('Pool exists, skipping creation (sqrtPriceX96=0)');
             }
@@ -801,12 +813,10 @@ export default function LiquidityPage() {
 
                         {/* CL Price Range - Uniswap Style */}
                         {poolType === 'cl' && (() => {
-                            // Use pool price if available, otherwise calculate from amounts
+                            // Use pool price if available, otherwise use initial price input
                             const currentPrice = clPoolPrice !== null
                                 ? clPoolPrice
-                                : (amountA && amountB && parseFloat(amountA) > 0
-                                    ? parseFloat(amountB) / parseFloat(amountA)
-                                    : null);
+                                : (initialPrice ? parseFloat(initialPrice) : null);
 
                             const setPresetRange = (percent: number) => {
                                 if (currentPrice) {
@@ -815,30 +825,49 @@ export default function LiquidityPage() {
                                 }
                             };
 
+                            // Check if pool exists
+                            const poolExists = clPoolPrice !== null;
+
                             return (
                                 <div className="mb-6">
-                                    {/* Current Price Display */}
+                                    {/* Current Price Display or Initial Price Input */}
                                     <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
-                                        <div className="text-xs text-gray-400 mb-1">
-                                            {clPoolPrice !== null ? (
-                                                <span className="text-green-400">● Pool Price (from existing pool)</span>
-                                            ) : clPoolAddress ? (
-                                                'Loading pool price...'
-                                            ) : (
-                                                'Current Price (enter amounts or pool will be created)'
-                                            )}
-                                        </div>
-                                        <div className="text-lg font-semibold">
-                                            {tokenA && tokenB && currentPrice ? (
-                                                <>1 {tokenA.symbol} = <span className="text-primary">{currentPrice.toFixed(6)}</span> {tokenB.symbol}</>
-                                            ) : tokenA && tokenB ? (
-                                                clPoolAddress ? 'Loading...' : 'No pool exists - enter amounts to set initial price'
-                                            ) : 'Select tokens'}
-                                        </div>
-                                        <div className="text-xs text-gray-500 mt-1">
-                                            {tokenA && tokenB && `${tokenB.symbol} per ${tokenA.symbol}`}
-                                            {clPoolAddress && <span className="ml-2 text-gray-600">Pool: {clPoolAddress.slice(0, 10)}...</span>}
-                                        </div>
+                                        {poolExists ? (
+                                            <>
+                                                <div className="text-xs text-gray-400 mb-1">
+                                                    <span className="text-green-400">● Pool Price (from existing pool)</span>
+                                                </div>
+                                                <div className="text-lg font-semibold">
+                                                    {tokenA && tokenB && currentPrice ? (
+                                                        <>1 {tokenA.symbol} = <span className="text-primary">{currentPrice.toFixed(6)}</span> {tokenB.symbol}</>
+                                                    ) : 'Select tokens'}
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1">
+                                                    {tokenA && tokenB && `${tokenB.symbol} per ${tokenA.symbol}`}
+                                                    {clPoolAddress && <span className="ml-2 text-gray-600">Pool: {clPoolAddress.slice(0, 10)}...</span>}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="text-xs text-yellow-400 mb-2">
+                                                    ⚠ No pool exists - set initial price to create
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-gray-400 text-sm">1 {tokenA?.symbol || 'Token A'} =</span>
+                                                    <input
+                                                        type="number"
+                                                        value={initialPrice}
+                                                        onChange={(e) => setInitialPrice(e.target.value)}
+                                                        placeholder="0.0"
+                                                        className="flex-1 p-2 rounded-lg bg-white/10 border border-white/20 text-lg font-semibold text-center"
+                                                    />
+                                                    <span className="text-gray-400 text-sm">{tokenB?.symbol || 'Token B'}</span>
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-2">
+                                                    Enter the starting price for this new pool
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* Preset Range Buttons */}
