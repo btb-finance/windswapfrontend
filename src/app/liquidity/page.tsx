@@ -178,14 +178,17 @@ export default function LiquidityPage() {
 
     // Auto-calculate Token B amount when Token A amount or price range changes (CL only)
     useEffect(() => {
-        if (poolType !== 'cl' || !clPoolPrice || !amountA || parseFloat(amountA) <= 0) {
+        // Use clPoolPrice if available, otherwise use initialPrice for new pools
+        const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
+
+        if (poolType !== 'cl' || !currentPrice || !amountA || parseFloat(amountA) <= 0) {
             return;
         }
 
         // Get price range
         const pLower = priceLower ? parseFloat(priceLower) : 0;
         const pUpper = priceUpper ? parseFloat(priceUpper) : Infinity;
-        const pCurrent = clPoolPrice;
+        const pCurrent = currentPrice;
 
         console.log('CL Auto-calculation:', { pCurrent, pLower, pUpper, amountA });
 
@@ -228,7 +231,7 @@ export default function LiquidityPage() {
             console.log('In range - calculated amountB:', amtB);
             setAmountB(amtB.toFixed(6));
         }
-    }, [poolType, clPoolPrice, amountA, priceLower, priceUpper]);
+    }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper]);
 
     // CL Position Actions State
     const [selectedCLPosition, setSelectedCLPosition] = useState<typeof clPositions[0] | null>(null);
