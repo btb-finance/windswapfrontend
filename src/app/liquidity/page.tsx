@@ -136,6 +136,124 @@ export default function LiquidityPage() {
         fetchPoolPrice();
     }, [tokenA, tokenB, tickSpacing, poolType]);
 
+    // Auto-calculate Token B amount when Token A amount or price range changes (CL only)
+    useEffect(() => {
+        if (poolType !== 'cl' || !clPoolPrice || !amountA || parseFloat(amountA) <= 0) {
+            return;
+        }
+
+        // Get price range
+        const pLower = priceLower ? parseFloat(priceLower) : 0;
+        const pUpper = priceUpper ? parseFloat(priceUpper) : Infinity;
+        const pCurrent = clPoolPrice;
+
+        if (pLower <= 0 && pUpper === Infinity) {
+            // Full range - use 50/50 split based on current price
+            const amtA = parseFloat(amountA);
+            const amtB = amtA * pCurrent;
+            setAmountB(amtB.toFixed(6));
+            return;
+        }
+
+        if (pLower <= 0 || pUpper <= 0 || pLower >= pUpper) {
+            return;
+        }
+
+        // Calculate token amounts for concentrated liquidity position
+        // Formula based on Uniswap v3 whitepaper
+        const sqrtPriceLower = Math.sqrt(pLower);
+        const sqrtPriceUpper = Math.sqrt(pUpper);
+        const sqrtPriceCurrent = Math.sqrt(pCurrent);
+
+        const amtA = parseFloat(amountA);
+
+        if (pCurrent <= pLower) {
+            // Price is below range - all token A, no token B needed
+            setAmountB('0');
+        } else if (pCurrent >= pUpper) {
+            // Price is above range - all token B, but user entered A which doesn't make sense
+            // In this case, they can't add A to this range
+            setAmountB('0');
+        } else {
+            // Price is in range - calculate token B based on liquidity math
+            // L = amountA * (sqrtP * sqrtPu) / (sqrtPu - sqrtP)
+            // amountB = L * (sqrtP - sqrtPl)
+            const L = amtA * (sqrtPriceCurrent * sqrtPriceUpper) / (sqrtPriceUpper - sqrtPriceCurrent);
+            const amtB = L * (sqrtPriceCurrent - sqrtPriceLower);
+            setAmountB(amtB.toFixed(6));
+        }
+    }, [poolType, clPoolPrice, amountA, priceLower, priceUpper]);
+
+    // CL Position Actions State
+    const [selectedCLPosition, setSelectedCLPosition] = useState<typeof clPositions[0] | null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
+
+    // Collect fees from CL position
+    const handleCollectFees = async (position: typeof clPositions[0]) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            const maxUint128 = BigInt('340282366920938463463374607431768211455'); // 2^128 - 1
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'collect',
+                args: [{
+                    tokenId: position.tokenId,
+                    recipient: address,
+                    amount0Max: maxUint128,
+                    amount1Max: maxUint128,
+                }],
+            });
+            refetchCL();
+        } catch (err) {
+            console.error('Collect fees error:', err);
+        }
+        setActionLoading(false);
+    };
+
+    // Remove all liquidity from CL position
+    const handleRemoveCLLiquidity = async (position: typeof clPositions[0]) => {
+        if (!address || position.liquidity <= BigInt(0)) return;
+        setActionLoading(true);
+        try {
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            // First decrease liquidity
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'decreaseLiquidity',
+                args: [{
+                    tokenId: position.tokenId,
+                    liquidity: position.liquidity,
+                    amount0Min: BigInt(0),
+                    amount1Min: BigInt(0),
+                    deadline,
+                }],
+            });
+
+            // Then collect the tokens
+            const maxUint128 = BigInt('340282366920938463463374607431768211455');
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'collect',
+                args: [{
+                    tokenId: position.tokenId,
+                    recipient: address,
+                    amount0Max: maxUint128,
+                    amount1Max: maxUint128,
+                }],
+            });
+
+            refetchCL();
+        } catch (err) {
+            console.error('Remove CL liquidity error:', err);
+        }
+        setActionLoading(false);
+    };
+
     // Handle V2 liquidity add
     const handleAddLiquidity = async () => {
         if (!tokenA || !tokenB || !amountA || !amountB) return;
@@ -226,6 +344,52 @@ export default function LiquidityPage() {
                 sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 79228162514264337593543950336));
             }
 
+            // Approve tokens if not native (native SEI will be sent as value and auto-wrapped)
+            if (!tokenA.isNative) {
+                const tokenToApprove = isAFirst ? token0 : token1;
+                const amountToApprove = isAFirst ? amount0Wei : amount1Wei;
+                await writeContractAsync({
+                    address: tokenToApprove.address as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amountToApprove],
+                });
+            }
+
+            if (!tokenB.isNative) {
+                const tokenToApprove = isAFirst ? token1 : token0;
+                const amountToApprove = isAFirst ? amount1Wei : amount0Wei;
+                await writeContractAsync({
+                    address: tokenToApprove.address as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amountToApprove],
+                });
+            }
+
+            // Calculate native SEI value to send (if any token is native)
+            // When sending native value, the contract auto-wraps to WSEI
+            // Need to use the actual wei amount based on token position
+            let nativeValue = BigInt(0);
+            if (tokenA.isNative) {
+                // tokenA is SEI, which became WSEI in actualTokenA
+                // Check if WSEI is token0 or token1
+                if (token0.address.toLowerCase() === WSEI.address.toLowerCase()) {
+                    nativeValue = amount0Wei;
+                } else {
+                    nativeValue = amount1Wei;
+                }
+            } else if (tokenB.isNative) {
+                // tokenB is SEI, which became WSEI in actualTokenB
+                if (token0.address.toLowerCase() === WSEI.address.toLowerCase()) {
+                    nativeValue = amount0Wei;
+                } else {
+                    nativeValue = amount1Wei;
+                }
+            }
+
+            console.log('Native value to send:', nativeValue.toString());
+
             // Mint position (will create pool if sqrtPriceX96 != 0 and pool doesn't exist)
             const hash = await writeContractAsync({
                 address: CL_CONTRACTS.NonfungiblePositionManager as Address,
@@ -245,6 +409,7 @@ export default function LiquidityPage() {
                     deadline,
                     sqrtPriceX96,
                 }],
+                value: nativeValue,
             });
 
             setTxHash(hash);
@@ -698,38 +863,69 @@ export default function LiquidityPage() {
                                 <div>
                                     <h3 className="text-lg font-semibold mb-4">V2 Positions</h3>
                                     <div className="space-y-3">
-                                        {v2Positions.map((pos, i) => (
-                                            <div key={i} className="glass-card p-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="relative">
-                                                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold">
-                                                                ?
+                                        {v2Positions.map((pos, i) => {
+                                            // Get token symbols from known tokens
+                                            const getSymbol = (addr: string) => {
+                                                const tokens = DEFAULT_TOKEN_LIST;
+                                                const token = tokens.find(t => t.address.toLowerCase() === addr.toLowerCase());
+                                                return token?.symbol || addr.slice(0, 6);
+                                            };
+                                            const symbol0 = getSymbol(pos.token0);
+                                            const symbol1 = getSymbol(pos.token1);
+
+                                            return (
+                                                <div key={i} className="glass-card p-4">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="relative">
+                                                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold">
+                                                                    {symbol0.slice(0, 2)}
+                                                                </div>
+                                                                <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-xs font-bold absolute -right-2 top-0 border-2 border-bg-primary">
+                                                                    {symbol1.slice(0, 2)}
+                                                                </div>
                                                             </div>
-                                                            <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-sm font-bold absolute -right-2 top-0 border-2 border-bg-primary">
-                                                                ?
+                                                            <div className="ml-2">
+                                                                <div className="font-semibold text-sm">
+                                                                    {symbol0}/{symbol1}
+                                                                </div>
+                                                                <div className="text-xs text-gray-400">
+                                                                    {pos.stable ? 'Stable' : 'Volatile'} • {pos.poolAddress.slice(0, 10)}...
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                        <div className="ml-2">
+                                                        <div className="text-right">
                                                             <div className="font-semibold text-sm">
-                                                                Pool ({pos.stable ? 'Stable' : 'Volatile'})
+                                                                {parseFloat(formatUnits(pos.lpBalance, 18)).toFixed(8)} LP
                                                             </div>
-                                                            <div className="text-xs text-gray-400 font-mono">
-                                                                {pos.poolAddress.slice(0, 10)}...
-                                                            </div>
+                                                            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+                                                                V2
+                                                            </span>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <div className="font-semibold text-sm">
-                                                            {formatUnits(pos.lpBalance, 18).slice(0, 10)} LP
-                                                        </div>
-                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
-                                                            V2
-                                                        </span>
+                                                    <div className="flex gap-2 mt-3 pt-3 border-t border-white/10">
+                                                        <button
+                                                            onClick={() => {
+                                                                // V2 remove liquidity requires Router - placeholder for now
+                                                                alert('V2 remove liquidity coming soon!');
+                                                            }}
+                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setActiveTab('add');
+                                                                setPoolType('v2');
+                                                            }}
+                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition"
+                                                        >
+                                                            Add More
+                                                        </button>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -739,38 +935,127 @@ export default function LiquidityPage() {
                                 <div>
                                     <h3 className="text-lg font-semibold mb-4 mt-6">Concentrated Positions</h3>
                                     <div className="space-y-3">
-                                        {clPositions.map((pos, i) => (
-                                            <div key={i} className="glass-card p-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="relative">
-                                                            <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-sm font-bold">
-                                                                ?
+                                        {clPositions.map((pos, i) => {
+                                            // Get token symbols
+                                            const getSymbol = (addr: string) => {
+                                                const tokens = DEFAULT_TOKEN_LIST;
+                                                const token = tokens.find(t => t.address.toLowerCase() === addr.toLowerCase());
+                                                return token?.symbol || addr.slice(0, 6);
+                                            };
+                                            const symbol0 = getSymbol(pos.token0);
+                                            const symbol1 = getSymbol(pos.token1);
+
+                                            // Convert ticks to prices
+                                            const tickToPrice = (tick: number) => Math.pow(1.0001, tick);
+                                            const priceLower = tickToPrice(pos.tickLower);
+                                            const priceUpper = tickToPrice(pos.tickUpper);
+
+                                            // Check if in range (simplified - would need current tick from pool)
+                                            const isFullRange = pos.tickLower === -887200 || pos.tickUpper === 887200;
+
+                                            // Fee tier from tickSpacing
+                                            const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 100: '0.30%', 200: '1%' };
+                                            const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
+
+                                            return (
+                                                <div key={i} className="glass-card p-4">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="relative">
+                                                                <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-xs font-bold">
+                                                                    {symbol0.slice(0, 2)}
+                                                                </div>
+                                                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold absolute -right-2 top-0 border-2 border-bg-primary">
+                                                                    {symbol1.slice(0, 2)}
+                                                                </div>
                                                             </div>
-                                                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold absolute -right-2 top-0 border-2 border-bg-primary">
-                                                                ?
+                                                            <div className="ml-2">
+                                                                <div className="font-semibold text-sm">
+                                                                    {symbol0}/{symbol1} • #{pos.tokenId.toString()}
+                                                                </div>
+                                                                <div className="text-xs text-gray-400">
+                                                                    Fee: {feeTier}
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                        <div className="ml-2">
-                                                            <div className="font-semibold text-sm">
-                                                                NFT #{pos.tokenId.toString()}
+                                                        <div className="text-right">
+                                                            <div className="font-mono text-xs text-gray-400">
+                                                                Liquidity
                                                             </div>
-                                                            <div className="text-xs text-gray-400">
-                                                                Tick: {pos.tickLower} → {pos.tickUpper}
+                                                            <div className="font-semibold text-sm">
+                                                                {Number(pos.liquidity).toLocaleString()}
+                                                            </div>
+                                                            <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/20 text-secondary">
+                                                                CL
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Price Range */}
+                                                    <div className="p-3 rounded-lg bg-white/5 mb-3">
+                                                        <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                                            <span>Price Range ({symbol1}/{symbol0})</span>
+                                                            {isFullRange && <span className="text-primary">Full Range</span>}
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="text-center">
+                                                                <div className="text-xs text-gray-500">Min</div>
+                                                                <div className="font-semibold text-sm">
+                                                                    {isFullRange ? '0' : priceLower.toFixed(6)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-gray-600">↔</div>
+                                                            <div className="text-center">
+                                                                <div className="text-xs text-gray-500">Max</div>
+                                                                <div className="font-semibold text-sm">
+                                                                    {isFullRange ? '∞' : priceUpper.toFixed(6)}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <div className="font-semibold text-sm">
-                                                            {pos.liquidity.toString().slice(0, 8)}...
+
+                                                    {/* Uncollected Fees */}
+                                                    {(pos.tokensOwed0 > BigInt(0) || pos.tokensOwed1 > BigInt(0)) && (
+                                                        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 mb-3">
+                                                            <div className="text-xs text-green-400 mb-1">Uncollected Fees</div>
+                                                            <div className="text-sm">
+                                                                {pos.tokensOwed0 > BigInt(0) && <span>{formatUnits(pos.tokensOwed0, 18)} {symbol0}</span>}
+                                                                {pos.tokensOwed0 > BigInt(0) && pos.tokensOwed1 > BigInt(0) && ' + '}
+                                                                {pos.tokensOwed1 > BigInt(0) && <span>{formatUnits(pos.tokensOwed1, 18)} {symbol1}</span>}
+                                                            </div>
                                                         </div>
-                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/20 text-secondary">
-                                                            CL
-                                                        </span>
+                                                    )}
+
+                                                    {/* Actions */}
+                                                    <div className="flex gap-2 pt-3 border-t border-white/10">
+                                                        <button
+                                                            onClick={() => handleCollectFees(pos)}
+                                                            disabled={actionLoading}
+                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition disabled:opacity-50"
+                                                        >
+                                                            {actionLoading ? '...' : 'Collect Fees'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                // Set token amounts for the position and switch to add tab
+                                                                setActiveTab('add');
+                                                                setPoolType('cl');
+                                                            }}
+                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition"
+                                                        >
+                                                            Increase
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleRemoveCLLiquidity(pos)}
+                                                            disabled={actionLoading || pos.liquidity <= BigInt(0)}
+                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                        >
+                                                            {actionLoading ? '...' : 'Remove'}
+                                                        </button>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             )}
