@@ -455,8 +455,9 @@ export default function LiquidityPage() {
 
             console.log('Final native value to send:', nativeValue.toString());
 
-            // Mint position with 0.5% slippage protection
-            const slippageBps = BigInt(50); // 0.5% = 50 basis points
+            // Mint position with 5% slippage protection
+            // Note: Using 5% because CL pool calculations can differ from our estimates
+            const slippageBps = BigInt(500); // 5% = 500 basis points
             const amount0Min = amount0Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
             const amount1Min = amount1Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
 
