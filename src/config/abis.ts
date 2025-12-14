@@ -599,3 +599,126 @@ export const SWAP_ROUTER_ABI = [
         type: 'function',
     },
 ] as const;
+
+// VotingEscrow ABI (veYAKA locking)
+export const VOTING_ESCROW_ABI = [
+    // View functions
+    {
+        inputs: [{ name: 'owner', type: 'address' }],
+        name: 'balanceOf',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'locked',
+        outputs: [
+            {
+                components: [
+                    { name: 'amount', type: 'int128' },
+                    { name: 'end', type: 'uint256' },
+                    { name: 'isPermanent', type: 'bool' },
+                ],
+                name: '',
+                type: 'tuple',
+            },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'balanceOfNFT',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: '_owner', type: 'address' },
+            { name: '_index', type: 'uint256' },
+        ],
+        name: 'ownerToNFTokenIdList',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'ownerOf',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    // Write functions
+    {
+        inputs: [
+            { name: '_value', type: 'uint256' },
+            { name: '_lockDuration', type: 'uint256' },
+        ],
+        name: 'createLock',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: '_tokenId', type: 'uint256' },
+            { name: '_value', type: 'uint256' },
+        ],
+        name: 'increaseAmount',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: '_tokenId', type: 'uint256' },
+            { name: '_lockDuration', type: 'uint256' },
+        ],
+        name: 'increaseUnlockTime',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'withdraw',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'lockPermanent',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'unlockPermanent',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+] as const;
+
+// RewardsDistributor ABI (veNFT rebases)
+export const REWARDS_DISTRIBUTOR_ABI = [
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'claimable',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'claim',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+] as const;
