@@ -455,7 +455,19 @@ export default function LiquidityPage() {
 
             console.log('Final native value to send:', nativeValue.toString());
 
-            // Mint position (will create pool if sqrtPriceX96 != 0 and pool doesn't exist)
+            // Mint position with 0.5% slippage protection
+            const slippageBps = BigInt(50); // 0.5% = 50 basis points
+            const amount0Min = amount0Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
+            const amount1Min = amount1Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
+
+            console.log('Mint params:', {
+                amount0Wei: amount0Wei.toString(),
+                amount1Wei: amount1Wei.toString(),
+                amount0Min: amount0Min.toString(),
+                amount1Min: amount1Min.toString(),
+                tickLower, tickUpper
+            });
+
             const hash = await writeContractAsync({
                 address: CL_CONTRACTS.NonfungiblePositionManager as Address,
                 abi: NFT_POSITION_MANAGER_ABI,
@@ -468,8 +480,8 @@ export default function LiquidityPage() {
                     tickUpper,
                     amount0Desired: amount0Wei,
                     amount1Desired: amount1Wei,
-                    amount0Min: BigInt(0),
-                    amount1Min: BigInt(0),
+                    amount0Min,
+                    amount1Min,
                     recipient: address,
                     deadline,
                     sqrtPriceX96,
