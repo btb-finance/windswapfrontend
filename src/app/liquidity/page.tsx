@@ -334,7 +334,8 @@ export default function LiquidityPage() {
             console.log('Found pool:', poolAddress);
 
             // Get gauge address from Voter contract
-            const gaugeSelector = '0x6f6dc5ee'; // cast sig "gauges(address)"
+            // gauges(address) selector = 0xb9a09fd5
+            const gaugeSelector = '0xb9a09fd5';
             const poolPadded = poolAddress.slice(2).toLowerCase().padStart(64, '0');
 
             const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
@@ -343,10 +344,12 @@ export default function LiquidityPage() {
                 body: JSON.stringify({
                     jsonrpc: '2.0',
                     method: 'eth_call',
-                    params: [{ to: V2_CONTRACTS.Voter, data: `0x${gaugeSelector}${poolPadded}` }, 'latest'],
+                    params: [{ to: V2_CONTRACTS.Voter, data: `${gaugeSelector}${poolPadded}` }, 'latest'],
                     id: 1
                 })
             }).then(r => r.json());
+
+            console.log('Gauge lookup result:', gaugeResult);
 
             if (!gaugeResult.result || gaugeResult.result === '0x' + '0'.repeat(64)) {
                 console.error('No gauge found for this pool');

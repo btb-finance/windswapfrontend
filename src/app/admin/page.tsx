@@ -44,6 +44,20 @@ const VOTER_ABI = [
         stateMutability: 'view',
         type: 'function',
     },
+    {
+        inputs: [{ name: '_gauge', type: 'address' }],
+        name: 'killGauge',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_pool', type: 'address' }],
+        name: 'gauges',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
 ] as const;
 
 const FACTORY_REGISTRY_ABI = [
@@ -111,6 +125,7 @@ export default function AdminPage() {
     const [whitelistAction, setWhitelistAction] = useState<'whitelist' | 'unwhitelist'>('whitelist');
     const [nftId, setNftId] = useState('');
     const [poolAddress, setPoolAddress] = useState('');
+    const [gaugeAddress, setGaugeAddress] = useState('');
     const [factoryType, setFactoryType] = useState<'v2' | 'cl'>('v2');
     const [newPoolFactory, setNewPoolFactory] = useState('');
     const [newVotingRewardsFactory, setNewVotingRewardsFactory] = useState('');
@@ -201,14 +216,83 @@ export default function AdminPage() {
         if (!poolAddress) return;
         setError(null);
         try {
-            const factory = factoryType === 'v2' ? V2_CONTRACTS.PoolFactory : CL_CONTRACTS.CLFactory;
+            // Auto-detect the pool's factory by calling pool.factory()
+            // This ensures we use the correct factory (CLFactory vs PoolFactory)
+            const factoryResult = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{ to: poolAddress, data: '0xc45a0155' }, 'latest'], // factory() selector
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            if (!factoryResult.result || factoryResult.result === '0x') {
+                setError('Could not detect pool factory. Is this a valid pool address?');
+                return;
+            }
+
+            const poolFactory = '0x' + factoryResult.result.slice(-40);
+            console.log('Auto-detected pool factory:', poolFactory);
+
             const hash = await writeContractAsync({
                 address: V2_CONTRACTS.Voter as Address,
                 abi: VOTER_ABI,
                 functionName: 'createGauge',
-                args: [factory as Address, poolAddress as Address],
+                args: [poolFactory as Address, poolAddress as Address],
             });
             setTxHash(hash);
+        } catch (err: any) {
+            setError(err.message || 'Transaction failed');
+        }
+    };
+
+    // Lookup gauge for a pool
+    const handleLookupGauge = async () => {
+        if (!poolAddress) return;
+        setError(null);
+        try {
+            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{
+                        to: V2_CONTRACTS.Voter,
+                        data: '0xb9a09fd5' + poolAddress.slice(2).toLowerCase().padStart(64, '0')
+                    }, 'latest'],
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            if (gaugeResult.result && gaugeResult.result !== '0x' + '0'.repeat(64)) {
+                const foundGauge = '0x' + gaugeResult.result.slice(-40);
+                setGaugeAddress(foundGauge);
+                console.log('Found gauge:', foundGauge);
+            } else {
+                setError('No gauge found for this pool');
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to lookup gauge');
+        }
+    };
+
+    // Kill a gauge (remove it)
+    const handleKillGauge = async () => {
+        if (!gaugeAddress) return;
+        setError(null);
+        try {
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.Voter as Address,
+                abi: VOTER_ABI,
+                functionName: 'killGauge',
+                args: [gaugeAddress as Address],
+            });
+            setTxHash(hash);
+            setGaugeAddress('');
         } catch (err: any) {
             setError(err.message || 'Transaction failed');
         }
@@ -485,32 +569,9 @@ export default function AdminPage() {
                             <div className="glass-card p-6">
                                 <h3 className="text-lg font-semibold mb-4">Create Gauge</h3>
                                 <p className="text-gray-400 text-sm mb-4">
-                                    Create a gauge for a pool to enable YAKA emissions and voting rewards.
+                                    Create a gauge for a pool. Factory is auto-detected from the pool address.
                                 </p>
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="text-sm text-gray-400 mb-2 block">Factory Type</label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => setFactoryType('v2')}
-                                                className={`flex-1 py-2 rounded-lg text-sm transition ${factoryType === 'v2'
-                                                    ? 'bg-primary text-white'
-                                                    : 'bg-white/5 text-gray-400'
-                                                    }`}
-                                            >
-                                                V2 Pool {isV2FactoryApproved ? '✓' : '⚠'}
-                                            </button>
-                                            <button
-                                                onClick={() => setFactoryType('cl')}
-                                                className={`flex-1 py-2 rounded-lg text-sm transition ${factoryType === 'cl'
-                                                    ? 'bg-secondary text-white'
-                                                    : 'bg-white/5 text-gray-400'
-                                                    }`}
-                                            >
-                                                CL Pool {isCLFactoryApproved ? '✓' : '⚠'}
-                                            </button>
-                                        </div>
-                                    </div>
                                     <div>
                                         <label className="text-sm text-gray-400 mb-2 block">Pool Address</label>
                                         <input
@@ -521,23 +582,66 @@ export default function AdminPage() {
                                             className="w-full p-3 rounded-lg bg-white/5 border border-white/10 font-mono text-sm"
                                         />
                                     </div>
-                                    <div className="p-3 rounded-lg bg-white/5 text-xs">
-                                        <div className="text-gray-400 mb-1">Factory:</div>
-                                        <div className="font-mono truncate">
-                                            {factoryType === 'v2' ? V2_CONTRACTS.PoolFactory : CL_CONTRACTS.CLFactory}
-                                        </div>
+                                    <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm text-blue-400">
+                                        ℹ️ Factory will be auto-detected by calling pool.factory()
                                     </div>
-                                    {factoryType === 'cl' && !isCLFactoryApproved && (
-                                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
-                                            ⚠ CL Factory is not approved! Approve it first using the button above.
-                                        </div>
-                                    )}
                                     <button
                                         onClick={handleCreateGauge}
-                                        disabled={!poolAddress || (factoryType === 'cl' && !isCLFactoryApproved)}
+                                        disabled={!poolAddress}
                                         className="w-full py-3 rounded-lg bg-primary text-white font-medium disabled:opacity-50"
                                     >
                                         Create Gauge
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Kill Gauge */}
+                            <div className="glass-card p-6">
+                                <h3 className="text-lg font-semibold mb-4 text-red-400">Kill Gauge</h3>
+                                <p className="text-gray-400 text-sm mb-4">
+                                    Kill (disable) a gauge that was created incorrectly. Use with caution!
+                                </p>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-sm text-gray-400 mb-2 block">Pool Address (to lookup gauge)</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={poolAddress}
+                                                onChange={(e) => setPoolAddress(e.target.value)}
+                                                placeholder="0x..."
+                                                className="flex-1 p-3 rounded-lg bg-white/5 border border-white/10 font-mono text-sm"
+                                            />
+                                            <button
+                                                onClick={handleLookupGauge}
+                                                disabled={!poolAddress}
+                                                className="px-4 py-2 rounded-lg bg-white/10 text-gray-200 disabled:opacity-50"
+                                            >
+                                                Lookup
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm text-gray-400 mb-2 block">Gauge Address</label>
+                                        <input
+                                            type="text"
+                                            value={gaugeAddress}
+                                            onChange={(e) => setGaugeAddress(e.target.value)}
+                                            placeholder="0x..."
+                                            className="w-full p-3 rounded-lg bg-white/5 border border-white/10 font-mono text-sm"
+                                        />
+                                    </div>
+                                    {gaugeAddress && (
+                                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+                                            ⚠️ Killing a gauge is irreversible! Make sure this is the correct gauge.
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={handleKillGauge}
+                                        disabled={!gaugeAddress}
+                                        className="w-full py-3 rounded-lg bg-red-500/20 text-red-400 font-medium disabled:opacity-50 hover:bg-red-500/30"
+                                    >
+                                        Kill Gauge
                                     </button>
                                 </div>
                             </div>
