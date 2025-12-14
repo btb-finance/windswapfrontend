@@ -298,10 +298,41 @@ export default function LiquidityPage() {
             const amount0Wei = parseUnits(amount0, token0.decimals);
             const amount1Wei = parseUnits(amount1, token1.decimals);
 
-            // Helper: Convert price to tick
-            const priceToTick = (price: number, spacing: number): number => {
-                if (price <= 0) return 0;
-                const tick = Math.floor(Math.log(price) / Math.log(1.0001));
+            // Helper: Convert user price to tick (accounting for token decimals)
+            // User enters price as "tokenB per tokenA" (e.g., 0.1 USDC per SEI)
+            // Pool stores price as token1/token0 in raw terms (wei amounts)
+            const priceToTick = (userPrice: number, spacing: number): number => {
+                if (userPrice <= 0) return 0;
+
+                // User price is in terms of tokenB per tokenA
+                // We need to convert to token1/token0 accounting for decimals
+                // token0 = USDC (6 dec), token1 = WSEI (18 dec)
+                // Raw price = userPrice * 10^(token0.decimals) / 10^(token1.decimals)
+                // But we also need to consider if tokenA is token0 or token1
+
+                // If tokenA (the one user puts first) is token1:
+                // User says "X tokenB per tokenA" = X USDC per SEI = X USDC per WSEI
+                // Pool price is token1/token0 = WSEI/USDC = 1/X
+                // Raw pool price = (1/X) * 10^6 / 10^18 = 1/(X * 10^12)
+
+                // If tokenA is token0:
+                // Pool price is token1/token0 = tokenB/tokenA = X
+                // Raw pool price = X * 10^(decA) / 10^(decB)
+
+                const isAFirst = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase();
+                let rawPrice: number;
+                if (isAFirst) {
+                    // tokenA is token0, so user price is already token1/token0
+                    rawPrice = userPrice * Math.pow(10, token0.decimals) / Math.pow(10, token1.decimals);
+                } else {
+                    // tokenA is token1, user price is tokenB/tokenA = token0/token1
+                    // Pool stores token1/token0, so we need to invert
+                    rawPrice = (1 / userPrice) * Math.pow(10, token0.decimals) / Math.pow(10, token1.decimals);
+                }
+
+                console.log('priceToTick:', { userPrice, isAFirst, rawPrice });
+
+                const tick = Math.floor(Math.log(rawPrice) / Math.log(1.0001));
                 return Math.round(tick / spacing) * spacing;
             };
 
@@ -313,6 +344,7 @@ export default function LiquidityPage() {
                 // Custom price range
                 tickLower = priceToTick(parseFloat(priceLower), tickSpacing);
                 tickUpper = priceToTick(parseFloat(priceUpper), tickSpacing);
+                console.log('Calculated ticks:', { tickLower, tickUpper });
                 // Ensure tickLower < tickUpper
                 if (tickLower > tickUpper) {
                     [tickLower, tickUpper] = [tickUpper, tickLower];
