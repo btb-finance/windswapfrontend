@@ -13,6 +13,45 @@ import { useTokenBalance } from '@/hooks/useToken';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, CL_FACTORY_ABI } from '@/config/abis';
 
+// CL Gauge ABI for staking
+const CL_GAUGE_ABI = [
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'deposit',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'withdraw',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'getReward',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'account', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
+        name: 'earned',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'depositor', type: 'address' }],
+        name: 'stakedValues',
+        outputs: [{ name: '', type: 'uint256[]' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
 type Tab = 'add' | 'positions';
 type PoolType = 'v2' | 'cl';
 
@@ -256,6 +295,104 @@ export default function LiquidityPage() {
             refetchCL();
         } catch (err) {
             console.error('Remove CL liquidity error:', err);
+        }
+        setActionLoading(false);
+    };
+
+    // Stake CL position in gauge to earn YAKA rewards
+    const handleStakeCL = async (position: typeof clPositions[0]) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            // First get the pool address from CLFactory.getPool(token0, token1, tickSpacing)
+            const getPoolSelector = '0x28af8d0b';
+            const token0Padded = position.token0.slice(2).toLowerCase().padStart(64, '0');
+            const token1Padded = position.token1.slice(2).toLowerCase().padStart(64, '0');
+            const tickSpacingHex = position.tickSpacing >= 0
+                ? position.tickSpacing.toString(16).padStart(64, '0')
+                : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(position.tickSpacing) + BigInt(1)).toString(16);
+
+            const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{ to: CL_CONTRACTS.CLFactory, data: `${getPoolSelector}${token0Padded}${token1Padded}${tickSpacingHex}` }, 'latest'],
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            if (!poolResult.result || poolResult.result === '0x' + '0'.repeat(64)) {
+                console.error('Pool not found');
+                alert('Pool not found for this position.');
+                setActionLoading(false);
+                return;
+            }
+
+            const poolAddress = '0x' + poolResult.result.slice(-40);
+            console.log('Found pool:', poolAddress);
+
+            // Get gauge address from Voter contract
+            const gaugeSelector = '0x6f6dc5ee'; // cast sig "gauges(address)"
+            const poolPadded = poolAddress.slice(2).toLowerCase().padStart(64, '0');
+
+            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{ to: V2_CONTRACTS.Voter, data: `0x${gaugeSelector}${poolPadded}` }, 'latest'],
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            if (!gaugeResult.result || gaugeResult.result === '0x' + '0'.repeat(64)) {
+                console.error('No gauge found for this pool');
+                alert('No gauge found for this pool. It may not be gauged yet.');
+                setActionLoading(false);
+                return;
+            }
+
+            const gaugeAddress = '0x' + gaugeResult.result.slice(-40);
+            console.log('Found gauge:', gaugeAddress, 'for pool:', poolAddress);
+
+            // First approve the NFT to the gauge
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: [
+                    {
+                        inputs: [
+                            { name: 'to', type: 'address' },
+                            { name: 'tokenId', type: 'uint256' }
+                        ],
+                        name: 'approve',
+                        outputs: [],
+                        stateMutability: 'nonpayable',
+                        type: 'function',
+                    }
+                ],
+                functionName: 'approve',
+                args: [gaugeAddress as Address, position.tokenId],
+            });
+
+            console.log('NFT approved, now staking...');
+
+            // Then deposit to the gauge
+            await writeContractAsync({
+                address: gaugeAddress as Address,
+                abi: CL_GAUGE_ABI,
+                functionName: 'deposit',
+                args: [position.tokenId],
+            });
+
+            console.log('Position staked successfully!');
+            alert('Position staked successfully! You will now earn YAKA rewards.');
+            refetchCL();
+        } catch (err) {
+            console.error('Stake CL position error:', err);
+            alert('Failed to stake position. Check console for details.');
         }
         setActionLoading(false);
     };
@@ -1135,6 +1272,13 @@ export default function LiquidityPage() {
                                                             className="flex-1 py-2 px-3 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
                                                         >
                                                             {actionLoading ? '...' : 'Remove'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleStakeCL(pos)}
+                                                            disabled={actionLoading}
+                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-50"
+                                                        >
+                                                            {actionLoading ? '...' : 'Stake'}
                                                         </button>
                                                     </div>
                                                 </div>
