@@ -420,12 +420,33 @@ export default function LiquidityPage() {
 
     // Handle CL liquidity add
     const handleAddCLLiquidity = async () => {
-        if (!tokenA || !tokenB || !amountA || !amountB || !address) return;
+        if (!tokenA || !tokenB || !amountA || !amountB || !address) {
+            console.error('Missing required fields:', { tokenA: !!tokenA, tokenB: !!tokenB, amountA, amountB, address });
+            return;
+        }
+
+        // Validate amounts are valid numbers
+        const amtA = parseFloat(amountA);
+        const amtB = parseFloat(amountB);
+        if (isNaN(amtA) || isNaN(amtB) || amtA <= 0 || amtB <= 0) {
+            console.error('Invalid amounts:', { amountA, amountB, parsedA: amtA, parsedB: amtB });
+            alert('Please enter valid amounts for both tokens');
+            return;
+        }
+
+        // For new pools, require initialPrice
+        if (!clPoolPrice && (!initialPrice || parseFloat(initialPrice) <= 0)) {
+            console.error('New pool requires initial price');
+            alert('Please set the initial price for this new pool');
+            return;
+        }
 
         console.log('CL Liquidity Add - tokens:', {
             tokenA: { symbol: tokenA.symbol, isNative: tokenA.isNative, address: tokenA.address },
             tokenB: { symbol: tokenB.symbol, isNative: tokenB.isNative, address: tokenB.address },
-            amountA, amountB
+            amountA, amountB,
+            clPoolPrice,
+            initialPrice
         });
 
         try {
