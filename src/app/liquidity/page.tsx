@@ -70,7 +70,7 @@ export default function LiquidityPage() {
     const [txHash, setTxHash] = useState<string | null>(null);
 
     // CL specific state
-    const [tickSpacing, setTickSpacing] = useState(100); // Default tick spacing
+    const [tickSpacing, setTickSpacing] = useState(80); // Default tick spacing (0.25%)
     const [priceLower, setPriceLower] = useState('');
     const [priceUpper, setPriceUpper] = useState('');
     const [clPoolPrice, setClPoolPrice] = useState<number | null>(null);
@@ -777,11 +777,12 @@ export default function LiquidityPage() {
                         {poolType === 'cl' && (
                             <div className="mb-6">
                                 <label className="text-sm text-gray-400 mb-2 block">Fee Tier</label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-4 gap-2">
                                     {[
                                         { spacing: 1, fee: '0.01%' },
                                         { spacing: 50, fee: '0.05%' },
-                                        { spacing: 100, fee: '0.30%' },
+                                        { spacing: 80, fee: '0.25%' },
+                                        { spacing: 200, fee: '0.30%' },
                                     ].map(({ spacing, fee }) => (
                                         <button
                                             key={spacing}
@@ -1178,7 +1179,7 @@ export default function LiquidityPage() {
                                             const isFullRange = pos.tickLower === -887200 || pos.tickUpper === 887200;
 
                                             // Fee tier from tickSpacing
-                                            const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 100: '0.30%', 200: '1%' };
+                                            const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%' };
                                             const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
 
                                             return (

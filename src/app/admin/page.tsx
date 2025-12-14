@@ -110,6 +110,23 @@ const CL_FACTORY_ABI = [
         stateMutability: 'view',
         type: 'function',
     },
+    {
+        inputs: [
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'fee', type: 'uint24' },
+        ],
+        name: 'enableTickSpacing',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tickSpacing', type: 'int24' }],
+        name: 'tickSpacingToFee',
+        outputs: [{ name: '', type: 'uint24' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
 ] as const;
 
 type AdminTab = 'tokens' | 'gauges' | 'factories' | 'config';
@@ -130,6 +147,9 @@ export default function AdminPage() {
     const [newPoolFactory, setNewPoolFactory] = useState('');
     const [newVotingRewardsFactory, setNewVotingRewardsFactory] = useState('');
     const [newGaugeFactory, setNewGaugeFactory] = useState('');
+    // Fee tier state
+    const [newTickSpacing, setNewTickSpacing] = useState('80');
+    const [newFee, setNewFee] = useState('2500'); // 0.25% = 2500
 
     const { writeContractAsync } = useWriteContract();
 
@@ -293,6 +313,23 @@ export default function AdminPage() {
             });
             setTxHash(hash);
             setGaugeAddress('');
+        } catch (err: any) {
+            setError(err.message || 'Transaction failed');
+        }
+    };
+
+    // Enable a new fee tier in CLFactory
+    const handleEnableTickSpacing = async () => {
+        if (!newTickSpacing || !newFee) return;
+        setError(null);
+        try {
+            const hash = await writeContractAsync({
+                address: CL_CONTRACTS.CLFactory as Address,
+                abi: CL_FACTORY_ABI,
+                functionName: 'enableTickSpacing',
+                args: [parseInt(newTickSpacing), parseInt(newFee)],
+            });
+            setTxHash(hash);
         } catch (err: any) {
             setError(err.message || 'Transaction failed');
         }
@@ -727,6 +764,53 @@ export default function AdminPage() {
                                 >
                                     Approve Factory Set
                                 </button>
+                            </div>
+
+                            {/* Enable Fee Tier */}
+                            <div className="mt-6 pt-6 border-t border-white/10">
+                                <h3 className="text-lg font-semibold mb-4">Enable CL Fee Tier</h3>
+                                <p className="text-gray-400 text-sm mb-4">
+                                    Enable a new fee tier for CL pools. Fee is in basis points (2500 = 0.25%).
+                                </p>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-sm text-gray-400 mb-2 block">Tick Spacing</label>
+                                            <input
+                                                type="number"
+                                                value={newTickSpacing}
+                                                onChange={(e) => setNewTickSpacing(e.target.value)}
+                                                placeholder="80"
+                                                className="w-full p-3 rounded-lg bg-white/5 border border-white/10 font-mono text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm text-gray-400 mb-2 block">Fee (basis points)</label>
+                                            <input
+                                                type="number"
+                                                value={newFee}
+                                                onChange={(e) => setNewFee(e.target.value)}
+                                                placeholder="2500"
+                                                className="w-full p-3 rounded-lg bg-white/5 border border-white/10 font-mono text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm">
+                                        <div className="text-blue-400">
+                                            {newFee ? `Fee: ${(parseInt(newFee) / 10000 * 100).toFixed(4)}%` : 'Enter fee amount'}
+                                        </div>
+                                        <div className="text-gray-400 text-xs mt-1">
+                                            Common: 100=0.01%, 500=0.05%, 2500=0.25%, 3000=0.30%, 10000=1%
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleEnableTickSpacing}
+                                        disabled={!newTickSpacing || !newFee}
+                                        className="w-full py-3 rounded-lg bg-secondary text-white font-medium disabled:opacity-50"
+                                    >
+                                        Enable Fee Tier
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     )}
