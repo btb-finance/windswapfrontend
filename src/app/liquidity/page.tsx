@@ -97,7 +97,19 @@ function LiquidityPageContent() {
     const { positions: clPositions, refetch: refetchCL } = useCLPositions();
     const { positions: v2Positions, refetch: refetchV2 } = useV2Positions();
 
-    // Track staked token IDs
+    // Track staked CL positions (positions that are in gauges)
+    interface StakedCLPosition {
+        tokenId: bigint;
+        gaugeAddress: string;
+        poolAddress: string;
+        token0: string;
+        token1: string;
+        tickSpacing: number;
+        tickLower: number;
+        tickUpper: number;
+        liquidity: bigint;
+    }
+    const [stakedCLPositions, setStakedCLPositions] = useState<StakedCLPosition[]>([]);
     const [stakedTokenIds, setStakedTokenIds] = useState<Set<string>>(new Set());
 
     const { writeContractAsync } = useWriteContract();
@@ -296,15 +308,17 @@ function LiquidityPageContent() {
     const [selectedCLPosition, setSelectedCLPosition] = useState<typeof clPositions[0] | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
 
-    // Fetch staked token IDs from gauges
+    // Fetch staked CL positions from gauges (includes full position details)
     useEffect(() => {
-        const fetchStakedTokenIds = async () => {
+        const fetchStakedPositions = async () => {
             if (!address) {
                 setStakedTokenIds(new Set());
+                setStakedCLPositions([]);
                 return;
             }
 
             const staked = new Set<string>();
+            const stakedPositions: StakedCLPosition[] = [];
 
             try {
                 // Get all CL pools
@@ -359,7 +373,7 @@ function LiquidityPageContent() {
                     const gaugeAddr = '0x' + gaugeResult.result?.slice(26);
                     if (!gaugeAddr || gaugeAddr === '0x0000000000000000000000000000000000000000') continue;
 
-                    // Get staked values for user - correct selector!
+                    // Get staked values for user
                     const stakedResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -375,25 +389,73 @@ function LiquidityPageContent() {
 
                     if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) continue;
 
-                    // Parse staked token IDs
+                    // Parse staked token IDs and fetch position details
                     const data = stakedResult.result.slice(2);
                     const length = parseInt(data.slice(64, 128), 16);
 
                     for (let j = 0; j < length; j++) {
                         const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
-                        const tokenId = BigInt('0x' + tokenIdHex).toString();
-                        staked.add(tokenId);
+                        const tokenId = BigInt('0x' + tokenIdHex);
+                        staked.add(tokenId.toString());
+
+                        // Fetch position details from NonfungiblePositionManager
+                        const positionResult = await fetch('https://evm-rpc.sei-apis.com', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', id: 1,
+                                method: 'eth_call',
+                                params: [{
+                                    to: CL_CONTRACTS.NonfungiblePositionManager,
+                                    data: `0x99fbab88${tokenId.toString(16).padStart(64, '0')}` // positions(uint256)
+                                }, 'latest']
+                            })
+                        }).then(r => r.json());
+
+                        if (!positionResult.result) continue;
+
+                        // Parse position data
+                        const posData = positionResult.result.slice(2);
+                        const token0 = '0x' + posData.slice(128 + 24, 192);
+                        const token1 = '0x' + posData.slice(192 + 24, 256);
+
+                        // Parse signed int24 values
+                        const parseSignedInt24 = (hex64: string): number => {
+                            const val = BigInt('0x' + hex64);
+                            if (val > BigInt(0x7fffff)) {
+                                return Number(val - BigInt(0x1000000));
+                            }
+                            return Number(val);
+                        };
+
+                        const tickSpacing = parseSignedInt24(posData.slice(256, 320));
+                        const tickLower = parseSignedInt24(posData.slice(320, 384));
+                        const tickUpper = parseSignedInt24(posData.slice(384, 448));
+                        const liquidity = BigInt('0x' + posData.slice(448, 512));
+
+                        stakedPositions.push({
+                            tokenId,
+                            gaugeAddress: gaugeAddr,
+                            poolAddress: poolAddr,
+                            token0,
+                            token1,
+                            tickSpacing,
+                            tickLower,
+                            tickUpper,
+                            liquidity,
+                        });
                     }
                 }
             } catch (err) {
-                console.error('Error fetching staked token IDs:', err);
+                console.error('Error fetching staked positions:', err);
             }
 
-            console.log('[Liquidity] Staked token IDs:', Array.from(staked));
+            console.log('[Liquidity] Staked positions:', stakedPositions.length, stakedPositions);
             setStakedTokenIds(staked);
+            setStakedCLPositions(stakedPositions);
         };
 
-        fetchStakedTokenIds();
+        fetchStakedPositions();
     }, [address]);
     const handleCollectFees = async (position: typeof clPositions[0]) => {
         if (!address) return;
@@ -557,6 +619,38 @@ function LiquidityPageContent() {
         } catch (err) {
             console.error('Stake CL position error:', err);
             alert('Failed to stake position. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
+    // Unstake CL position from gauge
+    const handleUnstakeCL = async (stakedPos: StakedCLPosition) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            // Withdraw from the gauge
+            await writeContractAsync({
+                address: stakedPos.gaugeAddress as Address,
+                abi: CL_GAUGE_ABI,
+                functionName: 'withdraw',
+                args: [stakedPos.tokenId],
+            });
+
+            console.log('Position unstaked successfully!');
+            alert('Position unstaked successfully! It is now back in your wallet.');
+
+            // Refresh both owned and staked positions
+            refetchCL();
+            // Trigger a re-fetch of staked positions by simulating address change
+            setStakedCLPositions(prev => prev.filter(p => p.tokenId !== stakedPos.tokenId));
+            setStakedTokenIds(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(stakedPos.tokenId.toString());
+                return newSet;
+            });
+        } catch (err) {
+            console.error('Unstake CL position error:', err);
+            alert('Failed to unstake position. Check console for details.');
         }
         setActionLoading(false);
     };
@@ -945,7 +1039,7 @@ function LiquidityPageContent() {
                             : 'text-gray-400 hover:text-white'
                             }`}
                     >
-                        My Positions ({v2Positions.length + clPositions.length})
+                        My Positions ({v2Positions.length + clPositions.length + stakedCLPositions.length})
                     </button>
                 </div>
             </div>
@@ -1429,7 +1523,7 @@ function LiquidityPageContent() {
                             <h3 className="text-xl font-semibold mb-2">Connect Wallet</h3>
                             <p className="text-gray-400 mb-6">Connect your wallet to view your positions</p>
                         </div>
-                    ) : v2Positions.length === 0 && clPositions.length === 0 ? (
+                    ) : v2Positions.length === 0 && clPositions.length === 0 && stakedCLPositions.length === 0 ? (
                         <div className="glass-card p-12 text-center">
                             <h3 className="text-xl font-semibold mb-2">No Positions Found</h3>
                             <p className="text-gray-400 mb-6">
@@ -1657,11 +1751,147 @@ function LiquidityPageContent() {
                                                             onClick={() => handleStakeCL(pos)}
                                                             disabled={actionLoading || stakedTokenIds.has(pos.tokenId.toString())}
                                                             className={`flex-1 py-2 px-3 text-xs rounded-lg transition disabled:opacity-50 ${stakedTokenIds.has(pos.tokenId.toString())
-                                                                    ? 'bg-green-500/20 text-green-400 cursor-default'
-                                                                    : 'bg-primary/10 text-primary hover:bg-primary/20'
+                                                                ? 'bg-green-500/20 text-green-400 cursor-default'
+                                                                : 'bg-primary/10 text-primary hover:bg-primary/20'
                                                                 }`}
                                                         >
                                                             {actionLoading ? '...' : stakedTokenIds.has(pos.tokenId.toString()) ? '✓ Staked' : 'Stake'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Staked CL Positions */}
+                            {stakedCLPositions.length > 0 && (
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-4 mt-6 flex items-center gap-2">
+                                        <span className="text-green-400">⚡</span> Staked Positions
+                                        <span className="text-xs font-normal text-green-400 px-2 py-0.5 rounded-full bg-green-500/20">
+                                            Earning YAKA
+                                        </span>
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {stakedCLPositions.map((pos, i) => {
+                                            // Get token symbols from known tokens
+                                            const getTokenInfo = (addr: string) => {
+                                                const tokens = DEFAULT_TOKEN_LIST;
+                                                const token = tokens.find(t => t.address.toLowerCase() === addr.toLowerCase());
+                                                return { symbol: token?.symbol || addr.slice(0, 6), decimals: token?.decimals || 18 };
+                                            };
+                                            const token0Info = getTokenInfo(pos.token0);
+                                            const token1Info = getTokenInfo(pos.token1);
+                                            const symbol0 = token0Info.symbol;
+                                            const symbol1 = token1Info.symbol;
+
+                                            // Convert ticks to prices
+                                            const decimalAdjustment = Math.pow(10, token0Info.decimals - token1Info.decimals);
+                                            const tickToPrice = (tick: number) => {
+                                                const rawPrice = Math.pow(1.0001, tick);
+                                                return rawPrice * decimalAdjustment;
+                                            };
+
+                                            const priceLower = tickToPrice(pos.tickLower);
+                                            const priceUpper = tickToPrice(pos.tickUpper);
+                                            const isFullRange = pos.tickLower <= -887200 || pos.tickUpper >= 887200;
+
+                                            const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%' };
+                                            const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
+
+                                            const formatPrice = (price: number) => {
+                                                if (price < 0.0001) return price.toExponential(2);
+                                                if (price < 1) return price.toFixed(6);
+                                                if (price < 1000) return price.toFixed(4);
+                                                if (price < 1000000) return price.toFixed(2);
+                                                return price.toExponential(2);
+                                            };
+
+                                            return (
+                                                <div key={i} className="glass-card p-4 border-2 border-green-500/30">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="relative">
+                                                                <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-xs font-bold">
+                                                                    {symbol0.slice(0, 2)}
+                                                                </div>
+                                                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold absolute -right-2 top-0 border-2 border-bg-primary">
+                                                                    {symbol1.slice(0, 2)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="ml-2">
+                                                                <div className="font-semibold text-sm flex items-center gap-2">
+                                                                    {symbol0}/{symbol1} • #{pos.tokenId.toString()}
+                                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                                                                        ✓ Staked
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-xs text-gray-400">
+                                                                    Fee: {feeTier}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="font-mono text-xs text-gray-400">
+                                                                Liquidity
+                                                            </div>
+                                                            <div className="font-semibold text-sm">
+                                                                {Number(pos.liquidity).toLocaleString()}
+                                                            </div>
+                                                            <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/20 text-secondary">
+                                                                CL
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Price Range */}
+                                                    <div className="p-3 rounded-lg bg-white/5 mb-3">
+                                                        <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                                            <span>Price Range ({symbol1}/{symbol0})</span>
+                                                            {isFullRange && <span className="text-primary">Full Range</span>}
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="text-center">
+                                                                <div className="text-xs text-gray-500">Min</div>
+                                                                <div className="font-semibold text-sm">
+                                                                    {isFullRange ? '0' : formatPrice(priceLower)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-gray-600">↔</div>
+                                                            <div className="text-center">
+                                                                <div className="text-xs text-gray-500">Max</div>
+                                                                <div className="font-semibold text-sm">
+                                                                    {isFullRange ? '∞' : formatPrice(priceUpper)}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Staking Info */}
+                                                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 mb-3">
+                                                        <div className="text-xs text-green-400 flex items-center gap-2">
+                                                            <span>🔥</span> Earning YAKA rewards
+                                                        </div>
+                                                        <div className="text-xs text-gray-400 mt-1">
+                                                            Visit <a href="/portfolio" className="text-primary hover:underline">Portfolio</a> to view all rewards
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Actions */}
+                                                    <div className="flex gap-2 pt-3 border-t border-white/10">
+                                                        <a href="/portfolio" className="flex-1">
+                                                            <button className="w-full py-2 px-3 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition">
+                                                                View Rewards
+                                                            </button>
+                                                        </a>
+                                                        <button
+                                                            onClick={() => handleUnstakeCL(pos)}
+                                                            disabled={actionLoading}
+                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
+                                                        >
+                                                            {actionLoading ? '...' : 'Unstake'}
                                                         </button>
                                                     </div>
                                                 </div>

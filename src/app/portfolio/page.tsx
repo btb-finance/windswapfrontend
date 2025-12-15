@@ -65,14 +65,10 @@ interface StakedPosition {
     rewardRate: bigint;
 }
 
-// Token symbols map
-const TOKEN_SYMBOLS: Record<string, string> = {
-    '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7': 'WSEI',
-    '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392': 'USDC',
-    '0x3894085ef7ff0f0aedf52e2a2704928d1ec074f1': 'USDC',
-    '0x5f0e07dfee5832faa00c63f2d33a0d79150e8598': 'YAKA',
-    '0xd7b207b7c2c8fc32f7ab448d73cfb6be212f0dcf': 'YAKA',
-    '0xb75d0b03c06a926e488e2659df1a861f860bd3d1': 'USDT',
+// Get token info from known token list
+const getTokenInfo = (addr: string) => {
+    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+    return { symbol: token?.symbol || addr.slice(0, 10) + '...', decimals: token?.decimals || 18 };
 };
 
 export default function PortfolioPage() {
@@ -337,11 +333,25 @@ export default function PortfolioPage() {
 
                         if (positionResult.result && positionResult.result.length > 130) {
                             const posData = positionResult.result.slice(2);
-                            // Match stake page offsets: slot layout for positions()
-                            token0 = '0x' + posData.slice(64 + 24, 128); // slot 1, last 40 chars
-                            token1 = '0x' + posData.slice(128 + 24, 192); // slot 2, last 40 chars
-                            tickSpacing = parseInt(posData.slice(192, 256), 16);
-                            liquidity = BigInt('0x' + posData.slice(320, 384));
+                            // positions() returns:
+                            // Slot 0 (0-64): nonce (uint96)
+                            // Slot 1 (64-128): operator (address) - last 40 chars
+                            // Slot 2 (128-192): token0 (address) - last 40 chars
+                            // Slot 3 (192-256): token1 (address) - last 40 chars
+                            // Slot 4 (256-320): tickSpacing (int24)
+                            // Slot 5 (320-384): tickLower (int24)
+                            // Slot 6 (384-448): tickUpper (int24)
+                            // Slot 7 (448-512): liquidity (uint128)
+                            token0 = '0x' + posData.slice(128 + 24, 192); // slot 2, last 40 chars
+                            token1 = '0x' + posData.slice(192 + 24, 256); // slot 3, last 40 chars
+
+                            // Parse tickSpacing (int24) - needs to handle signed integers
+                            const tickSpacingRaw = BigInt('0x' + posData.slice(256, 320));
+                            tickSpacing = tickSpacingRaw > BigInt(8388607)
+                                ? Number(tickSpacingRaw - BigInt(2) ** BigInt(256))
+                                : Number(tickSpacingRaw);
+
+                            liquidity = BigInt('0x' + posData.slice(448, 512)); // slot 7
 
                             // Get token symbols
                             const t0Info = getTokenInfo(token0);
@@ -385,11 +395,6 @@ export default function PortfolioPage() {
     const totalVotingPower = veNFTs.reduce((sum, nft) => sum + nft.votingPower, BigInt(0));
     const totalPendingRewards = stakedPositions.reduce((sum, pos) => sum + pos.pendingRewards, BigInt(0));
     const totalUncollectedFees = clPositions.reduce((sum, pos) => sum + pos.tokensOwed0 + pos.tokensOwed1, BigInt(0));
-
-    const getTokenInfo = (addr: string) => {
-        const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-        return { symbol: token?.symbol || addr.slice(0, 6), decimals: token?.decimals || 18 };
-    };
 
     if (!isConnected) {
         return (
@@ -583,7 +588,7 @@ export default function PortfolioPage() {
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold">Pending Rewards</h3>
-                            <Link href="/stake" className="text-sm text-primary hover:underline">Claim All →</Link>
+                            <Link href="/liquidity" className="text-sm text-primary hover:underline">Manage Positions →</Link>
                         </div>
                         {loadingStaked ? (
                             <div className="text-center py-8 text-gray-400">Loading rewards...</div>
@@ -703,7 +708,7 @@ export default function PortfolioPage() {
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold">Staked LP Positions</h3>
-                            <Link href="/stake" className="text-sm text-primary hover:underline">Manage Stakes →</Link>
+                            <Link href="/liquidity" className="text-sm text-primary hover:underline">Manage Stakes →</Link>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20">
@@ -869,7 +874,7 @@ export default function PortfolioPage() {
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold">Total Pending Rewards</h3>
-                            <Link href="/stake" className="btn-primary px-4 py-2 text-sm rounded-lg">Claim All</Link>
+                            <Link href="/liquidity" className="btn-primary px-4 py-2 text-sm rounded-lg">Manage Positions</Link>
                         </div>
                         <div className="text-4xl font-bold gradient-text mb-2">
                             {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} YAKA

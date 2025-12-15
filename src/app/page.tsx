@@ -78,10 +78,10 @@ export default function Home() {
       icon: '🗳️',
     },
     {
-      title: 'Stake Rewards',
-      description: 'Stake your LP positions to earn extra YAKA rewards.',
-      href: '/stake',
-      icon: '💰',
+      title: 'Portfolio',
+      description: 'Track your positions, staked LP, and pending rewards.',
+      href: '/portfolio',
+      icon: '📊',
     },
   ];
 
@@ -334,45 +334,129 @@ export default function Home() {
 
       {/* Quick Actions for connected users */}
       {isConnected && (
-        <section className="py-12">
-          <motion.div
-            className="glass-card p-8"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-          >
-            <h2 className="text-2xl font-bold mb-6">Quick Actions</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Link href="/swap">
-                <motion.button
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30 font-medium hover:from-primary/30 hover:to-secondary/30 transition-all flex items-center justify-center gap-2"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  🔄 Swap Tokens
-                </motion.button>
-              </Link>
-              <Link href="/liquidity">
-                <motion.button
-                  className="w-full py-4 rounded-xl bg-white/5 border border-white/10 font-medium hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  💧 Manage Positions
-                </motion.button>
-              </Link>
-              <Link href="/vote">
-                <motion.button
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 font-medium hover:from-green-500/30 hover:to-emerald-500/30 transition-all flex items-center justify-center gap-2"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  🗳️ Vote & Earn
-                </motion.button>
-              </Link>
-            </div>
-          </motion.div>
-        </section>
+        <>
+          <section className="py-12">
+            <motion.div
+              className="glass-card p-8"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+            >
+              <h2 className="text-2xl font-bold mb-6">Quick Actions</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Link href="/swap">
+                  <motion.button
+                    className="w-full py-4 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30 font-medium hover:from-primary/30 hover:to-secondary/30 transition-all flex items-center justify-center gap-2"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    🔄 Swap Tokens
+                  </motion.button>
+                </Link>
+                <Link href="/liquidity">
+                  <motion.button
+                    className="w-full py-4 rounded-xl bg-white/5 border border-white/10 font-medium hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    💧 Manage Positions
+                  </motion.button>
+                </Link>
+                <Link href="/vote">
+                  <motion.button
+                    className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 font-medium hover:from-green-500/30 hover:to-emerald-500/30 transition-all flex items-center justify-center gap-2"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    🗳️ Vote & Earn
+                  </motion.button>
+                </Link>
+              </div>
+            </motion.div>
+          </section>
+
+          {/* Portfolio Summary */}
+          <section className="py-8">
+            <motion.div
+              className="glass-card p-8"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.75 }}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold mb-1">Your Portfolio</h2>
+                  <p className="text-gray-400 text-sm">Track your positions and rewards</p>
+                </div>
+                <Link href="/portfolio">
+                  <motion.button
+                    className="btn-secondary px-4 py-2 text-sm"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    View Full Portfolio →
+                  </motion.button>
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-primary">💧</span>
+                    <span className="text-xs text-gray-400">LP Positions</span>
+                  </div>
+                  <div className="text-2xl font-bold">--</div>
+                  <div className="text-xs text-gray-500">View in Portfolio</div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-500/5 border border-yellow-500/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-yellow-400">⚡</span>
+                    <span className="text-xs text-gray-400">Staked</span>
+                  </div>
+                  <div className="text-2xl font-bold">--</div>
+                  <div className="text-xs text-gray-500">Earning YAKA</div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/5 border border-green-500/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-green-400">🎁</span>
+                    <span className="text-xs text-gray-400">Pending Rewards</span>
+                  </div>
+                  <div className="text-2xl font-bold text-green-400">--</div>
+                  <div className="text-xs text-gray-500">YAKA to claim</div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-secondary">🔐</span>
+                    <span className="text-xs text-gray-400">Locked YAKA</span>
+                  </div>
+                  <div className="text-2xl font-bold">--</div>
+                  <div className="text-xs text-gray-500">veNFTs</div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link href="/liquidity" className="flex-1 min-w-[200px]">
+                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition flex items-center justify-center gap-2">
+                    💧 Add Liquidity
+                  </button>
+                </Link>
+                <Link href="/liquidity" className="flex-1 min-w-[200px]">
+                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition flex items-center justify-center gap-2">
+                    ⚡ Manage Staking
+                  </button>
+                </Link>
+                <Link href="/vote" className="flex-1 min-w-[200px]">
+                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition flex items-center justify-center gap-2">
+                    🔐 Lock YAKA
+                  </button>
+                </Link>
+              </div>
+            </motion.div>
+          </section>
+        </>
       )}
 
       {/* YAKA Token Section */}
@@ -421,3 +505,4 @@ export default function Home() {
     </div>
   );
 }
+

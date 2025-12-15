@@ -58,6 +58,20 @@ const VOTER_ABI = [
         stateMutability: 'view',
         type: 'function',
     },
+    {
+        inputs: [],
+        name: 'length',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_start', type: 'uint256' }, { name: '_finish', type: 'uint256' }],
+        name: 'distribute',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
 ] as const;
 
 const FACTORY_REGISTRY_ABI = [
@@ -231,6 +245,13 @@ export default function AdminPage() {
         functionName: 'owner',
     });
 
+    // Get number of pools to distribute
+    const { data: voterPoolsLength } = useReadContract({
+        address: V2_CONTRACTS.Voter as Address,
+        abi: VOTER_ABI,
+        functionName: 'length',
+    });
+
     // Check if factories are approved
     const { data: isV2FactoryApproved, refetch: refetchV2Approval } = useReadContract({
         address: V2_CONTRACTS.FactoryRegistry as Address,
@@ -338,6 +359,24 @@ export default function AdminPage() {
             setTxHash(hash);
         } catch (err: any) {
             setError(err.message || 'Transaction failed');
+        }
+    };
+
+    // Handle distribute call - triggers fee claims for all gauges
+    const handleDistribute = async () => {
+        if (!voterPoolsLength) return;
+        setError(null);
+        try {
+            const poolCount = Number(voterPoolsLength);
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.Voter as Address,
+                abi: VOTER_ABI,
+                functionName: 'distribute',
+                args: [BigInt(0), BigInt(poolCount)],
+            });
+            setTxHash(hash);
+        } catch (err: any) {
+            setError(err.message || 'Distribute failed');
         }
     };
 
