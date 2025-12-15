@@ -192,7 +192,7 @@ export default function StakePage() {
                             method: 'eth_call',
                             params: [{
                                 to: gaugeAddress,
-                                data: `0x17e710a8${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
+                                data: `0x4b937763${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
                             }, 'latest']
                         })
                     }).then(r => r.json());
