@@ -78,6 +78,8 @@ function LiquidityPageContent() {
     const [stable, setStable] = useState(false);
     const [selectorOpen, setSelectorOpen] = useState<'A' | 'B' | null>(null);
     const [txHash, setTxHash] = useState<string | null>(null);
+    const [showStakePrompt, setShowStakePrompt] = useState(false);
+    const [newlyMintedTokenId, setNewlyMintedTokenId] = useState<bigint | null>(null);
 
     // CL specific state
     const [tickSpacing, setTickSpacing] = useState(80); // Default tick spacing (0.25%)
@@ -786,7 +788,14 @@ function LiquidityPageContent() {
             setTxHash(hash);
             setAmountA('');
             setAmountB('');
-            refetchCL();
+
+            // Show stake prompt after successful mint
+            setShowStakePrompt(true);
+
+            // Refetch positions to get the new one
+            setTimeout(() => {
+                refetchCL();
+            }, 2000); // Wait for tx to confirm
         } catch (err: any) {
             console.error('CL mint error:', err);
         }
@@ -1586,6 +1595,70 @@ function LiquidityPageContent() {
                 selectedToken={selectorOpen === 'A' ? tokenA : tokenB}
                 excludeToken={selectorOpen === 'A' ? tokenB : tokenA}
             />
+
+            {/* Stake Prompt Modal - appears after successful LP mint */}
+            {showStakePrompt && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <motion.div
+                        className="glass-card p-6 max-w-md w-full"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                    >
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                <span className="text-3xl">✅</span>
+                            </div>
+                            <h3 className="text-xl font-bold mb-2">Liquidity Added Successfully!</h3>
+                            <p className="text-gray-400 text-sm">
+                                Your position has been created. <span className="text-primary font-semibold">Stake it now</span> to earn YAKA emissions!
+                            </p>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20 mb-6">
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className="text-2xl">🔥</span>
+                                <span className="font-semibold">Why Stake?</span>
+                            </div>
+                            <ul className="text-sm text-gray-300 space-y-1 ml-9">
+                                <li>• Earn YAKA token rewards</li>
+                                <li>• Boost gauge voting power</li>
+                                <li>• Maximize your LP returns</li>
+                            </ul>
+                        </div>
+
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => {
+                                    setShowStakePrompt(false);
+                                    setActiveTab('positions');
+                                }}
+                                className="w-full py-3 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-semibold hover:opacity-90 transition"
+                            >
+                                🎯 Go to Positions & Stake
+                            </button>
+                            <button
+                                onClick={() => setShowStakePrompt(false)}
+                                className="w-full py-3 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 transition text-sm"
+                            >
+                                Skip for now
+                            </button>
+                        </div>
+
+                        {txHash && (
+                            <div className="mt-4 pt-4 border-t border-white/10 text-center">
+                                <a
+                                    href={`https://seitrace.com/tx/${txHash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary hover:underline"
+                                >
+                                    View transaction →
+                                </a>
+                            </div>
+                        )}
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 }
