@@ -642,7 +642,9 @@ export default function LiquidityPage() {
                 amount1Wei: amount1Wei.toString(),
                 amount0Min: amount0Min.toString(),
                 amount1Min: amount1Min.toString(),
-                tickLower, tickUpper
+                tickLower, tickUpper,
+                nativeValue: nativeValue.toString(),
+                sqrtPriceX96: sqrtPriceX96.toString()
             });
 
             const hash = await writeContractAsync({
