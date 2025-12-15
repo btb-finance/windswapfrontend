@@ -647,6 +647,27 @@ export default function LiquidityPage() {
                 sqrtPriceX96: sqrtPriceX96.toString()
             });
 
+            // Log the exact transaction we're about to send
+            const txRequest = {
+                address: CL_CONTRACTS.NonfungiblePositionManager,
+                functionName: 'mint',
+                value: nativeValue.toString(),
+                valueHex: '0x' + nativeValue.toString(16),
+                args: {
+                    token0: token0.address,
+                    token1: token1.address,
+                    tickSpacing,
+                    tickLower,
+                    tickUpper,
+                    amount0Desired: amount0Wei.toString(),
+                    amount1Desired: amount1Wei.toString(),
+                    amount0Min: amount0Min.toString(),
+                    amount1Min: amount1Min.toString(),
+                    sqrtPriceX96: sqrtPriceX96.toString()
+                }
+            };
+            console.log('FULL TX REQUEST:', JSON.stringify(txRequest, null, 2));
+
             const hash = await writeContractAsync({
                 address: CL_CONTRACTS.NonfungiblePositionManager as Address,
                 abi: NFT_POSITION_MANAGER_ABI,
