@@ -144,7 +144,7 @@ export default function StakePage() {
                             method: 'eth_call',
                             params: [{
                                 to: CL_CONTRACTS.CLFactory,
-                                data: `0x1e3dd18b${i.toString(16).padStart(64, '0')}` // allPools(uint256)
+                                data: `0x41d1de97${i.toString(16).padStart(64, '0')}` // allPools(uint256) - correct selector
                             }, 'latest']
                         })
                     }).then(r => r.json());
