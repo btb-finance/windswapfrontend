@@ -554,21 +554,61 @@ export default function LiquidityPage() {
             let sqrtPriceX96 = BigInt(0);
             if (!poolExists) {
                 // Use initialPrice if set, otherwise calculate from amounts
-                let price: number;
+                // initialPrice is entered as "tokenB per tokenA" (e.g., 10 USDC per SEI)
+
+                let rawPrice: number; // price in terms of token1/token0 in raw wei
+
                 if (initialPrice && parseFloat(initialPrice) > 0) {
-                    // initialPrice is token1/token0 (tokenB per tokenA)
-                    // Need to adjust based on sorted order
                     const userPrice = parseFloat(initialPrice);
-                    // If tokenA is token0 (isAFirst), price is correct; if tokenA is token1, invert
-                    price = isAFirst ? userPrice : 1 / userPrice;
+
+                    // User enters: X tokenB per 1 tokenA
+                    // We need: token1_wei / token0_wei for the pool
+
+                    if (isAFirst) {
+                        // tokenA = token0, tokenB = token1
+                        // User price = tokenB/tokenA = token1/token0 (correct direction)
+                        // But need to adjust for decimals:
+                        // rawPrice = userPrice * 10^token1.decimals / 10^token0.decimals
+                        rawPrice = userPrice * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
+                    } else {
+                        // tokenA = token1, tokenB = token0
+                        // User price = tokenB/tokenA = token0/token1 = 1/poolPrice
+                        // So poolPrice = 1/userPrice
+                        rawPrice = (1 / userPrice) * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
+                    }
                 } else {
-                    // Fall back to amounts ratio
-                    price = Number(amount1Wei) / Number(amount0Wei);
+                    // Fall back to amounts ratio (already in wei)
+                    rawPrice = Number(amount1Wei) / Number(amount0Wei);
                 }
-                const sqrtPrice = Math.sqrt(price);
-                // 2^96 = 79228162514264337593543950336
-                sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 79228162514264337593543950336));
-                console.log('Creating new pool with sqrtPriceX96:', sqrtPriceX96.toString(), 'price:', price);
+
+                console.log('Price calculation:', {
+                    initialPrice,
+                    isAFirst,
+                    token0Symbol: token0.symbol,
+                    token0Decimals: token0.decimals,
+                    token1Symbol: token1.symbol,
+                    token1Decimals: token1.decimals,
+                    rawPrice,
+                });
+
+                // sqrtPriceX96 = sqrt(rawPrice) * 2^96
+                // Use BigInt math to avoid precision loss
+                const Q96 = BigInt(2) ** BigInt(96);
+                const sqrtPriceFloat = Math.sqrt(rawPrice);
+
+                // To maintain precision, multiply first then convert to BigInt
+                // sqrtPriceX96 = sqrtPrice * 2^96
+                // Since sqrtPriceFloat can be very small or very large, we need to be careful
+                // Use string parsing for large numbers to avoid JS number precision issues
+                const sqrtPriceScaled = sqrtPriceFloat * Number(Q96);
+                sqrtPriceX96 = BigInt(Math.floor(sqrtPriceScaled));
+
+                console.log('Creating new pool with:', {
+                    sqrtPriceX96: sqrtPriceX96.toString(),
+                    sqrtPriceFloat,
+                    rawPrice,
+                    expectedPrice: (Number(sqrtPriceX96) / Number(Q96)) ** 2,
+                });
             } else {
                 console.log('Pool exists, skipping creation (sqrtPriceX96=0)');
             }
