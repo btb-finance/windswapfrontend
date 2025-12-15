@@ -97,6 +97,9 @@ function LiquidityPageContent() {
     const { positions: clPositions, refetch: refetchCL } = useCLPositions();
     const { positions: v2Positions, refetch: refetchV2 } = useV2Positions();
 
+    // Track staked token IDs
+    const [stakedTokenIds, setStakedTokenIds] = useState<Set<string>>(new Set());
+
     const { writeContractAsync } = useWriteContract();
 
     // URL params for deep linking from pools page
@@ -293,7 +296,105 @@ function LiquidityPageContent() {
     const [selectedCLPosition, setSelectedCLPosition] = useState<typeof clPositions[0] | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
 
-    // Collect fees from CL position
+    // Fetch staked token IDs from gauges
+    useEffect(() => {
+        const fetchStakedTokenIds = async () => {
+            if (!address) {
+                setStakedTokenIds(new Set());
+                return;
+            }
+
+            const staked = new Set<string>();
+
+            try {
+                // Get all CL pools
+                const poolCountResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: CL_CONTRACTS.CLFactory,
+                            data: '0xefde4e64' // allPoolsLength()
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
+                const poolCount = poolCountResult.result ? parseInt(poolCountResult.result, 16) : 0;
+
+                // Check up to 50 pools for gauges
+                for (let i = 0; i < Math.min(poolCount, 50); i++) {
+                    const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', id: 1,
+                            method: 'eth_call',
+                            params: [{
+                                to: CL_CONTRACTS.CLFactory,
+                                data: `0x41d1de97${i.toString(16).padStart(64, '0')}`
+                            }, 'latest']
+                        })
+                    }).then(r => r.json());
+
+                    if (!poolResult.result) continue;
+                    const poolAddr = '0x' + poolResult.result.slice(26);
+                    if (poolAddr === '0x0000000000000000000000000000000000000000') continue;
+
+                    // Get gauge for this pool
+                    const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', id: 1,
+                            method: 'eth_call',
+                            params: [{
+                                to: V2_CONTRACTS.Voter,
+                                data: `0xb9a09fd5${poolAddr.slice(2).toLowerCase().padStart(64, '0')}`
+                            }, 'latest']
+                        })
+                    }).then(r => r.json());
+
+                    const gaugeAddr = '0x' + gaugeResult.result?.slice(26);
+                    if (!gaugeAddr || gaugeAddr === '0x0000000000000000000000000000000000000000') continue;
+
+                    // Get staked values for user - correct selector!
+                    const stakedResult = await fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', id: 1,
+                            method: 'eth_call',
+                            params: [{
+                                to: gaugeAddr,
+                                data: `0x4b937763${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
+                            }, 'latest']
+                        })
+                    }).then(r => r.json());
+
+                    if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) continue;
+
+                    // Parse staked token IDs
+                    const data = stakedResult.result.slice(2);
+                    const length = parseInt(data.slice(64, 128), 16);
+
+                    for (let j = 0; j < length; j++) {
+                        const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
+                        const tokenId = BigInt('0x' + tokenIdHex).toString();
+                        staked.add(tokenId);
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching staked token IDs:', err);
+            }
+
+            console.log('[Liquidity] Staked token IDs:', Array.from(staked));
+            setStakedTokenIds(staked);
+        };
+
+        fetchStakedTokenIds();
+    }, [address]);
     const handleCollectFees = async (position: typeof clPositions[0]) => {
         if (!address) return;
         setActionLoading(true);
@@ -1554,10 +1655,13 @@ function LiquidityPageContent() {
                                                         </button>
                                                         <button
                                                             onClick={() => handleStakeCL(pos)}
-                                                            disabled={actionLoading}
-                                                            className="flex-1 py-2 px-3 text-xs rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-50"
+                                                            disabled={actionLoading || stakedTokenIds.has(pos.tokenId.toString())}
+                                                            className={`flex-1 py-2 px-3 text-xs rounded-lg transition disabled:opacity-50 ${stakedTokenIds.has(pos.tokenId.toString())
+                                                                    ? 'bg-green-500/20 text-green-400 cursor-default'
+                                                                    : 'bg-primary/10 text-primary hover:bg-primary/20'
+                                                                }`}
                                                         >
-                                                            {actionLoading ? '...' : 'Stake'}
+                                                            {actionLoading ? '...' : stakedTokenIds.has(pos.tokenId.toString()) ? '✓ Staked' : 'Stake'}
                                                         </button>
                                                     </div>
                                                 </div>
