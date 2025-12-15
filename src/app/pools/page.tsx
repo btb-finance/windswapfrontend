@@ -74,6 +74,8 @@ interface PoolData {
     reserve1: string;
     tvl: string;
     estimatedApr?: number;
+    hasGauge?: boolean;
+    rewardRate?: bigint;
 }
 
 // Fee tier mapping for CL pools
@@ -430,10 +432,11 @@ export default function PoolsPage() {
             >
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">
-                    <div className="col-span-5">Pool</div>
+                    <div className="col-span-4">Pool</div>
                     <div className="col-span-2 text-center">Type</div>
+                    <div className="col-span-2 text-center">Rewards</div>
                     <div className="col-span-2 text-right">TVL</div>
-                    <div className="col-span-3 text-center">Action</div>
+                    <div className="col-span-2 text-center">Action</div>
                 </div>
 
                 {/* Table Body */}
@@ -462,7 +465,7 @@ export default function PoolsPage() {
                             transition={{ delay: 0.1 + index * 0.02 }}
                         >
                             {/* Pool */}
-                            <div className="col-span-5 flex items-center gap-3">
+                            <div className="col-span-4 flex items-center gap-3">
                                 <div className="relative">
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${pool.poolType === 'CL'
                                         ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
@@ -504,23 +507,36 @@ export default function PoolsPage() {
                                 </span>
                             </div>
 
+                            {/* Rewards - Staking Available */}
+                            <div className="col-span-2 text-center">
+                                {pool.poolType === 'CL' ? (
+                                    <Tooltip content="Stake LP to earn YAKA emissions">
+                                        <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 cursor-help">
+                                            🔥 YAKA
+                                        </span>
+                                    </Tooltip>
+                                ) : (
+                                    <span className="text-xs text-gray-500">—</span>
+                                )}
+                            </div>
+
                             {/* TVL */}
                             <div className="col-span-2 text-right">
                                 <div className="font-semibold">{formatTVL(pool.tvl)}</div>
                             </div>
 
                             {/* Action */}
-                            <div className="col-span-3 text-center">
+                            <div className="col-span-2 text-center">
                                 <Link href={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}&type=${pool.poolType.toLowerCase()}${pool.poolType === 'CL' && pool.tickSpacing ? `&tickSpacing=${pool.tickSpacing}` : ''}${pool.poolType === 'V2' ? `&stable=${pool.stable}` : ''}`}>
                                     <motion.button
-                                        className={`px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
+                                        className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
                                             ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
                                             : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
                                             }`}
                                         whileHover={{ scale: 1.02 }}
                                         whileTap={{ scale: 0.98 }}
                                     >
-                                        Add Liquidity
+                                        + Add LP
                                     </motion.button>
                                 </Link>
                             </div>
