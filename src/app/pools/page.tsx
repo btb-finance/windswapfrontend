@@ -149,6 +149,7 @@ export default function PoolsPage() {
 
     const validClPoolAddresses = (clPoolAddresses?.filter(p => p.status === 'success').map(p => p.result as unknown as Address) || []);
 
+    // Get CL pool details
     const { data: clPoolDetails } = useReadContracts({
         contracts: validClPoolAddresses.flatMap((addr) => [
             { address: addr, abi: CL_POOL_ABI, functionName: 'token0' },
@@ -157,6 +158,29 @@ export default function PoolsPage() {
             { address: addr, abi: CL_POOL_ABI, functionName: 'liquidity' },
         ]),
         query: { enabled: validClPoolAddresses.length > 0 },
+    });
+
+    // Extract CL pool token addresses to fetch balances for TVL
+    const clPoolTokenPairs: { poolAddr: Address; token0?: Address; token1?: Address }[] = [];
+    if (clPoolDetails) {
+        for (let i = 0; i < validClPoolAddresses.length; i++) {
+            const token0Result = clPoolDetails[i * 4];
+            const token1Result = clPoolDetails[i * 4 + 1];
+            clPoolTokenPairs.push({
+                poolAddr: validClPoolAddresses[i],
+                token0: token0Result?.status === 'success' ? token0Result.result as Address : undefined,
+                token1: token1Result?.status === 'success' ? token1Result.result as Address : undefined,
+            });
+        }
+    }
+
+    // Fetch token balances in CL pools for real TVL
+    const { data: clPoolBalances } = useReadContracts({
+        contracts: clPoolTokenPairs.flatMap((pair) => [
+            pair.token0 ? { address: pair.token0, abi: ERC20_ABI, functionName: 'balanceOf', args: [pair.poolAddr] } : null,
+            pair.token1 ? { address: pair.token1, abi: ERC20_ABI, functionName: 'balanceOf', args: [pair.poolAddr] } : null,
+        ]).filter(Boolean) as { address: Address; abi: typeof ERC20_ABI; functionName: 'balanceOf'; args: [Address] }[],
+        query: { enabled: clPoolTokenPairs.length > 0 && clPoolTokenPairs.some(p => p.token0 && p.token1) },
     });
 
     // ============================================
@@ -264,22 +288,43 @@ export default function PoolsPage() {
             if (!token0Info || !token1Info) continue;
 
             const tickSpacing = Number(tickSpacingResult.result);
-            const liquidity = liquidityResult?.status === 'success' ? BigInt(liquidityResult.result as bigint) : BigInt(0);
 
-            // For CL pools, show liquidity in a human-readable way
-            // Note: This is raw liquidity units, not USD - requires price feeds for true TVL
+            // Get real TVL from token balances
+            let reserve0 = '0';
+            let reserve1 = '0';
             let tvl = '0';
-            if (liquidity > BigInt(0)) {
-                // Display liquidity scaled appropriately
-                const liqNum = Number(liquidity);
-                if (liqNum > 1e18) {
-                    tvl = (liqNum / 1e18).toFixed(2);
-                } else if (liqNum > 1e12) {
-                    tvl = (liqNum / 1e12).toFixed(2);
-                } else if (liqNum > 1e6) {
-                    tvl = (liqNum / 1e6).toFixed(2);
-                } else {
-                    tvl = liqNum.toFixed(2);
+
+            if (clPoolBalances && clPoolBalances.length >= (i + 1) * 2) {
+                const balance0Result = clPoolBalances[i * 2];
+                const balance1Result = clPoolBalances[i * 2 + 1];
+
+                if (balance0Result?.status === 'success') {
+                    reserve0 = formatUnits(balance0Result.result as bigint, token0Info.decimals);
+                }
+                if (balance1Result?.status === 'success') {
+                    reserve1 = formatUnits(balance1Result.result as bigint, token1Info.decimals);
+                }
+
+                // Sum of both reserves as simplified TVL (for real USD TVL, would need price feeds)
+                const r0 = parseFloat(reserve0) || 0;
+                const r1 = parseFloat(reserve1) || 0;
+                tvl = (r0 + r1).toFixed(2);
+            }
+
+            // Fallback to raw liquidity if balances not available
+            if (parseFloat(tvl) === 0) {
+                const liquidity = liquidityResult?.status === 'success' ? BigInt(liquidityResult.result as bigint) : BigInt(0);
+                if (liquidity > BigInt(0)) {
+                    const liqNum = Number(liquidity);
+                    if (liqNum > 1e18) {
+                        tvl = (liqNum / 1e18).toFixed(2);
+                    } else if (liqNum > 1e12) {
+                        tvl = (liqNum / 1e12).toFixed(2);
+                    } else if (liqNum > 1e6) {
+                        tvl = (liqNum / 1e6).toFixed(2);
+                    } else {
+                        tvl = liqNum.toFixed(2);
+                    }
                 }
             }
 
@@ -289,14 +334,14 @@ export default function PoolsPage() {
                 token1: { address: token1Result.result as Address, ...token1Info },
                 poolType: 'CL',
                 tickSpacing,
-                reserve0: '0',
-                reserve1: '0',
+                reserve0,
+                reserve1,
                 tvl,
             });
         }
 
         setClPools(newPools);
-    }, [clPoolDetails, validClPoolAddresses.length, tokenInfoMap.size]);
+    }, [clPoolDetails, clPoolBalances, validClPoolAddresses.length, tokenInfoMap.size]);
 
     // Combine and filter pools
     const allPools = [...v2Pools, ...clPools];

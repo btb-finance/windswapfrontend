@@ -112,6 +112,12 @@ export default function PortfolioPage() {
     const [loadingStaked, setLoadingStaked] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
 
+    // Increase liquidity modal state
+    const [showIncreaseLiquidityModal, setShowIncreaseLiquidityModal] = useState(false);
+    const [selectedPosition, setSelectedPosition] = useState<typeof clPositions[0] | null>(null);
+    const [amount0ToAdd, setAmount0ToAdd] = useState('');
+    const [amount1ToAdd, setAmount1ToAdd] = useState('');
+
     // Contract write hook
     const { writeContractAsync } = useWriteContract();
 
@@ -653,6 +659,71 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
+    // Open increase liquidity modal
+    const openIncreaseLiquidityModal = (position: typeof clPositions[0]) => {
+        setSelectedPosition(position);
+        setAmount0ToAdd('');
+        setAmount1ToAdd('');
+        setShowIncreaseLiquidityModal(true);
+    };
+
+    // Increase liquidity for CL position
+    const handleIncreaseLiquidity = async () => {
+        if (!address || !selectedPosition || (!amount0ToAdd && !amount1ToAdd)) return;
+        setActionLoading(true);
+        try {
+            const t0 = getTokenInfo(selectedPosition.token0);
+            const t1 = getTokenInfo(selectedPosition.token1);
+            const amount0Desired = amount0ToAdd ? BigInt(Math.floor(parseFloat(amount0ToAdd) * (10 ** t0.decimals))) : BigInt(0);
+            const amount1Desired = amount1ToAdd ? BigInt(Math.floor(parseFloat(amount1ToAdd) * (10 ** t1.decimals))) : BigInt(0);
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            // Approve token0 if needed
+            if (amount0Desired > BigInt(0)) {
+                await writeContractAsync({
+                    address: selectedPosition.token0 as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
+                });
+            }
+
+            // Approve token1 if needed
+            if (amount1Desired > BigInt(0)) {
+                await writeContractAsync({
+                    address: selectedPosition.token1 as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
+                });
+            }
+
+            // Call increaseLiquidity
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'increaseLiquidity',
+                args: [{
+                    tokenId: selectedPosition.tokenId,
+                    amount0Desired,
+                    amount1Desired,
+                    amount0Min: BigInt(0),
+                    amount1Min: BigInt(0),
+                    deadline,
+                }],
+            });
+
+            alert('Liquidity increased successfully!');
+            setShowIncreaseLiquidityModal(false);
+            setSelectedPosition(null);
+            refetchCL();
+        } catch (err) {
+            console.error('Increase liquidity error:', err);
+            alert('Failed to increase liquidity. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
     if (!isConnected) {
         return (
             <div className="container mx-auto px-6 py-20">
@@ -921,11 +992,18 @@ export default function PortfolioPage() {
                                                 {/* Action Buttons */}
                                                 <div className="flex gap-2 mt-4 pt-3 border-t border-white/10">
                                                     <button
+                                                        onClick={() => openIncreaseLiquidityModal(pos)}
+                                                        disabled={actionLoading}
+                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
+                                                    >
+                                                        {actionLoading ? '...' : '+ Increase'}
+                                                    </button>
+                                                    <button
                                                         onClick={() => handleCollectFees(pos)}
                                                         disabled={actionLoading || (pos.tokensOwed0 <= BigInt(0) && pos.tokensOwed1 <= BigInt(0))}
                                                         className="flex-1 py-2 px-3 text-xs rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition disabled:opacity-50"
                                                     >
-                                                        {actionLoading ? '...' : 'Collect Fees'}
+                                                        {actionLoading ? '...' : 'Collect'}
                                                     </button>
                                                     <button
                                                         onClick={() => handleRemoveLiquidity(pos)}
@@ -1231,6 +1309,90 @@ export default function PortfolioPage() {
                     </div>
                 </motion.div>
             )}
+
+            {/* Increase Liquidity Modal */}
+            {showIncreaseLiquidityModal && selectedPosition && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <motion.div
+                        className="glass-card p-6 max-w-md w-full mx-4"
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                    >
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold">Increase Liquidity</h3>
+                            <button
+                                onClick={() => setShowIncreaseLiquidityModal(false)}
+                                className="text-gray-400 hover:text-white"
+                            >✕</button>
+                        </div>
+
+                        <div className="p-4 rounded-lg bg-white/5 mb-6">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="flex -space-x-2">
+                                    <div className="w-8 h-8 rounded-full bg-secondary/30 flex items-center justify-center text-xs font-bold">
+                                        {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
+                                    </div>
+                                    <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center text-xs font-bold">
+                                        {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="font-semibold">
+                                        {getTokenInfo(selectedPosition.token0).symbol}/{getTokenInfo(selectedPosition.token1).symbol}
+                                    </div>
+                                    <div className="text-xs text-gray-400">Position #{selectedPosition.tokenId.toString()}</div>
+                                </div>
+                            </div>
+                            <div className="text-sm text-gray-400">
+                                Current Liquidity: {Number(selectedPosition.liquidity).toLocaleString()}
+                            </div>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="block text-sm text-gray-400 mb-2">
+                                {getTokenInfo(selectedPosition.token0).symbol} Amount
+                            </label>
+                            <input
+                                type="number"
+                                value={amount0ToAdd}
+                                onChange={(e) => setAmount0ToAdd(e.target.value)}
+                                placeholder="0.0"
+                                className="w-full p-3 rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 outline-none"
+                            />
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-sm text-gray-400 mb-2">
+                                {getTokenInfo(selectedPosition.token1).symbol} Amount
+                            </label>
+                            <input
+                                type="number"
+                                value={amount1ToAdd}
+                                onChange={(e) => setAmount1ToAdd(e.target.value)}
+                                placeholder="0.0"
+                                className="w-full p-3 rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 outline-none"
+                            />
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowIncreaseLiquidityModal(false)}
+                                className="flex-1 py-3 rounded-lg border border-white/20 hover:bg-white/5 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleIncreaseLiquidity}
+                                disabled={actionLoading || (!amount0ToAdd && !amount1ToAdd)}
+                                className="flex-1 py-3 rounded-lg btn-primary disabled:opacity-50"
+                            >
+                                {actionLoading ? 'Adding...' : 'Add Liquidity'}
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 }
+
