@@ -9,6 +9,7 @@ const navLinks = [
     { href: '/', label: 'Dashboard' },
     { href: '/swap', label: 'Swap' },
     { href: '/liquidity', label: 'Liquidity' },
+    { href: '/stake', label: 'Stake' },
     { href: '/pools', label: 'Pools' },
     { href: '/vote', label: 'Vote' },
 ];
