@@ -6,7 +6,6 @@ import { WalletConnect } from '@/components/wallet/WalletConnect';
 import { motion } from 'framer-motion';
 
 const navLinks = [
-    { href: '/', label: 'Dashboard' },
     { href: '/swap', label: 'Swap' },
     { href: '/liquidity', label: 'Liquidity' },
     { href: '/stake', label: 'Stake' },
