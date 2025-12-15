@@ -53,9 +53,16 @@ interface StakedPosition {
     tokenId: bigint;
     gaugeAddress: string;
     poolAddress: string;
+    token0: string;
+    token1: string;
     token0Symbol: string;
     token1Symbol: string;
+    token0Decimals: number;
+    token1Decimals: number;
+    tickSpacing: number;
+    liquidity: bigint;
     pendingRewards: bigint;
+    rewardRate: bigint;
 }
 
 // Token symbols map
@@ -70,7 +77,7 @@ const TOKEN_SYMBOLS: Record<string, string> = {
 
 export default function PortfolioPage() {
     const { isConnected, address } = useAccount();
-    const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'locks' | 'rewards'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'staked' | 'locks' | 'rewards'>('overview');
     const [veNFTs, setVeNFTs] = useState<VeNFT[]>([]);
     const [stakedPositions, setStakedPositions] = useState<StakedPosition[]>([]);
     const [loadingVeNFTs, setLoadingVeNFTs] = useState(true);
@@ -275,13 +282,68 @@ export default function PortfolioPage() {
                             })
                         }).then(r => r.json());
 
+                        // Get reward rate
+                        const rateResult = await fetch('https://evm-rpc.sei-apis.com', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', id: 1,
+                                method: 'eth_call',
+                                params: [{
+                                    to: gaugeAddr,
+                                    data: '0x7b0a47ee' // rewardRate()
+                                }, 'latest']
+                            })
+                        }).then(r => r.json());
+
+                        // Get position data from NFT manager
+                        const positionResult = await fetch('https://evm-rpc.sei-apis.com', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', id: 1,
+                                method: 'eth_call',
+                                params: [{
+                                    to: CL_CONTRACTS.NonfungiblePositionManager,
+                                    data: `0x99fbab88${tokenId.toString(16).padStart(64, '0')}`
+                                }, 'latest']
+                            })
+                        }).then(r => r.json());
+
+                        let token0 = '', token1 = '', tickSpacing = 0, liquidity = BigInt(0);
+                        let token0Symbol = 'Token0', token1Symbol = 'Token1';
+                        let token0Decimals = 18, token1Decimals = 18;
+
+                        if (positionResult.result && positionResult.result.length > 130) {
+                            const posData = positionResult.result.slice(2);
+                            token0 = '0x' + posData.slice(128, 192).slice(-40);
+                            token1 = '0x' + posData.slice(192, 256).slice(-40);
+                            tickSpacing = parseInt(posData.slice(256, 320), 16);
+                            liquidity = BigInt('0x' + posData.slice(448, 512));
+
+                            // Get token symbols
+                            const t0Info = getTokenInfo(token0);
+                            const t1Info = getTokenInfo(token1);
+                            token0Symbol = t0Info.symbol;
+                            token1Symbol = t1Info.symbol;
+                            token0Decimals = t0Info.decimals;
+                            token1Decimals = t1Info.decimals;
+                        }
+
                         positions.push({
                             tokenId,
                             gaugeAddress: gaugeAddr,
                             poolAddress: poolAddr,
-                            token0Symbol: 'USDC', // Would need to fetch actual
-                            token1Symbol: 'WSEI',
+                            token0,
+                            token1,
+                            token0Symbol,
+                            token1Symbol,
+                            token0Decimals,
+                            token1Decimals,
+                            tickSpacing,
+                            liquidity,
                             pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
+                            rewardRate: rateResult.result ? BigInt(rateResult.result) : BigInt(0),
                         });
                     }
                 }
@@ -391,18 +453,19 @@ export default function PortfolioPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 mb-6 border-b border-white/10 pb-2">
-                {(['overview', 'positions', 'locks', 'rewards'] as const).map((tab) => (
+            <div className="flex gap-2 mb-6 border-b border-white/10 pb-2 overflow-x-auto">
+                {(['overview', 'positions', 'staked', 'locks', 'rewards'] as const).map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === tab
-                                ? 'bg-primary text-white'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === tab
+                            ? 'bg-primary text-white'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         {tab === 'overview' && '📊 '}
                         {tab === 'positions' && '💧 '}
+                        {tab === 'staked' && '⚡ '}
                         {tab === 'locks' && '🔒 '}
                         {tab === 'rewards' && '🎁 '}
                         {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -605,6 +668,120 @@ export default function PortfolioPage() {
                             <div className="text-center py-12">
                                 <p className="text-gray-400 mb-4">No LP positions found</p>
                                 <Link href="/liquidity" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Staked Tab */}
+            {activeTab === 'staked' && (
+                <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    {/* Summary Card */}
+                    <div className="glass-card p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-semibold">Staked LP Positions</h3>
+                            <Link href="/stake" className="text-sm text-primary hover:underline">Manage Stakes →</Link>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20">
+                                <div className="text-xs text-gray-400 mb-1">Total Staked</div>
+                                <div className="text-2xl font-bold gradient-text">{stakedPositions.length}</div>
+                                <div className="text-xs text-gray-500">NFT Positions</div>
+                            </div>
+                            <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                                <div className="text-xs text-gray-400 mb-1">Total Pending</div>
+                                <div className="text-xl font-bold text-green-400">
+                                    {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)}
+                                </div>
+                                <div className="text-xs text-gray-500">YAKA rewards</div>
+                            </div>
+                            <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
+                                <div className="text-xs text-gray-400 mb-1">Active Gauges</div>
+                                <div className="text-xl font-bold text-blue-400">
+                                    {new Set(stakedPositions.map(p => p.gaugeAddress)).size}
+                                </div>
+                                <div className="text-xs text-gray-500">earning rewards</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Staked Positions List */}
+                    <div className="glass-card p-6">
+                        <h3 className="font-semibold mb-4">Your Staked NFTs</h3>
+                        {loadingStaked ? (
+                            <div className="text-center py-12 text-gray-400">
+                                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                                Loading staked positions...
+                            </div>
+                        ) : stakedPositions.length === 0 ? (
+                            <div className="text-center py-12">
+                                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                                    <span className="text-4xl">⚡</span>
+                                </div>
+                                <p className="text-gray-400 mb-2">No staked positions</p>
+                                <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+                                    Stake your LP positions to earn YAKA emissions
+                                </p>
+                                <Link href="/liquidity" className="btn-primary px-6 py-3 rounded-lg">View Your Positions</Link>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {stakedPositions.map((pos, i) => {
+                                    const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%' };
+                                    const dailyRewards = Number(formatUnits(pos.rewardRate, 18)) * 86400;
+
+                                    return (
+                                        <div key={i} className="p-5 rounded-xl bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border border-yellow-500/20">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="flex -space-x-3">
+                                                        <div className="w-12 h-12 rounded-full bg-secondary/30 flex items-center justify-center text-sm font-bold border-2 border-bg-primary">
+                                                            {pos.token0Symbol.slice(0, 2)}
+                                                        </div>
+                                                        <div className="w-12 h-12 rounded-full bg-primary/30 flex items-center justify-center text-sm font-bold border-2 border-bg-primary">
+                                                            {pos.token1Symbol.slice(0, 2)}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-bold text-lg">{pos.token0Symbol}/{pos.token1Symbol}</div>
+                                                        <div className="text-sm text-gray-400">
+                                                            NFT #{pos.tokenId.toString()} · {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">
+                                                    ⚡ Staked
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="p-3 rounded-lg bg-white/5">
+                                                    <div className="text-xs text-gray-400 mb-1">Liquidity</div>
+                                                    <div className="font-semibold">{Number(pos.liquidity).toLocaleString()}</div>
+                                                </div>
+                                                <div className="p-3 rounded-lg bg-white/5">
+                                                    <div className="text-xs text-gray-400 mb-1">Pending Rewards</div>
+                                                    <div className="font-semibold text-green-400">
+                                                        {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} YAKA
+                                                    </div>
+                                                </div>
+                                                <div className="p-3 rounded-lg bg-white/5">
+                                                    <div className="text-xs text-gray-400 mb-1">Est. Daily</div>
+                                                    <div className="font-semibold text-blue-400">
+                                                        ~{dailyRewards.toFixed(4)} YAKA
+                                                    </div>
+                                                </div>
+                                                <div className="p-3 rounded-lg bg-white/5">
+                                                    <div className="text-xs text-gray-400 mb-1">Gauge</div>
+                                                    <div className="font-mono text-xs truncate">
+                                                        {pos.gaugeAddress.slice(0, 8)}...{pos.gaugeAddress.slice(-6)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
