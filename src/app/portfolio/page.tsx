@@ -42,6 +42,38 @@ const VOTING_ESCROW_ABI = [
     },
 ] as const;
 
+// CL Gauge ABI for staking/claiming
+const CL_GAUGE_ABI = [
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'deposit',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'withdraw',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'getReward',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'account', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
+        name: 'earned',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
 interface VeNFT {
     tokenId: bigint;
     lockedAmount: bigint;
@@ -78,9 +110,13 @@ export default function PortfolioPage() {
     const [stakedPositions, setStakedPositions] = useState<StakedPosition[]>([]);
     const [loadingVeNFTs, setLoadingVeNFTs] = useState(true);
     const [loadingStaked, setLoadingStaked] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
+
+    // Contract write hook
+    const { writeContractAsync } = useWriteContract();
 
     // Get CL and V2 positions
-    const { positions: clPositions, positionCount: clCount, isLoading: clLoading } = useCLPositions();
+    const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
     const { positions: v2Positions } = useV2Positions();
 
     // Fetch veNFT data
@@ -396,6 +432,227 @@ export default function PortfolioPage() {
     const totalPendingRewards = stakedPositions.reduce((sum, pos) => sum + pos.pendingRewards, BigInt(0));
     const totalUncollectedFees = clPositions.reduce((sum, pos) => sum + pos.tokensOwed0 + pos.tokensOwed1, BigInt(0));
 
+    // Refetch staked positions
+    const refetchStakedPositions = () => {
+        // Trigger re-fetch by resetting loading state (useEffect will handle it)
+        setLoadingStaked(true);
+    };
+
+    // Collect fees from CL position
+    const handleCollectFees = async (position: typeof clPositions[0]) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            const maxUint128 = BigInt('340282366920938463463374607431768211455');
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'collect',
+                args: [{
+                    tokenId: position.tokenId,
+                    recipient: address,
+                    amount0Max: maxUint128,
+                    amount1Max: maxUint128,
+                }],
+            });
+            alert('Fees collected successfully!');
+            refetchCL();
+        } catch (err) {
+            console.error('Collect fees error:', err);
+            alert('Failed to collect fees. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
+    // Remove liquidity from CL position
+    const handleRemoveLiquidity = async (position: typeof clPositions[0]) => {
+        if (!address || position.liquidity <= BigInt(0)) return;
+        setActionLoading(true);
+        try {
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            // Decrease liquidity
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'decreaseLiquidity',
+                args: [{
+                    tokenId: position.tokenId,
+                    liquidity: position.liquidity,
+                    amount0Min: BigInt(0),
+                    amount1Min: BigInt(0),
+                    deadline,
+                }],
+            });
+
+            // Then collect
+            const maxUint128 = BigInt('340282366920938463463374607431768211455');
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'collect',
+                args: [{
+                    tokenId: position.tokenId,
+                    recipient: address,
+                    amount0Max: maxUint128,
+                    amount1Max: maxUint128,
+                }],
+            });
+
+            alert('Liquidity removed successfully!');
+            refetchCL();
+        } catch (err) {
+            console.error('Remove liquidity error:', err);
+            alert('Failed to remove liquidity. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
+    // Stake CL position in gauge
+    const handleStakePosition = async (position: typeof clPositions[0]) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            // Get pool address from CLFactory
+            const getPoolSelector = '0x28af8d0b';
+            const token0Padded = position.token0.slice(2).toLowerCase().padStart(64, '0');
+            const token1Padded = position.token1.slice(2).toLowerCase().padStart(64, '0');
+            const tickSpacingHex = position.tickSpacing >= 0
+                ? position.tickSpacing.toString(16).padStart(64, '0')
+                : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(position.tickSpacing) + BigInt(1)).toString(16);
+
+            const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0', method: 'eth_call',
+                    params: [{ to: CL_CONTRACTS.CLFactory, data: `${getPoolSelector}${token0Padded}${token1Padded}${tickSpacingHex}` }, 'latest'],
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            if (!poolResult.result || poolResult.result === '0x' + '0'.repeat(64)) {
+                alert('Pool not found for this position.');
+                setActionLoading(false);
+                return;
+            }
+
+            const poolAddress = '0x' + poolResult.result.slice(-40);
+
+            // Get gauge address from Voter
+            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0', method: 'eth_call',
+                    params: [{ to: V2_CONTRACTS.Voter, data: `0xb9a09fd5${poolAddress.slice(2).toLowerCase().padStart(64, '0')}` }, 'latest'],
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            if (!gaugeResult.result || gaugeResult.result === '0x' + '0'.repeat(64)) {
+                alert('No gauge found for this pool. It may not be gauged yet.');
+                setActionLoading(false);
+                return;
+            }
+
+            const gaugeAddress = '0x' + gaugeResult.result.slice(-40);
+
+            // Approve NFT to gauge
+            await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                functionName: 'approve',
+                args: [gaugeAddress as Address, position.tokenId],
+            });
+
+            // Deposit to gauge
+            await writeContractAsync({
+                address: gaugeAddress as Address,
+                abi: CL_GAUGE_ABI,
+                functionName: 'deposit',
+                args: [position.tokenId],
+            });
+
+            alert('Position staked successfully! You will now earn YAKA rewards.');
+            refetchCL();
+        } catch (err) {
+            console.error('Stake position error:', err);
+            alert('Failed to stake position. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
+    // Unstake position from gauge
+    const handleUnstakePosition = async (pos: StakedPosition) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            await writeContractAsync({
+                address: pos.gaugeAddress as Address,
+                abi: CL_GAUGE_ABI,
+                functionName: 'withdraw',
+                args: [pos.tokenId],
+            });
+
+            alert('Position unstaked successfully!');
+            setStakedPositions(prev => prev.filter(p => p.tokenId !== pos.tokenId));
+            refetchCL();
+        } catch (err) {
+            console.error('Unstake position error:', err);
+            alert('Failed to unstake position. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
+    // Claim YAKA rewards from gauge
+    const handleClaimRewards = async (pos: StakedPosition) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            await writeContractAsync({
+                address: pos.gaugeAddress as Address,
+                abi: CL_GAUGE_ABI,
+                functionName: 'getReward',
+                args: [pos.tokenId],
+            });
+
+            alert('Rewards claimed successfully!');
+            // Update pending rewards to 0 for this position
+            setStakedPositions(prev => prev.map(p =>
+                p.tokenId === pos.tokenId ? { ...p, pendingRewards: BigInt(0) } : p
+            ));
+        } catch (err) {
+            console.error('Claim rewards error:', err);
+            alert('Failed to claim rewards. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
+    // Claim all rewards from all staked positions
+    const handleClaimAllRewards = async () => {
+        if (!address || stakedPositions.length === 0) return;
+        setActionLoading(true);
+        try {
+            for (const pos of stakedPositions) {
+                if (pos.pendingRewards > BigInt(0)) {
+                    await writeContractAsync({
+                        address: pos.gaugeAddress as Address,
+                        abi: CL_GAUGE_ABI,
+                        functionName: 'getReward',
+                        args: [pos.tokenId],
+                    });
+                }
+            }
+            alert('All rewards claimed successfully!');
+            setStakedPositions(prev => prev.map(p => ({ ...p, pendingRewards: BigInt(0) })));
+        } catch (err) {
+            console.error('Claim all rewards error:', err);
+            alert('Failed to claim all rewards. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
     if (!isConnected) {
         return (
             <div className="container mx-auto px-6 py-20">
@@ -661,6 +918,30 @@ export default function PortfolioPage() {
                                                         </div>
                                                     </div>
                                                 </div>
+                                                {/* Action Buttons */}
+                                                <div className="flex gap-2 mt-4 pt-3 border-t border-white/10">
+                                                    <button
+                                                        onClick={() => handleCollectFees(pos)}
+                                                        disabled={actionLoading || (pos.tokensOwed0 <= BigInt(0) && pos.tokensOwed1 <= BigInt(0))}
+                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition disabled:opacity-50"
+                                                    >
+                                                        {actionLoading ? '...' : 'Collect Fees'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRemoveLiquidity(pos)}
+                                                        disabled={actionLoading || pos.liquidity <= BigInt(0)}
+                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                    >
+                                                        {actionLoading ? '...' : 'Remove'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleStakePosition(pos)}
+                                                        disabled={actionLoading}
+                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-50"
+                                                    >
+                                                        {actionLoading ? '...' : 'Stake'}
+                                                    </button>
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -806,6 +1087,23 @@ export default function PortfolioPage() {
                                                     </div>
                                                 </div>
                                             </div>
+                                            {/* Action Buttons */}
+                                            <div className="flex gap-3 mt-4 pt-4 border-t border-white/10">
+                                                <button
+                                                    onClick={() => handleClaimRewards(pos)}
+                                                    disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
+                                                    className="flex-1 py-2.5 px-4 text-sm rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50 font-medium"
+                                                >
+                                                    {actionLoading ? '...' : `Claim ${parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} YAKA`}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleUnstakePosition(pos)}
+                                                    disabled={actionLoading}
+                                                    className="flex-1 py-2.5 px-4 text-sm rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50 font-medium"
+                                                >
+                                                    {actionLoading ? '...' : 'Unstake'}
+                                                </button>
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -874,7 +1172,13 @@ export default function PortfolioPage() {
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold">Total Pending Rewards</h3>
-                            <Link href="/liquidity" className="btn-primary px-4 py-2 text-sm rounded-lg">Manage Positions</Link>
+                            <button
+                                onClick={handleClaimAllRewards}
+                                disabled={actionLoading || totalPendingRewards <= BigInt(0)}
+                                className="btn-primary px-4 py-2 text-sm rounded-lg disabled:opacity-50"
+                            >
+                                {actionLoading ? 'Claiming...' : 'Claim All'}
+                            </button>
                         </div>
                         <div className="text-4xl font-bold gradient-text mb-2">
                             {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} YAKA
@@ -905,11 +1209,20 @@ export default function PortfolioPage() {
                                                 Position #{pos.tokenId.toString()} · Gauge: {pos.gaugeAddress.slice(0, 8)}...
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="font-semibold text-green-400">
-                                                {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} YAKA
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-right">
+                                                <div className="font-semibold text-green-400">
+                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} YAKA
+                                                </div>
+                                                <div className="text-xs text-gray-400">pending</div>
                                             </div>
-                                            <div className="text-xs text-gray-400">pending</div>
+                                            <button
+                                                onClick={() => handleClaimRewards(pos)}
+                                                disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
+                                                className="px-3 py-1.5 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
+                                            >
+                                                {actionLoading ? '...' : 'Claim'}
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
