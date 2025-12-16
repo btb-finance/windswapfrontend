@@ -127,21 +127,26 @@ export default function PortfolioPage() {
     const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
     const { positions: v2Positions } = useV2Positions();
 
-    // Fetch balances when modal opens
+    // Fetch balances and pool price when modal opens
+    const [currentTick, setCurrentTick] = useState<number | null>(null);
+
     useEffect(() => {
-        const fetchBalances = async () => {
+        const fetchBalancesAndPrice = async () => {
             if (!address || !selectedPosition || !showIncreaseLiquidityModal) {
                 setBalance0('0');
                 setBalance1('0');
+                setCurrentTick(null);
                 return;
             }
 
-            // Fetch balance of token0
             try {
                 const balanceSelector = '0x70a08231';
                 const addressPadded = address.slice(2).toLowerCase().padStart(64, '0');
 
-                const [bal0Response, bal1Response] = await Promise.all([
+                // Fetch balances and pool slot0 (for current tick)
+                const slot0Selector = '0x3850c7bd'; // slot0()
+
+                const [bal0Response, bal1Response, slot0Response] = await Promise.all([
                     fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -162,6 +167,46 @@ export default function PortfolioPage() {
                             id: 2,
                         }),
                     }).then(r => r.json()),
+                    // Fetch pool address and slot0
+                    (async () => {
+                        // Get pool address from CLFactory
+                        const t0 = selectedPosition.token0.toLowerCase();
+                        const t1 = selectedPosition.token1.toLowerCase();
+                        const [token0, token1] = t0 < t1 ? [t0, t1] : [t1, t0];
+                        const tickSpacing = selectedPosition.tickSpacing || 100;
+
+                        const getPoolSelector = '0x28af8d0b';
+                        const token0Padded = token0.slice(2).padStart(64, '0');
+                        const token1Padded = token1.slice(2).padStart(64, '0');
+                        const tickPadded = tickSpacing.toString(16).padStart(64, '0');
+
+                        const poolRes = await fetch('https://evm-rpc.sei-apis.com', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'eth_call',
+                                params: [{ to: CL_CONTRACTS.CLFactory, data: `${getPoolSelector}${token0Padded}${token1Padded}${tickPadded}` }, 'latest'],
+                                id: 3,
+                            }),
+                        }).then(r => r.json());
+
+                        if (poolRes.result && poolRes.result !== '0x' + '0'.repeat(64)) {
+                            const poolAddress = '0x' + poolRes.result.slice(-40);
+                            const slot0Res = await fetch('https://evm-rpc.sei-apis.com', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    jsonrpc: '2.0',
+                                    method: 'eth_call',
+                                    params: [{ to: poolAddress, data: slot0Selector }, 'latest'],
+                                    id: 4,
+                                }),
+                            }).then(r => r.json());
+                            return slot0Res;
+                        }
+                        return null;
+                    })(),
                 ]);
 
                 const t0 = getTokenInfo(selectedPosition.token0);
@@ -175,13 +220,105 @@ export default function PortfolioPage() {
                     const bal1Wei = BigInt(bal1Response.result);
                     setBalance1((Number(bal1Wei) / (10 ** t1.decimals)).toFixed(6));
                 }
+
+                // Parse slot0 to get current tick
+                if (slot0Response?.result && slot0Response.result.length >= 130) {
+                    // slot0 returns: sqrtPriceX96 (uint160), tick (int24), ...
+                    // tick is at bytes 20-22 (from position 64 to 70)
+                    const tickHex = slot0Response.result.slice(66, 130);
+                    const tickBigInt = BigInt('0x' + tickHex);
+                    // Convert to signed int24
+                    const tick = tickBigInt > BigInt(0x7FFFFF) ? Number(tickBigInt) - 0x1000000 : Number(tickBigInt);
+                    setCurrentTick(tick);
+                }
             } catch (err) {
                 console.error('Error fetching balances:', err);
             }
         };
 
-        fetchBalances();
+        fetchBalancesAndPrice();
     }, [address, selectedPosition, showIncreaseLiquidityModal]);
+
+    // Calculate required amount1 based on amount0 input and position tick range
+    const calculateAmount1FromAmount0 = (amount0: string): string => {
+        if (!selectedPosition || !currentTick || !amount0 || parseFloat(amount0) === 0) return '';
+
+        const tickLower = selectedPosition.tickLower;
+        const tickUpper = selectedPosition.tickUpper;
+        const t0 = getTokenInfo(selectedPosition.token0);
+        const t1 = getTokenInfo(selectedPosition.token1);
+
+        // Calculate price ratio at current tick
+        const sqrtPriceCurrent = Math.pow(1.0001, currentTick / 2);
+        const sqrtPriceLower = Math.pow(1.0001, tickLower / 2);
+        const sqrtPriceUpper = Math.pow(1.0001, tickUpper / 2);
+
+        // Adjust for decimals
+        const decimalAdjust = Math.pow(10, t1.decimals - t0.decimals);
+
+        // Calculate the ratio of token1 to token0 for this position
+        // For in-range positions: amount1 = amount0 * (sqrtP - sqrtPa) / (1/sqrtP - 1/sqrtPb)
+        if (currentTick < tickLower) {
+            // Position is below range, only token0 needed
+            return '0';
+        } else if (currentTick > tickUpper) {
+            // Position is above range, only token1 needed - can't compute from amount0
+            return '';
+        } else {
+            // In range
+            const numerator = sqrtPriceCurrent - sqrtPriceLower;
+            const denominator = (1 / sqrtPriceCurrent) - (1 / sqrtPriceUpper);
+            if (denominator === 0) return '';
+            const ratio = numerator / denominator * decimalAdjust;
+            const amount1 = parseFloat(amount0) * ratio;
+            return amount1.toFixed(6);
+        }
+    };
+
+    // Calculate required amount0 based on amount1 input
+    const calculateAmount0FromAmount1 = (amount1: string): string => {
+        if (!selectedPosition || !currentTick || !amount1 || parseFloat(amount1) === 0) return '';
+
+        const tickLower = selectedPosition.tickLower;
+        const tickUpper = selectedPosition.tickUpper;
+        const t0 = getTokenInfo(selectedPosition.token0);
+        const t1 = getTokenInfo(selectedPosition.token1);
+
+        const sqrtPriceCurrent = Math.pow(1.0001, currentTick / 2);
+        const sqrtPriceLower = Math.pow(1.0001, tickLower / 2);
+        const sqrtPriceUpper = Math.pow(1.0001, tickUpper / 2);
+
+        const decimalAdjust = Math.pow(10, t1.decimals - t0.decimals);
+
+        if (currentTick < tickLower) {
+            // Only token0 needed - can't compute from amount1
+            return '';
+        } else if (currentTick > tickUpper) {
+            // Only token1 needed
+            return '0';
+        } else {
+            const numerator = sqrtPriceCurrent - sqrtPriceLower;
+            const denominator = (1 / sqrtPriceCurrent) - (1 / sqrtPriceUpper);
+            if (numerator === 0) return '';
+            const ratio = denominator / numerator / decimalAdjust;
+            const amount0 = parseFloat(amount1) * ratio;
+            return amount0.toFixed(6);
+        }
+    };
+
+    // Handle amount0 change and auto-calculate amount1
+    const handleAmount0Change = (value: string) => {
+        setAmount0ToAdd(value);
+        const calculated = calculateAmount1FromAmount0(value);
+        if (calculated) setAmount1ToAdd(calculated);
+    };
+
+    // Handle amount1 change and auto-calculate amount0
+    const handleAmount1Change = (value: string) => {
+        setAmount1ToAdd(value);
+        const calculated = calculateAmount0FromAmount1(value);
+        if (calculated) setAmount0ToAdd(calculated);
+    };
 
     // Fetch veNFT data
     useEffect(() => {
@@ -1414,7 +1551,7 @@ export default function PortfolioPage() {
                                 <div className="flex items-center gap-2 text-sm">
                                     <span className="text-gray-500">Balance: {balance0}</span>
                                     <button
-                                        onClick={() => setAmount0ToAdd(balance0)}
+                                        onClick={() => handleAmount0Change(balance0)}
                                         className="text-primary hover:text-primary/80 font-medium"
                                     >MAX</button>
                                 </div>
@@ -1422,7 +1559,7 @@ export default function PortfolioPage() {
                             <input
                                 type="number"
                                 value={amount0ToAdd}
-                                onChange={(e) => setAmount0ToAdd(e.target.value)}
+                                onChange={(e) => handleAmount0Change(e.target.value)}
                                 placeholder="0.0"
                                 className="w-full p-3 rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 outline-none"
                             />
@@ -1436,7 +1573,7 @@ export default function PortfolioPage() {
                                 <div className="flex items-center gap-2 text-sm">
                                     <span className="text-gray-500">Balance: {balance1}</span>
                                     <button
-                                        onClick={() => setAmount1ToAdd(balance1)}
+                                        onClick={() => handleAmount1Change(balance1)}
                                         className="text-primary hover:text-primary/80 font-medium"
                                     >MAX</button>
                                 </div>
@@ -1444,7 +1581,7 @@ export default function PortfolioPage() {
                             <input
                                 type="number"
                                 value={amount1ToAdd}
-                                onChange={(e) => setAmount1ToAdd(e.target.value)}
+                                onChange={(e) => handleAmount1Change(e.target.value)}
                                 placeholder="0.0"
                                 className="w-full p-3 rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 outline-none"
                             />
