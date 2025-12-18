@@ -400,16 +400,6 @@ export default function VotePage() {
                             title="Connect Your Wallet"
                             description="Connect your wallet to vote on pool rewards"
                         />
-                    ) : positions.length === 0 ? (
-                        <EmptyState
-                            icon="🔐"
-                            title="No Voting Power Yet"
-                            description="Lock YAKA tokens first to get voting power. Then you can vote to direct weekly rewards to your favorite pools."
-                            action={{
-                                label: 'Lock YAKA',
-                                onClick: () => setActiveTab('lock')
-                            }}
-                        />
                     ) : gauges.length === 0 ? (
                         <EmptyState
                             icon="🗳️"
@@ -418,38 +408,65 @@ export default function VotePage() {
                         />
                     ) : (
                         <>
-                            {/* NFT Selector */}
-                            <div className="glass-card p-5 mb-6 max-w-4xl mx-auto">
-                                <label className="text-sm text-gray-400 mb-3 block">Select Voting NFT to Use</label>
-                                <div className="flex gap-3 flex-wrap">
-                                    {positions.map((pos) => (
-                                        <button
-                                            key={pos.tokenId.toString()}
-                                            onClick={() => setSelectedVeNFT(pos.tokenId)}
-                                            className={`px-4 py-3 rounded-xl text-sm transition-all ${selectedVeNFT === pos.tokenId
-                                                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
-                                                : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10'
-                                                }`}
-                                        >
-                                            <div className="font-semibold">NFT #{pos.tokenId.toString()}</div>
-                                            <div className="text-xs opacity-80">
-                                                {parseFloat(formatUnits(pos.votingPower, 18)).toFixed(2)} voting power
+                            {/* Banner for users without veNFT */}
+                            {positions.length === 0 && (
+                                <div className="max-w-4xl mx-auto mb-6 p-4 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30">
+                                    <div className="flex items-center justify-between flex-wrap gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-2xl">🔐</span>
+                                            <div>
+                                                <p className="font-semibold">Lock YAKA to Vote</p>
+                                                <p className="text-sm text-gray-400">You need voting power to participate in gauge voting</p>
                                             </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setActiveTab('lock')}
+                                            className="px-4 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-medium hover:opacity-90"
+                                        >
+                                            Lock YAKA
                                         </button>
-                                    ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
-                            {/* Pools List */}
+                            {/* NFT Selector - only show if user has positions */}
+                            {positions.length > 0 && (
+                                <div className="glass-card p-5 mb-6 max-w-4xl mx-auto">
+                                    <label className="text-sm text-gray-400 mb-3 block">Select Voting NFT to Use</label>
+                                    <div className="flex gap-3 flex-wrap">
+                                        {positions.map((pos) => (
+                                            <button
+                                                key={pos.tokenId.toString()}
+                                                onClick={() => setSelectedVeNFT(pos.tokenId)}
+                                                className={`px-4 py-3 rounded-xl text-sm transition-all ${selectedVeNFT === pos.tokenId
+                                                    ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10'
+                                                    }`}
+                                            >
+                                                <div className="font-semibold">NFT #{pos.tokenId.toString()}</div>
+                                                <div className="text-xs opacity-80">
+                                                    {parseFloat(formatUnits(pos.votingPower, 18)).toFixed(2)} voting power
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Pools List - always visible */}
                             <div className="glass-card overflow-hidden max-w-4xl mx-auto">
                                 <div className="p-5 border-b border-white/5 flex justify-between items-center">
                                     <div>
-                                        <h2 className="text-lg font-semibold">Vote on Pool Rewards</h2>
-                                        <p className="text-sm text-gray-400">Allocate your voting power to pools. They&apos;ll receive weekly YAKA rewards!</p>
+                                        <h2 className="text-lg font-semibold">Pool Vote Weights</h2>
+                                        <p className="text-sm text-gray-400">
+                                            {positions.length > 0
+                                                ? "Allocate your voting power to pools. They'll receive weekly YAKA rewards!"
+                                                : "See how votes are distributed across pools. Lock YAKA to participate!"}
+                                        </p>
                                     </div>
                                     <div className="text-right text-sm">
                                         <div className="text-gray-400">Total Votes</div>
-                                        <div className="font-semibold">{parseFloat(formatUnits(totalWeight, 18)).toLocaleString()}</div>
+                                        <div className="font-semibold text-lg">{parseFloat(formatUnits(totalWeight, 18)).toLocaleString()}</div>
                                     </div>
                                 </div>
 
@@ -458,7 +475,7 @@ export default function VotePage() {
                                     <div className="col-span-4">Pool</div>
                                     <div className="col-span-2 text-right">Current Share</div>
                                     <div className="col-span-3 text-right">Total Votes</div>
-                                    <div className="col-span-3 text-center">Your Vote %</div>
+                                    <div className="col-span-3 text-center">{positions.length > 0 ? 'Your Vote %' : 'Status'}</div>
                                 </div>
 
                                 {/* Loading State */}
@@ -519,39 +536,47 @@ export default function VotePage() {
                                             {parseFloat(formatUnits(gauge.weight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </div>
 
-                                        {/* Vote Input - Full width on mobile */}
+                                        {/* Vote Input or Status */}
                                         <div className="md:col-span-3 flex items-center justify-between md:justify-center gap-2">
-                                            <div className="flex gap-1">
-                                                {[100, 50, 25].map((pct) => (
-                                                    <button
-                                                        key={pct}
-                                                        onClick={() => updateVoteWeight(gauge.pool, pct)}
+                                            {positions.length > 0 ? (
+                                                <>
+                                                    <div className="flex gap-1">
+                                                        {[100, 50, 25].map((pct) => (
+                                                            <button
+                                                                key={pct}
+                                                                onClick={() => updateVoteWeight(gauge.pool, pct)}
+                                                                disabled={!selectedVeNFT || !gauge.isAlive}
+                                                                className={`px-2.5 py-1.5 text-xs rounded-lg transition ${voteWeights[gauge.pool] === pct
+                                                                    ? 'bg-primary text-white'
+                                                                    : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                                            >
+                                                                {pct}%
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="0"
+                                                        value={voteWeights[gauge.pool] || ''}
+                                                        onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
                                                         disabled={!selectedVeNFT || !gauge.isAlive}
-                                                        className={`px-2.5 py-1.5 text-xs rounded-lg transition ${voteWeights[gauge.pool] === pct
-                                                            ? 'bg-primary text-white'
-                                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                                                            } disabled:opacity-40 disabled:cursor-not-allowed`}
-                                                    >
-                                                        {pct}%
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                placeholder="0"
-                                                value={voteWeights[gauge.pool] || ''}
-                                                onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
-                                                disabled={!selectedVeNFT || !gauge.isAlive}
-                                                className="w-16 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
-                                            />
+                                                        className="w-16 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
+                                                    />
+                                                </>
+                                            ) : (
+                                                <span className={`text-xs px-3 py-1.5 rounded-lg ${gauge.isAlive ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                                    {gauge.isAlive ? '✓ Active' : '✗ Inactive'}
+                                                </span>
+                                            )}
                                         </div>
                                     </motion.div>
                                 ))}
                             </div>
 
-                            {/* Vote Summary */}
-                            {totalVoteWeight > 0 && (
+                            {/* Vote Summary - only show if user has positions and has allocated votes */}
+                            {positions.length > 0 && totalVoteWeight > 0 && (
                                 <motion.div
                                     className="max-w-4xl mx-auto mt-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20"
                                     initial={{ opacity: 0 }}
@@ -567,27 +592,29 @@ export default function VotePage() {
                                 </motion.div>
                             )}
 
-                            {/* Submit Vote */}
-                            <div className="max-w-4xl mx-auto mt-6 flex gap-4 justify-end">
-                                {selectedVeNFT && (
-                                    <button
-                                        onClick={handleResetVotes}
-                                        disabled={isVoting}
-                                        className="px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition disabled:opacity-50 font-medium"
+                            {/* Submit Vote - only show if user has positions */}
+                            {positions.length > 0 && (
+                                <div className="max-w-4xl mx-auto mt-6 flex gap-4 justify-end">
+                                    {selectedVeNFT && (
+                                        <button
+                                            onClick={handleResetVotes}
+                                            disabled={isVoting}
+                                            className="px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition disabled:opacity-50 font-medium"
+                                        >
+                                            Reset My Votes
+                                        </button>
+                                    )}
+                                    <motion.button
+                                        onClick={handleVote}
+                                        disabled={!selectedVeNFT || totalVoteWeight === 0 || isVoting}
+                                        className="btn-gradient px-8 disabled:opacity-50"
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
                                     >
-                                        Reset My Votes
-                                    </button>
-                                )}
-                                <motion.button
-                                    onClick={handleVote}
-                                    disabled={!selectedVeNFT || totalVoteWeight === 0 || isVoting}
-                                    className="btn-gradient px-8 disabled:opacity-50"
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                >
-                                    {isVoting ? 'Submitting...' : 'Cast Votes'}
-                                </motion.button>
-                            </div>
+                                        {isVoting ? 'Submitting...' : 'Cast Votes'}
+                                    </motion.button>
+                                </div>
+                            )}
                         </>
                     )}
                 </motion.div>
