@@ -522,7 +522,8 @@ export default function PortfolioPage() {
                         const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
                         const tokenId = BigInt('0x' + tokenIdHex);
 
-                        // Get pending rewards
+                        // Get pending rewards using earned(address,uint256) which simulates reward growth
+                        // Selector: 0x3e491d47 = earned(address,uint256)
                         const rewardsResult = await fetch('https://evm-rpc.sei-apis.com', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -531,7 +532,7 @@ export default function PortfolioPage() {
                                 method: 'eth_call',
                                 params: [{
                                     to: gaugeAddr,
-                                    data: `0x0fb5a6b4${tokenId.toString(16).padStart(64, '0')}`
+                                    data: `0x3e491d47${address.slice(2).toLowerCase().padStart(64, '0')}${tokenId.toString(16).padStart(64, '0')}`
                                 }, 'latest']
                             })
                         }).then(r => r.json());
