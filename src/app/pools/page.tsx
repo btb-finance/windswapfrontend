@@ -92,6 +92,7 @@ export default function PoolsPage() {
     const [search, setSearch] = useState('');
     const [v2Pools, setV2Pools] = useState<PoolData[]>([]);
     const [clPools, setClPools] = useState<PoolData[]>([]);
+    const [poolRewards, setPoolRewards] = useState<Map<string, bigint>>(new Map());
 
     // ============================================
     // V2 POOLS
@@ -343,6 +344,78 @@ export default function PoolsPage() {
         setClPools(newPools);
     }, [clPoolDetails, clPoolBalances, validClPoolAddresses.length, tokenInfoMap.size]);
 
+    // Fetch reward rates for all pools from gauges
+    useEffect(() => {
+        const fetchRewardRates = async () => {
+            const allPoolAddresses = [...validV2PoolAddresses, ...validClPoolAddresses];
+            if (allPoolAddresses.length === 0) return;
+
+            const rewards = new Map<string, bigint>();
+            const rpcUrl = 'https://evm-rpc.sei-apis.com';
+
+            for (const poolAddr of allPoolAddresses) {
+                try {
+                    // Get gauge address from Voter - gauges(address) selector 0xb9a09fd5
+                    const gaugeRes = await fetch(rpcUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', id: 1,
+                            method: 'eth_call',
+                            params: [{
+                                to: V2_CONTRACTS.Voter,
+                                data: `0xb9a09fd5${poolAddr.slice(2).padStart(64, '0')}`
+                            }, 'latest']
+                        })
+                    }).then(r => r.json());
+
+                    const gaugeAddr = gaugeRes.result ? ('0x' + gaugeRes.result.slice(-40)) : null;
+                    if (!gaugeAddr || gaugeAddr === '0x0000000000000000000000000000000000000000') continue;
+
+                    // Get rewardRate from gauge - rewardRate() selector 0x7b0a47ee
+                    const rateRes = await fetch(rpcUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', id: 2,
+                            method: 'eth_call',
+                            params: [{
+                                to: gaugeAddr,
+                                data: '0x7b0a47ee'
+                            }, 'latest']
+                        })
+                    }).then(r => r.json());
+
+                    const rewardRate = rateRes.result ? BigInt(rateRes.result) : BigInt(0);
+                    if (rewardRate > BigInt(0)) {
+                        rewards.set(poolAddr.toLowerCase(), rewardRate);
+                    }
+                } catch (err) {
+                    // Ignore individual pool errors
+                }
+            }
+
+            setPoolRewards(rewards);
+        };
+
+        fetchRewardRates();
+    }, [validV2PoolAddresses.length, validClPoolAddresses.length]);
+
+    // Format weekly YAKA rewards
+    const formatWeeklyRewards = (poolAddress: string) => {
+        const rewardRate = poolRewards.get(poolAddress.toLowerCase());
+        if (!rewardRate || rewardRate === BigInt(0)) return null;
+
+        // rewardRate is YAKA per second, convert to per week (7 * 24 * 60 * 60 = 604800)
+        const weeklyRewards = rewardRate * BigInt(604800);
+        const weeklyFloat = parseFloat(formatUnits(weeklyRewards, 18));
+
+        if (weeklyFloat >= 1000000) return `${(weeklyFloat / 1000000).toFixed(1)}M`;
+        if (weeklyFloat >= 1000) return `${(weeklyFloat / 1000).toFixed(0)}K`;
+        if (weeklyFloat >= 1) return weeklyFloat.toFixed(0);
+        return weeklyFloat.toFixed(2);
+    };
+
     // Combine and filter pools
     const allPools = [...v2Pools, ...clPools];
 
@@ -582,15 +655,19 @@ export default function PoolsPage() {
 
                             {/* Desktop: Rewards */}
                             <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                {pool.poolType === 'CL' ? (
-                                    <Tooltip content="Stake LP to earn YAKA emissions">
-                                        <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 cursor-help">
-                                            🔥 YAKA
-                                        </span>
-                                    </Tooltip>
-                                ) : (
-                                    <span className="text-xs text-gray-500">—</span>
-                                )}
+                                {(() => {
+                                    const weeklyAmount = formatWeeklyRewards(pool.address);
+                                    if (weeklyAmount) {
+                                        return (
+                                            <Tooltip content={`${weeklyAmount} YAKA distributed per week`}>
+                                                <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 cursor-help">
+                                                    🔥 {weeklyAmount}/wk
+                                                </span>
+                                            </Tooltip>
+                                        );
+                                    }
+                                    return <span className="text-xs text-gray-500">—</span>;
+                                })()}
                             </div>
 
                             {/* Desktop: TVL */}
@@ -603,9 +680,9 @@ export default function PoolsPage() {
                                 <div className="flex items-center gap-3">
                                     <span className="text-xs text-gray-500">TVL:</span>
                                     <span className="font-medium text-sm">{formatTVL(pool.tvl, pool)}</span>
-                                    {pool.poolType === 'CL' && (
+                                    {formatWeeklyRewards(pool.address) && (
                                         <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
-                                            🔥 YAKA
+                                            🔥 {formatWeeklyRewards(pool.address)}
                                         </span>
                                     )}
                                 </div>
