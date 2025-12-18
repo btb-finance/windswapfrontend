@@ -125,7 +125,7 @@ export function useVeYAKA() {
             })
         }).then(r => r.json());
 
-        // Get claimable rebases
+        // Get claimable rebases - claimable(uint256) selector 0xd1d58b25
         const claimableData = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -134,7 +134,7 @@ export function useVeYAKA() {
                 method: 'eth_call',
                 params: [{
                     to: V2_CONTRACTS.RewardsDistributor,
-                    data: `0x402914f5${tokenId.toString(16).padStart(64, '0')}`
+                    data: `0xd1d58b25${tokenId.toString(16).padStart(64, '0')}`
                 }, 'latest'],
                 id: 4
             })
