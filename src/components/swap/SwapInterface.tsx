@@ -122,23 +122,30 @@ export function SwapInterface() {
             try {
                 const routes: BestRoute[] = [];
 
-                // === Get V3 and Multi-hop quotes IN PARALLEL for speed ===
-                const [v3Quote, multiHopQuote] = await Promise.all([
-                    getQuoteV3(tokenIn, tokenOut, amountIn),
-                    findMultiHopRoute(tokenIn, tokenOut, amountIn)
-                ]);
+                // === Get best V3 route (direct or multi-hop) - SINGLE call handles both ===
+                const v3Route = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
 
-                if (v3Quote && v3Quote.poolExists && parseFloat(v3Quote.amountOut) > 0) {
-                    const feeMap: Record<number, string> = { 1: '0.01%', 10: '0.05%', 80: '0.30%' };
-                    routes.push({
-                        type: 'v3',
-                        amountOut: v3Quote.amountOut,
-                        tickSpacing: v3Quote.tickSpacing,
-                        feeLabel: `V3 ${feeMap[v3Quote.tickSpacing] || ''}`,
-                    });
+                if (v3Route && parseFloat(v3Route.amountOut) > 0) {
+                    const feeMap: Record<number, string> = { 10: '0.05%', 80: '0.30%' };
+                    if (v3Route.routeType === 'direct') {
+                        routes.push({
+                            type: 'v3',
+                            amountOut: v3Route.amountOut,
+                            tickSpacing: v3Route.tickSpacing1,
+                            feeLabel: `V3 ${feeMap[v3Route.tickSpacing1 || 10] || ''}`,
+                        });
+                    } else if (v3Route.routeType === 'multi-hop' && v3Route.intermediate) {
+                        routes.push({
+                            type: 'multi-hop',
+                            amountOut: v3Route.amountOut,
+                            feeLabel: v3Route.via ? `via ${v3Route.via}` : 'Multi-hop',
+                            via: v3Route.via,
+                            intermediate: v3Route.intermediate,
+                        });
+                    }
                 }
 
-                // === V2 Volatile Quote ===
+                // === V2 Volatile Quote (instant - already fetched by wagmi hook) ===
                 if (v2VolatileQuote && Array.isArray(v2VolatileQuote) && v2VolatileQuote.length > 1) {
                     const outAmount = formatUnits(v2VolatileQuote[v2VolatileQuote.length - 1] as bigint, actualTokenOut.decimals);
                     if (parseFloat(outAmount) > 0) {
@@ -151,7 +158,7 @@ export function SwapInterface() {
                     }
                 }
 
-                // === V2 Stable Quote ===
+                // === V2 Stable Quote (instant - already fetched by wagmi hook) ===
                 if (v2StableQuote && Array.isArray(v2StableQuote) && v2StableQuote.length > 1) {
                     const outAmount = formatUnits(v2StableQuote[v2StableQuote.length - 1] as bigint, actualTokenOut.decimals);
                     if (parseFloat(outAmount) > 0) {
@@ -162,21 +169,6 @@ export function SwapInterface() {
                             feeLabel: 'V2 Stable',
                         });
                     }
-                }
-
-                // === Multi-hop Quote (already fetched above) ===
-                // Only add if it's actually a multi-hop route (not a direct route) and has intermediate
-                if (multiHopQuote &&
-                    multiHopQuote.routeType === 'multi-hop' &&
-                    multiHopQuote.intermediate &&
-                    parseFloat(multiHopQuote.amountOut) > 0) {
-                    routes.push({
-                        type: 'multi-hop',
-                        amountOut: multiHopQuote.amountOut,
-                        feeLabel: multiHopQuote.via ? `via ${multiHopQuote.via}` : 'Multi-hop',
-                        via: multiHopQuote.via,
-                        intermediate: multiHopQuote.intermediate,
-                    });
                 }
 
                 // Find best route
@@ -202,7 +194,7 @@ export function SwapInterface() {
 
         const debounce = setTimeout(findBestRoute, 300);
         return () => clearTimeout(debounce);
-    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, getQuoteV3, findMultiHopRoute]);
+    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute]);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
