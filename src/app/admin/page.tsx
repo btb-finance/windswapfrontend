@@ -979,10 +979,10 @@ export default function AdminPage() {
                                     </div>
                                     <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm">
                                         <div className="text-blue-400">
-                                            {newFee ? `Fee: ${(parseInt(newFee) / 10000 * 100).toFixed(4)}%` : 'Enter fee amount'}
+                                            {newFee ? `Fee: ${(parseInt(newFee) / 10000).toFixed(4)}%` : 'Enter fee amount'}
                                         </div>
                                         <div className="text-gray-400 text-xs mt-1">
-                                            Common: 100=0.01%, 500=0.05%, 2500=0.25%, 3000=0.30%, 10000=1%
+                                            Formula: bps ÷ 10000 = fee % | 9=0.009%, 45=0.045%, 250=0.25%, 500=0.05%, 3000=0.30%
                                         </div>
                                     </div>
                                     <button
