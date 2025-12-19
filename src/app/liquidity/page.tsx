@@ -59,7 +59,7 @@ type PoolType = 'v2' | 'cl';
 // Wrapper component for Suspense boundary (required for useSearchParams)
 export default function LiquidityPage() {
     return (
-        <Suspense fallback={<div className="container mx-auto px-6 text-center py-20"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" /></div>}>
+        <Suspense fallback={<div className="container mx-auto px-4 md:px-6 text-center py-20"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" /></div>}>
             <LiquidityPageContent />
         </Suspense>
     );
@@ -1019,27 +1019,27 @@ function LiquidityPageContent() {
         parseFloat(amountB) > 0;
 
     return (
-        <div className="container mx-auto px-6">
+        <div className="container mx-auto px-4 md:px-6">
             {/* Page Header */}
             <motion.div
-                className="text-center mb-8"
+                className="text-center mb-6 md:mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-4xl font-bold mb-4">
+                <h1 className="text-2xl md:text-4xl font-bold mb-2 md:mb-4">
                     <span className="gradient-text">Provide</span> Liquidity
                 </h1>
-                <p className="text-gray-400 max-w-xl mx-auto">
-                    Deposit tokens into trading pools to earn a share of every trade. The more volume, the more you earn!
+                <p className="text-sm md:text-base text-gray-400 max-w-xl mx-auto px-2">
+                    Deposit tokens into pools to earn trading fees. More volume = more earnings!
                 </p>
             </motion.div>
 
             {/* Tabs */}
-            <div className="flex justify-center mb-8">
+            <div className="flex justify-center mb-6 md:mb-8">
                 <div className="glass p-1 rounded-xl inline-flex">
                     <button
                         onClick={() => setActiveTab('add')}
-                        className={`px-6 py-2 rounded-lg font-medium transition ${activeTab === 'add'
+                        className={`px-4 md:px-6 py-2 rounded-lg text-sm md:text-base font-medium transition ${activeTab === 'add'
                             ? 'bg-primary text-white'
                             : 'text-gray-400 hover:text-white'
                             }`}
@@ -1048,12 +1048,14 @@ function LiquidityPageContent() {
                     </button>
                     <button
                         onClick={() => setActiveTab('positions')}
-                        className={`px-6 py-2 rounded-lg font-medium transition ${activeTab === 'positions'
+                        className={`px-4 md:px-6 py-2 rounded-lg text-sm md:text-base font-medium transition ${activeTab === 'positions'
                             ? 'bg-primary text-white'
                             : 'text-gray-400 hover:text-white'
                             }`}
                     >
-                        My Positions ({v2Positions.length + clPositions.length + stakedCLPositions.length})
+                        <span className="hidden sm:inline">My Positions</span>
+                        <span className="sm:hidden">Positions</span>
+                        <span className="ml-1">({v2Positions.length + clPositions.length + stakedCLPositions.length})</span>
                     </button>
                 </div>
             </div>

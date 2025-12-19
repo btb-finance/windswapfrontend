@@ -922,58 +922,58 @@ export default function PortfolioPage() {
 
     if (!isConnected) {
         return (
-            <div className="container mx-auto px-6 py-20">
-                <div className="glass-card max-w-md mx-auto p-12 text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/20 flex items-center justify-center">
-                        <span className="text-3xl">👛</span>
+            <div className="container mx-auto px-4 md:px-6 py-12 md:py-20">
+                <div className="glass-card max-w-md mx-auto p-8 md:p-12 text-center">
+                    <div className="w-14 h-14 md:w-16 md:h-16 mx-auto mb-3 md:mb-4 rounded-full bg-primary/20 flex items-center justify-center">
+                        <span className="text-2xl md:text-3xl">👛</span>
                     </div>
-                    <h2 className="text-xl font-bold mb-2">Connect Wallet</h2>
-                    <p className="text-gray-400">Connect your wallet to view your portfolio</p>
+                    <h2 className="text-lg md:text-xl font-bold mb-2">Connect Wallet</h2>
+                    <p className="text-sm md:text-base text-gray-400">Connect your wallet to view your portfolio</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="container mx-auto px-6 py-8">
+        <div className="container mx-auto px-4 md:px-6 py-4 md:py-8">
             {/* Header */}
             <motion.div
-                className="text-center mb-8"
+                className="text-center mb-6 md:mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-4xl font-bold mb-2">
+                <h1 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2">
                     <span className="gradient-text">My Portfolio</span>
                 </h1>
-                <p className="text-gray-400">
+                <p className="text-sm md:text-base text-gray-400">
                     Track your LP positions, locked WIND, and rewards
                 </p>
             </motion.div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-6 md:mb-8">
                 <motion.div
-                    className="glass-card p-4"
+                    className="glass-card p-3 md:p-4"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                 >
                     <div className="text-xs text-gray-400 mb-1">LP Positions</div>
-                    <div className="text-2xl font-bold gradient-text">{clPositions.length + v2Positions.length}</div>
-                    <div className="text-xs text-gray-500 mt-1">{clPositions.length} CL · {v2Positions.length} V2</div>
+                    <div className="text-xl md:text-2xl font-bold gradient-text">{clPositions.length + v2Positions.length}</div>
+                    <div className="text-xs text-gray-500 mt-0.5 md:mt-1">{clPositions.length} CL · {v2Positions.length} V2</div>
                 </motion.div>
 
                 <motion.div
-                    className="glass-card p-4"
+                    className="glass-card p-3 md:p-4"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                 >
                     <div className="text-xs text-gray-400 mb-1">Locked WIND</div>
-                    <div className="text-2xl font-bold text-primary">
+                    <div className="text-xl md:text-2xl font-bold text-primary">
                         {parseFloat(formatUnits(totalLockedYaka, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">{veNFTs.length} veNFT{veNFTs.length !== 1 ? 's' : ''}</div>
+                    <div className="text-xs text-gray-500 mt-0.5 md:mt-1">{veNFTs.length} veNFT{veNFTs.length !== 1 ? 's' : ''}</div>
                 </motion.div>
 
                 <motion.div

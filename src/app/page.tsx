@@ -93,9 +93,9 @@ export default function Home() {
   ];
 
   return (
-    <div className="container mx-auto px-6">
+    <div className="container mx-auto px-4 md:px-6">
       {/* Hero Section */}
-      <section className="py-16 text-center">
+      <section className="py-8 md:py-16 text-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -111,13 +111,13 @@ export default function Home() {
               <span>ve(3,3) Tokenomics</span>
             </div>
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold mb-6">
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold mb-4 md:mb-6">
             <span className="gradient-text">Wind Swap</span>
           </h1>
-          <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-6">
+          <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-4 md:mb-6 px-2">
             The Next-Gen DEX on Sei Network
           </p>
-          <p className="text-lg text-gray-400 max-w-3xl mx-auto mb-8">
+          <p className="text-sm md:text-lg text-gray-400 max-w-3xl mx-auto mb-6 md:mb-8 px-2">
             Trade with the best rates, earn rewards as a liquidity provider, and shape the protocol by voting on pool incentives.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
@@ -144,93 +144,93 @@ export default function Home() {
       </section>
 
       {/* Live Stats Section */}
-      <section className="py-8">
+      <section className="py-6 md:py-8">
         <motion.div
-          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
           <div className="stat-card text-center">
-            <p className="text-sm text-gray-400 mb-1">Total Pools</p>
-            <p className="text-3xl font-bold">{poolCount ? Number(poolCount).toLocaleString() : '--'}</p>
+            <p className="text-xs md:text-sm text-gray-400 mb-1">Total Pools</p>
+            <p className="text-xl md:text-3xl font-bold">{poolCount ? Number(poolCount).toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
-            <p className="text-sm text-gray-400 mb-1">Active Gauges</p>
-            <p className="text-3xl font-bold">{gaugeCount ? Number(gaugeCount).toLocaleString() : '--'}</p>
+            <p className="text-xs md:text-sm text-gray-400 mb-1">Active Gauges</p>
+            <p className="text-xl md:text-3xl font-bold">{gaugeCount ? Number(gaugeCount).toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
-            <p className="text-sm text-gray-400 mb-1">WIND Locked</p>
-            <p className="text-3xl font-bold">{formattedVeSupply}</p>
+            <p className="text-xs md:text-sm text-gray-400 mb-1">WIND Locked</p>
+            <p className="text-xl md:text-3xl font-bold">{formattedVeSupply}</p>
           </div>
           <div className="stat-card text-center">
-            <p className="text-sm text-gray-400 mb-1">Network</p>
-            <p className="text-3xl font-bold">Sei</p>
+            <p className="text-xs md:text-sm text-gray-400 mb-1">Network</p>
+            <p className="text-xl md:text-3xl font-bold">Sei</p>
           </div>
         </motion.div>
       </section>
 
       {/* How It Works */}
-      <section className="py-12">
+      <section className="py-8 md:py-12">
         <motion.div
-          className="glass-card p-8"
+          className="glass-card p-4 md:p-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold mb-3">
+          <div className="text-center mb-6 md:mb-8">
+            <h2 className="text-xl md:text-3xl font-bold mb-2 md:mb-3">
               How <span className="text-green-400">ve(3,3)</span> Works
             </h2>
-            <p className="text-gray-400">Lock, vote, and earn. It&apos;s that simple.</p>
+            <p className="text-sm md:text-base text-gray-400">Lock, vote, and earn. It&apos;s that simple.</p>
           </div>
 
-          <div className="max-w-2xl mx-auto mb-8">
+          <div className="hidden md:block max-w-2xl mx-auto mb-8">
             <LockVoteEarnSteps currentStep={-1} />
           </div>
 
-          <div className="grid md:grid-cols-4 gap-6 text-center">
-            <div className="p-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 text-center">
+            <div className="p-2 md:p-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mx-auto mb-2 md:mb-4">
+                <svg className="w-5 h-5 md:w-6 md:h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               </div>
-              <div className="font-semibold mb-2">Lock WIND</div>
-              <div className="text-sm text-gray-400">Get voting power that grows with lock time</div>
+              <div className="font-semibold text-sm md:text-base mb-1 md:mb-2">Lock WIND</div>
+              <div className="text-xs md:text-sm text-gray-400">Voting power grows with lock time</div>
             </div>
-            <div className="p-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="p-2 md:p-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center mx-auto mb-2 md:mb-4">
+                <svg className="w-5 h-5 md:w-6 md:h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
               </div>
-              <div className="font-semibold mb-2">Vote for Pools</div>
-              <div className="text-sm text-gray-400">Direct WIND rewards to your favorite pools</div>
+              <div className="font-semibold text-sm md:text-base mb-1 md:mb-2">Vote for Pools</div>
+              <div className="text-xs md:text-sm text-gray-400">Direct rewards to pools</div>
             </div>
-            <div className="p-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="p-2 md:p-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mx-auto mb-2 md:mb-4">
+                <svg className="w-5 h-5 md:w-6 md:h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
               </div>
-              <div className="font-semibold mb-2">Pools Grow</div>
-              <div className="text-sm text-gray-400">Voted pools attract more liquidity</div>
+              <div className="font-semibold text-sm md:text-base mb-1 md:mb-2">Pools Grow</div>
+              <div className="text-xs md:text-sm text-gray-400">Attract more liquidity</div>
             </div>
-            <div className="p-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="p-2 md:p-4">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mx-auto mb-2 md:mb-4">
+                <svg className="w-5 h-5 md:w-6 md:h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <div className="font-semibold mb-2">Earn Rewards</div>
-              <div className="text-sm text-gray-400">Get trading fees + bonus incentives</div>
+              <div className="font-semibold text-sm md:text-base mb-1 md:mb-2">Earn Rewards</div>
+              <div className="text-xs md:text-sm text-gray-400">Trading fees + incentives</div>
             </div>
           </div>
 
-          <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 text-center">
-            <span className="text-sm text-gray-300">
-              <strong className="text-primary">The Flywheel:</strong> Good pools earn more → LPs join → Better trades → Protocol grows
+          <div className="mt-4 md:mt-8 p-3 md:p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 text-center">
+            <span className="text-xs md:text-sm text-gray-300">
+              <strong className="text-primary">The Flywheel:</strong> Good pools earn more → LPs join → Better trades
             </span>
           </div>
         </motion.div>

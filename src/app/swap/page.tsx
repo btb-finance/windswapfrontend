@@ -5,17 +5,17 @@ import { SwapInterface } from '@/components/swap/SwapInterface';
 
 export default function SwapPage() {
     return (
-        <div className="container mx-auto px-6">
+        <div className="container mx-auto px-4 md:px-6">
             {/* Page Header */}
             <motion.div
-                className="text-center mb-12"
+                className="text-center mb-8 md:mb-12"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-4xl font-bold mb-4">
+                <h1 className="text-2xl md:text-4xl font-bold mb-2 md:mb-4">
                     <span className="gradient-text">Swap</span> Tokens
                 </h1>
-                <p className="text-gray-400 max-w-lg mx-auto">
+                <p className="text-sm md:text-base text-gray-400 max-w-lg mx-auto px-2">
                     Trade tokens instantly with low slippage using Wind Swap V2 and Slipstream pools.
                 </p>
             </motion.div>

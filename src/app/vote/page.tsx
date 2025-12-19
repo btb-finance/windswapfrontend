@@ -138,24 +138,24 @@ export default function VotePage() {
     ];
 
     return (
-        <div className="container mx-auto px-6">
+        <div className="container mx-auto px-4 md:px-6">
             {/* Page Header */}
             <motion.div
-                className="text-center mb-6"
+                className="text-center mb-4 md:mb-6"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-4xl font-bold mb-4">
+                <h1 className="text-2xl md:text-4xl font-bold mb-2 md:mb-4">
                     <span className="gradient-text">Vote</span> & Earn
                 </h1>
-                <p className="text-gray-400 max-w-xl mx-auto">
-                    Lock your WIND tokens to get voting power. Vote for pools to direct weekly rewards, and earn your share of fees and bonuses!
+                <p className="text-sm md:text-base text-gray-400 max-w-xl mx-auto px-2">
+                    Lock WIND tokens to get voting power. Vote for pools to direct weekly rewards!
                 </p>
             </motion.div>
 
-            {/* Visual Step Flow */}
+            {/* Visual Step Flow - hidden on mobile */}
             <motion.div
-                className="mb-8"
+                className="hidden md:block mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 }}
@@ -166,60 +166,60 @@ export default function VotePage() {
             </motion.div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-3 gap-4 mb-8 max-w-3xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8 max-w-3xl mx-auto">
                 <motion.div
-                    className="glass-card p-5 text-center"
+                    className="glass-card p-4 md:p-5 text-center"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                 >
-                    <div className="text-xs text-gray-400 mb-2">Your WIND Balance</div>
-                    <div className="text-2xl font-bold">{formattedYakaBalance || '0'}</div>
+                    <div className="text-xs text-gray-400 mb-1 md:mb-2">Your WIND Balance</div>
+                    <div className="text-xl md:text-2xl font-bold">{formattedYakaBalance || '0'}</div>
                 </motion.div>
                 <motion.div
-                    className="glass-card p-5 text-center"
+                    className="glass-card p-4 md:p-5 text-center"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.15 }}
                 >
-                    <div className="text-xs text-gray-400 mb-2">
+                    <div className="text-xs text-gray-400 mb-1 md:mb-2">
                         <Tooltip content="Voting Power NFTs represent your locked WIND and give you the right to vote on pool rewards">
                             Your Voting NFTs
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold">{veNFTCount}</div>
+                    <div className="text-xl md:text-2xl font-bold">{veNFTCount}</div>
                 </motion.div>
                 <motion.div
-                    className="glass-card p-5 text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20"
+                    className="glass-card p-4 md:p-5 text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                 >
-                    <div className="text-xs text-gray-400 mb-2">
+                    <div className="text-xs text-gray-400 mb-1 md:mb-2">
                         <Tooltip content="Rebase rewards compensate you for token inflation, keeping your voting power strong">
                             Claimable Rewards
                         </Tooltip>
                     </div>
-                    <div className="text-2xl font-bold text-green-400">
-                        {formatUnits(totalClaimable, 18).slice(0, 8)} <span className="text-sm">WIND</span>
+                    <div className="text-xl md:text-2xl font-bold text-green-400">
+                        {formatUnits(totalClaimable, 18).slice(0, 8)} <span className="text-xs md:text-sm">WIND</span>
                     </div>
                 </motion.div>
             </div>
 
             {/* Tabs */}
-            <div className="flex justify-center mb-8">
-                <div className="glass p-1.5 rounded-2xl inline-flex gap-1">
+            <div className="flex justify-center mb-6 md:mb-8">
+                <div className="glass p-1 md:p-1.5 rounded-2xl inline-flex gap-1">
                     {tabConfig.map((tab) => (
                         <button
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
-                            className={`px-5 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${activeTab === tab.key
+                            className={`px-3 md:px-5 py-2.5 md:py-3 rounded-xl font-medium transition-all flex items-center gap-1.5 md:gap-2 ${activeTab === tab.key
                                 ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
                                 }`}
                         >
-                            <span className="text-lg">{tab.icon}</span>
-                            <span className="hidden md:inline">{tab.label}</span>
+                            <span className="text-base md:text-lg">{tab.icon}</span>
+                            <span className="text-sm md:text-base hidden sm:inline">{tab.label}</span>
                         </button>
                     ))}
                 </div>
@@ -287,14 +287,14 @@ export default function VotePage() {
                         </div>
 
                         {/* Lock Duration */}
-                        <div className="mb-6">
-                            <label className="text-sm text-gray-400 mb-3 block">Lock Duration</label>
-                            <div className="grid grid-cols-7 gap-2">
+                        <div className="mb-4 md:mb-6">
+                            <label className="text-sm text-gray-400 mb-2 md:mb-3 block">Lock Duration</label>
+                            <div className="grid grid-cols-4 md:grid-cols-7 gap-1.5 md:gap-2">
                                 {(Object.keys(LOCK_DURATIONS) as Array<keyof typeof LOCK_DURATIONS>).map((duration) => (
                                     <button
                                         key={duration}
                                         onClick={() => setLockDuration(duration)}
-                                        className={`py-3 rounded-xl text-sm font-medium transition-all ${lockDuration === duration
+                                        className={`py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-medium transition-all ${lockDuration === duration
                                             ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
                                             : 'bg-white/5 hover:bg-white/10 text-gray-400'
                                             }`}
@@ -303,11 +303,11 @@ export default function VotePage() {
                                     </button>
                                 ))}
                             </div>
-                            <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                            <p className="text-xs text-gray-500 mt-2 md:mt-3 flex items-center gap-1">
                                 <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                Longer locks = more voting power (up to 4x multiplier)
+                                Longer locks = more voting power
                             </p>
                         </div>
 
