@@ -27,7 +27,8 @@ interface BestRoute {
     tickSpacing?: number;
     feeLabel: string;
     stable?: boolean;
-    via?: string; // Intermediate token for multi-hop
+    via?: string; // Intermediate token symbol for multi-hop
+    intermediate?: Token; // Intermediate token object for multi-hop execution
 }
 
 export function SwapInterface() {
@@ -53,8 +54,8 @@ export function SwapInterface() {
 
     // Hooks
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
-    const { getQuoteV3, executeSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
-    const { findBestRoute: findMultiHopRoute } = useMixedRouteQuoter();
+    const { getQuoteV3, executeSwapV3, executeMultiHopSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
+    const { findBestRoute: findMultiHopRoute, getIntermediateToken } = useMixedRouteQuoter();
     const { formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
 
@@ -124,7 +125,7 @@ export function SwapInterface() {
                 // === Get V3 Quote (auto-detects best pool) ===
                 const v3Quote = await getQuoteV3(tokenIn, tokenOut, amountIn);
                 if (v3Quote && v3Quote.poolExists && parseFloat(v3Quote.amountOut) > 0) {
-                    const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
+                    const feeMap: Record<number, string> = { 1: '0.01%', 10: '0.045%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.3%', 2000: '1%' };
                     routes.push({
                         type: 'v3',
                         amountOut: v3Quote.amountOut,
@@ -167,6 +168,7 @@ export function SwapInterface() {
                         amountOut: multiHopQuote.amountOut,
                         feeLabel: multiHopQuote.via ? `via ${multiHopQuote.via}` : 'Multi-hop',
                         via: multiHopQuote.via,
+                        intermediate: multiHopQuote.intermediate, // Store intermediate for execution
                     });
                 }
 
@@ -236,7 +238,7 @@ export function SwapInterface() {
                 bestRoute.stable || false,
                 deadline
             );
-        } else {
+        } else if (bestRoute.type === 'v3') {
             if (!bestRoute.tickSpacing) return;
             result = await executeSwapV3(
                 tokenIn,
@@ -244,6 +246,20 @@ export function SwapInterface() {
                 amountIn,
                 amountOutMin,
                 bestRoute.tickSpacing,
+                slippage
+            );
+        } else if (bestRoute.type === 'multi-hop') {
+            // Multi-hop route - execute via intermediate token
+            if (!bestRoute.intermediate) {
+                console.error('Multi-hop route missing intermediate token');
+                return;
+            }
+            result = await executeMultiHopSwapV3(
+                tokenIn,
+                bestRoute.intermediate,
+                tokenOut,
+                amountIn,
+                amountOutMin,
                 slippage
             );
         }

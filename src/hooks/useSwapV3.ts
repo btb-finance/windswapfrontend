@@ -8,7 +8,7 @@ import { CL_CONTRACTS } from '@/config/contracts';
 import { SWAP_ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 
 // All available tick spacings in CLFactory
-const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
+const TICK_SPACINGS = [1, 10, 50, 80, 100, 200, 2000] as const;
 
 interface SwapQuoteV3 {
     amountOut: string;
@@ -250,9 +250,134 @@ export function useSwapV3() {
         }
     }, [address, writeContractAsync]);
 
+    // Execute multi-hop V3 swap via intermediate token
+    const executeMultiHopSwapV3 = useCallback(async (
+        tokenIn: Token,
+        intermediate: Token,
+        tokenOut: Token,
+        amountIn: string,
+        amountOutMin: string,
+        slippage: number = 0.5
+    ) => {
+        if (!address) {
+            setError('Wallet not connected');
+            return null;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
+            const actualIntermediate = intermediate.isNative ? WSEI : intermediate;
+            const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
+
+            const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
+            const minOut = parseUnits(amountOutMin, actualTokenOut.decimals);
+            const slippageAmount = (minOut * BigInt(Math.floor(slippage * 100))) / BigInt(10000);
+            const amountOutMinimum = minOut - slippageAmount;
+
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            // Find tick spacings for both legs
+            let tickSpacing1 = 0;
+            let tickSpacing2 = 0;
+
+            // Check first leg pools
+            for (const ts of TICK_SPACINGS) {
+                if (await checkPoolExists(actualTokenIn.address, actualIntermediate.address, ts)) {
+                    tickSpacing1 = ts;
+                    break;
+                }
+            }
+            // Check second leg pools
+            for (const ts of TICK_SPACINGS) {
+                if (await checkPoolExists(actualIntermediate.address, actualTokenOut.address, ts)) {
+                    tickSpacing2 = ts;
+                    break;
+                }
+            }
+
+            if (!tickSpacing1 || !tickSpacing2) {
+                setError('No multi-hop route available');
+                setIsLoading(false);
+                return null;
+            }
+
+            // Encode path: tokenIn(20) + tickSpacing1(3) + intermediate(20) + tickSpacing2(3) + tokenOut(20)
+            const encodeTickSpacing = (ts: number): string => {
+                // Convert to signed int24 hex (3 bytes)
+                const hex = ts >= 0
+                    ? ts.toString(16).padStart(6, '0')
+                    : ((1 << 24) + ts).toString(16);
+                return hex;
+            };
+
+            const path = '0x' +
+                actualTokenIn.address.slice(2).toLowerCase() +
+                encodeTickSpacing(tickSpacing1) +
+                actualIntermediate.address.slice(2).toLowerCase() +
+                encodeTickSpacing(tickSpacing2) +
+                actualTokenOut.address.slice(2).toLowerCase();
+
+            // Approve if not native
+            if (!tokenIn.isNative) {
+                await writeContractAsync({
+                    address: actualTokenIn.address as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [CL_CONTRACTS.SwapRouter as Address, amountInWei],
+                });
+            }
+
+            // Execute multi-hop swap using exactInput
+            const hash = await writeContractAsync({
+                address: CL_CONTRACTS.SwapRouter as Address,
+                abi: [
+                    {
+                        inputs: [{
+                            components: [
+                                { name: 'path', type: 'bytes' },
+                                { name: 'recipient', type: 'address' },
+                                { name: 'deadline', type: 'uint256' },
+                                { name: 'amountIn', type: 'uint256' },
+                                { name: 'amountOutMinimum', type: 'uint256' },
+                            ],
+                            name: 'params',
+                            type: 'tuple',
+                        }],
+                        name: 'exactInput',
+                        outputs: [{ name: 'amountOut', type: 'uint256' }],
+                        stateMutability: 'payable',
+                        type: 'function',
+                    }
+                ],
+                functionName: 'exactInput',
+                args: [{
+                    path: path as `0x${string}`,
+                    recipient: address,
+                    deadline,
+                    amountIn: amountInWei,
+                    amountOutMinimum,
+                }],
+                value: tokenIn.isNative ? amountInWei : undefined,
+            });
+
+            setTxHash(hash);
+            setIsLoading(false);
+            return { hash };
+        } catch (err: any) {
+            console.error('Multi-hop V3 swap error:', err);
+            setError(err.message || 'Multi-hop swap failed');
+            setIsLoading(false);
+            return null;
+        }
+    }, [address, writeContractAsync, checkPoolExists]);
+
     return {
         getQuoteV3,
         executeSwapV3,
+        executeMultiHopSwapV3,
         checkPoolExists,
         isLoading,
         error,

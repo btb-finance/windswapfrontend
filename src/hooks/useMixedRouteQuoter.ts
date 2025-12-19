@@ -2,23 +2,25 @@
 
 import { useState, useCallback } from 'react';
 import { parseUnits, formatUnits, Address, encodePacked, encodeAbiParameters, parseAbiParameters } from 'viem';
-import { Token, WSEI, USDC, SEI } from '@/config/tokens';
+import { Token, WSEI, USDC, USDCN, SEI } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 
 // Common intermediate tokens for routing
 const INTERMEDIATE_TOKENS = [
     WSEI,
     USDC,
+    USDCN,
 ];
 
 // Tick spacings to try for CL pools
-const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
+const TICK_SPACINGS = [1, 10, 50, 80, 100, 200, 2000] as const;
 
 interface RouteQuote {
     amountOut: string;
     path: string[];  // Token symbols for display
     routeType: 'direct' | 'multi-hop';
-    via?: string;    // Intermediate token if multi-hop
+    via?: string;    // Intermediate token symbol if multi-hop
+    intermediate?: Token; // Intermediate token object for execution
     gasEstimate?: bigint;
 }
 
@@ -40,23 +42,25 @@ export function useMixedRouteQuoter() {
         try {
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
 
-            // Try all tick spacings and find best
-            for (const tickSpacing of TICK_SPACINGS) {
-                const result = await callQuoterV3Single(
+            // Try all tick spacings in parallel and find best
+            const quotePromises = TICK_SPACINGS.map(tickSpacing =>
+                callQuoterV3Single(
                     actualTokenIn.address,
                     actualTokenOut.address,
                     amountInWei,
                     tickSpacing
-                );
+                )
+            );
+            const results = await Promise.all(quotePromises);
+            const validResult = results.find(r => r && r.amountOut > BigInt(0));
 
-                if (result && result.amountOut > BigInt(0)) {
-                    return {
-                        amountOut: formatUnits(result.amountOut, actualTokenOut.decimals),
-                        path: [tokenIn.symbol, tokenOut.symbol],
-                        routeType: 'direct',
-                        gasEstimate: result.gasEstimate,
-                    };
-                }
+            if (validResult) {
+                return {
+                    amountOut: formatUnits(validResult.amountOut, actualTokenOut.decimals),
+                    path: [tokenIn.symbol, tokenOut.symbol],
+                    routeType: 'direct',
+                    gasEstimate: validResult.gasEstimate,
+                };
             }
             return null;
         } catch {
@@ -86,40 +90,42 @@ export function useMixedRouteQuoter() {
         try {
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
 
-            // First leg: tokenIn -> intermediate
-            let firstLegOut: bigint | null = null;
-            for (const tickSpacing of TICK_SPACINGS) {
-                const result = await callQuoterV3Single(
+            // First leg: tokenIn -> intermediate (try all tick spacings in parallel)
+            const firstLegPromises = TICK_SPACINGS.map(tickSpacing =>
+                callQuoterV3Single(
                     actualTokenIn.address,
                     actualIntermediate.address,
                     amountInWei,
                     tickSpacing
-                );
-                if (result && result.amountOut > BigInt(0)) {
-                    firstLegOut = result.amountOut;
-                    break;
-                }
-            }
+                )
+            );
+            const firstLegResults = await Promise.all(firstLegPromises);
+            const validFirstLeg = firstLegResults.find(r => r && r.amountOut > BigInt(0));
 
-            if (!firstLegOut) return null;
+            if (!validFirstLeg) return null;
+            const firstLegOut = validFirstLeg.amountOut;
 
-            // Second leg: intermediate -> tokenOut
-            for (const tickSpacing of TICK_SPACINGS) {
-                const result = await callQuoterV3Single(
+            // Second leg: intermediate -> tokenOut (try all tick spacings in parallel)
+            const secondLegPromises = TICK_SPACINGS.map(tickSpacing =>
+                callQuoterV3Single(
                     actualIntermediate.address,
                     actualTokenOut.address,
                     firstLegOut,
                     tickSpacing
-                );
-                if (result && result.amountOut > BigInt(0)) {
-                    return {
-                        amountOut: formatUnits(result.amountOut, actualTokenOut.decimals),
-                        path: [tokenIn.symbol, intermediate.symbol, tokenOut.symbol],
-                        routeType: 'multi-hop',
-                        via: intermediate.symbol,
-                        gasEstimate: result.gasEstimate,
-                    };
-                }
+                )
+            );
+            const secondLegResults = await Promise.all(secondLegPromises);
+            const validSecondLeg = secondLegResults.find(r => r && r.amountOut > BigInt(0));
+
+            if (validSecondLeg) {
+                return {
+                    amountOut: formatUnits(validSecondLeg.amountOut, actualTokenOut.decimals),
+                    path: [tokenIn.symbol, intermediate.symbol, tokenOut.symbol],
+                    routeType: 'multi-hop',
+                    via: intermediate.symbol,
+                    intermediate: intermediate, // Include the token object for execution
+                    gasEstimate: validSecondLeg.gasEstimate,
+                };
             }
             return null;
         } catch {
@@ -176,8 +182,15 @@ export function useMixedRouteQuoter() {
         }
     }, [quoteDirectV3, quoteMultiHopV3]);
 
+    // Helper to get intermediate token by symbol
+    const getIntermediateToken = useCallback((symbol: string): Token | undefined => {
+        return INTERMEDIATE_TOKENS.find(t => t.symbol === symbol);
+    }, []);
+
     return {
         findBestRoute,
+        getIntermediateToken,
+        INTERMEDIATE_TOKENS,
         isLoading,
         error,
     };
@@ -204,6 +217,8 @@ async function callQuoterV3Single(
 
         const data = `0x${selector}${tokenInPadded}${tokenOutPadded}${amountInHex}${tickHex}${sqrtPriceLimitHex}`;
 
+        console.log(`[Quoter] ${tokenIn.slice(0, 10)}→${tokenOut.slice(0, 10)} ts=${tickSpacing}`);
+
         const response = await fetch('https://evm-rpc.sei-apis.com', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -216,15 +231,18 @@ async function callQuoterV3Single(
         });
 
         const result = await response.json();
+        console.log(`[Quoter] Result for ts=${tickSpacing}:`, result.result?.slice(0, 70) || result.error);
 
         if (result.result && result.result !== '0x' && result.result.length > 2) {
             const hex = result.result.slice(2);
             const amountOut = BigInt('0x' + hex.slice(0, 64));
+            console.log(`[Quoter] amountOut=${amountOut.toString()}`);
             const gasEstimate = hex.length >= 256 ? BigInt('0x' + hex.slice(192, 256)) : BigInt(0);
             return { amountOut, gasEstimate };
         }
         return null;
-    } catch {
+    } catch (err) {
+        console.error('[Quoter] Error:', err);
         return null;
     }
 }
