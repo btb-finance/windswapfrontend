@@ -5,11 +5,10 @@ import { parseUnits, formatUnits, Address, encodePacked, encodeAbiParameters, pa
 import { Token, WSEI, USDC, USDCN, SEI } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 
-// Common intermediate tokens for routing
+// Common intermediate tokens for routing (WSEI and USDC only)
 const INTERMEDIATE_TOKENS = [
     WSEI,
     USDC,
-    USDCN,
 ];
 
 // Tick spacings actually used (1, 10, 80 are most common)
