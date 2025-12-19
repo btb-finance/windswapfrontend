@@ -314,6 +314,7 @@ function LiquidityPageContent() {
     const [actionLoading, setActionLoading] = useState(false);
 
     // Fetch staked CL positions from gauges (includes full position details)
+    // OPTIMIZED: Uses parallel RPC calls instead of sequential loops
     useEffect(() => {
         const fetchStakedPositions = async () => {
             if (!address) {
@@ -326,118 +327,107 @@ function LiquidityPageContent() {
             const stakedPositions: StakedCLPosition[] = [];
 
             try {
-                // Get all CL pools
-                const poolCountResult = await fetch('https://evm-rpc.sei-apis.com', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: CL_CONTRACTS.CLFactory,
-                            data: '0xefde4e64' // allPoolsLength()
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
+                // Helper for RPC calls
+                const rpcCall = async (to: string, data: string) => {
+                    const response = await fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', id: 1,
+                            method: 'eth_call',
+                            params: [{ to, data }, 'latest']
+                        })
+                    });
+                    return response.json();
+                };
 
+                // 1. Get pool count
+                const poolCountResult = await rpcCall(CL_CONTRACTS.CLFactory, '0xefde4e64');
                 const poolCount = poolCountResult.result ? parseInt(poolCountResult.result, 16) : 0;
+                const maxPools = Math.min(poolCount, 30); // Limit to 30 pools
 
-                // Check up to 50 pools for gauges
-                for (let i = 0; i < Math.min(poolCount, 50); i++) {
-                    const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: CL_CONTRACTS.CLFactory,
-                                data: `0x41d1de97${i.toString(16).padStart(64, '0')}`
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
+                if (maxPools === 0) {
+                    setStakedTokenIds(new Set());
+                    setStakedCLPositions([]);
+                    return;
+                }
 
-                    if (!poolResult.result) continue;
-                    const poolAddr = '0x' + poolResult.result.slice(26);
-                    if (poolAddr === '0x0000000000000000000000000000000000000000') continue;
+                // 2. Fetch all pool addresses in parallel
+                const poolPromises = Array.from({ length: maxPools }, (_, i) =>
+                    rpcCall(CL_CONTRACTS.CLFactory, `0x41d1de97${i.toString(16).padStart(64, '0')}`)
+                );
+                const poolResults = await Promise.all(poolPromises);
 
-                    // Get gauge for this pool
-                    const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: V2_CONTRACTS.Voter,
-                                data: `0xb9a09fd5${poolAddr.slice(2).toLowerCase().padStart(64, '0')}`
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
+                const poolAddresses = poolResults
+                    .map(r => r.result ? '0x' + r.result.slice(26) : null)
+                    .filter((addr): addr is string => addr !== null && addr !== '0x0000000000000000000000000000000000000000');
 
-                    const gaugeAddr = '0x' + gaugeResult.result?.slice(26);
-                    if (!gaugeAddr || gaugeAddr === '0x0000000000000000000000000000000000000000') continue;
+                // 3. Fetch all gauges in parallel
+                const gaugePromises = poolAddresses.map(poolAddr =>
+                    rpcCall(V2_CONTRACTS.Voter, `0xb9a09fd5${poolAddr.slice(2).toLowerCase().padStart(64, '0')}`)
+                );
+                const gaugeResults = await Promise.all(gaugePromises);
 
-                    // Get staked values for user
-                    const stakedResult = await fetch('https://evm-rpc.sei-apis.com', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: gaugeAddr,
-                                data: `0x4b937763${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
+                // Build pool-to-gauge mapping
+                const poolsWithGauges: Array<{ pool: string; gauge: string }> = [];
+                gaugeResults.forEach((r, i) => {
+                    const gaugeAddr = r.result ? '0x' + r.result.slice(26) : null;
+                    if (gaugeAddr && gaugeAddr !== '0x0000000000000000000000000000000000000000') {
+                        poolsWithGauges.push({ pool: poolAddresses[i], gauge: gaugeAddr });
+                    }
+                });
 
-                    if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) continue;
+                // 4. Fetch staked values for user from all gauges in parallel
+                const stakedPromises = poolsWithGauges.map(({ gauge }) =>
+                    rpcCall(gauge, `0x4b937763${address.slice(2).toLowerCase().padStart(64, '0')}`)
+                );
+                const stakedResults = await Promise.all(stakedPromises);
 
-                    // Parse staked token IDs and fetch position details
-                    const data = stakedResult.result.slice(2);
+                // Collect all token IDs that need position lookups
+                const tokenIdsToFetch: Array<{ tokenId: bigint; gaugeAddr: string; poolAddr: string }> = [];
+
+                stakedResults.forEach((r, i) => {
+                    if (!r.result || r.result === '0x' || r.result.length < 130) return;
+
+                    const data = r.result.slice(2);
                     const length = parseInt(data.slice(64, 128), 16);
+                    const { pool, gauge } = poolsWithGauges[i];
 
                     for (let j = 0; j < length; j++) {
                         const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
                         const tokenId = BigInt('0x' + tokenIdHex);
                         staked.add(tokenId.toString());
+                        tokenIdsToFetch.push({ tokenId, gaugeAddr: gauge, poolAddr: pool });
+                    }
+                });
 
-                        // Fetch position details from NonfungiblePositionManager
-                        const positionResult = await fetch('https://evm-rpc.sei-apis.com', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', id: 1,
-                                method: 'eth_call',
-                                params: [{
-                                    to: CL_CONTRACTS.NonfungiblePositionManager,
-                                    data: `0x99fbab88${tokenId.toString(16).padStart(64, '0')}` // positions(uint256)
-                                }, 'latest']
-                            })
-                        }).then(r => r.json());
+                // 5. Fetch all position details in parallel
+                if (tokenIdsToFetch.length > 0) {
+                    const positionPromises = tokenIdsToFetch.map(({ tokenId }) =>
+                        rpcCall(CL_CONTRACTS.NonfungiblePositionManager, `0x99fbab88${tokenId.toString(16).padStart(64, '0')}`)
+                    );
+                    const positionResults = await Promise.all(positionPromises);
 
-                        if (!positionResult.result) continue;
+                    const parseSignedInt24 = (hex64: string): number => {
+                        const val = BigInt('0x' + hex64);
+                        if (val > BigInt(0x7fffff)) {
+                            return Number(val - BigInt(0x1000000));
+                        }
+                        return Number(val);
+                    };
 
-                        // Parse position data
-                        const posData = positionResult.result.slice(2);
+                    positionResults.forEach((r, i) => {
+                        if (!r.result) return;
+
+                        const posData = r.result.slice(2);
                         const token0 = '0x' + posData.slice(128 + 24, 192);
                         const token1 = '0x' + posData.slice(192 + 24, 256);
-
-                        // Parse signed int24 values
-                        const parseSignedInt24 = (hex64: string): number => {
-                            const val = BigInt('0x' + hex64);
-                            if (val > BigInt(0x7fffff)) {
-                                return Number(val - BigInt(0x1000000));
-                            }
-                            return Number(val);
-                        };
-
                         const tickSpacing = parseSignedInt24(posData.slice(256, 320));
                         const tickLower = parseSignedInt24(posData.slice(320, 384));
                         const tickUpper = parseSignedInt24(posData.slice(384, 448));
                         const liquidity = BigInt('0x' + posData.slice(448, 512));
 
+                        const { tokenId, gaugeAddr, poolAddr } = tokenIdsToFetch[i];
                         stakedPositions.push({
                             tokenId,
                             gaugeAddress: gaugeAddr,
@@ -449,13 +439,13 @@ function LiquidityPageContent() {
                             tickUpper,
                             liquidity,
                         });
-                    }
+                    });
                 }
             } catch (err) {
                 console.error('Error fetching staked positions:', err);
             }
 
-            console.log('[Liquidity] Staked positions:', stakedPositions.length, stakedPositions);
+            console.log('[Liquidity] Staked positions:', stakedPositions.length);
             setStakedTokenIds(staked);
             setStakedCLPositions(stakedPositions);
         };
