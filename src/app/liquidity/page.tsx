@@ -951,9 +951,9 @@ function LiquidityPageContent() {
             console.log('Final native value to send:', nativeValue.toString());
 
             // Mint position with slippage protection
-            // The contract calculates optimal liquidity from amounts and refunds any excess via refundETH()
-            // Using 0.5% slippage to protect against price movements between quote and execution
-            const slippageBps = BigInt(50); // 0.5% = 50 basis points
+            // For CL positions, actual amounts depend on current tick & price range
+            // Using 5% slippage as amounts can vary significantly based on range
+            const slippageBps = BigInt(500); // 5% = 500 basis points (increased from 0.5% which was too tight)
             const amount0Min = amount0Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
             const amount1Min = amount1Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
 
