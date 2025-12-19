@@ -148,6 +148,8 @@ export default function PortfolioPage() {
                 // Fetch balances and pool slot0 (for current tick)
                 const slot0Selector = '0x3850c7bd'; // slot0()
 
+                console.log('Fetching for position tokens:', selectedPosition.token0, selectedPosition.token1);
+
                 const [bal0Response, bal1Response, slot0Response] = await Promise.all([
                     fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
@@ -207,12 +209,15 @@ export default function PortfolioPage() {
                             }).then(r => r.json());
                             return slot0Res;
                         }
+                        console.error('Pool not found for', { token0, token1, tickSpacing });
                         return null;
                     })(),
                 ]);
 
                 const t0 = getTokenInfo(selectedPosition.token0);
                 const t1 = getTokenInfo(selectedPosition.token1);
+
+                console.log('Balance responses:', bal0Response, bal1Response);
 
                 if (bal0Response.result && bal0Response.result !== '0x') {
                     const bal0Wei = BigInt(bal0Response.result);
