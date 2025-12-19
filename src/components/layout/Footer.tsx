@@ -15,7 +15,7 @@ export function Footer() {
 
                     {/* Copyright */}
                     <p className="text-sm text-gray-500">
-                        © 2024 Wind Swap. Built on Sei.
+                        © 2024-2026 Wind Swap. Built on Sei.
                     </p>
                 </div>
             </div>
