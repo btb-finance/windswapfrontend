@@ -1162,10 +1162,10 @@ function LiquidityPageContent() {
                                 <label className="text-sm text-gray-400 mb-2 block">Fee Tier</label>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                     {[
-                                        { spacing: 1, fee: '0.01%' },
-                                        { spacing: 50, fee: '0.05%' },
+                                        { spacing: 1, fee: '0.009%' },
+                                        { spacing: 10, fee: '0.045%' },
                                         { spacing: 80, fee: '0.25%' },
-                                        { spacing: 200, fee: '0.30%' },
+                                        { spacing: 2000, fee: '1%' },
                                     ].map(({ spacing, fee }) => (
                                         <button
                                             key={spacing}
@@ -1690,7 +1690,7 @@ function LiquidityPageContent() {
                                             const isFullRange = pos.tickLower <= -887200 || pos.tickUpper >= 887200;
 
                                             // Fee tier from tickSpacing
-                                            const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%' };
+                                            const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%', 2000: '1%' };
                                             const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
 
                                             // Format price for display
@@ -1848,7 +1848,7 @@ function LiquidityPageContent() {
                                             const priceUpper = tickToPrice(pos.tickUpper);
                                             const isFullRange = pos.tickLower <= -887200 || pos.tickUpper >= 887200;
 
-                                            const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%' };
+                                            const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%', 2000: '1%' };
                                             const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
 
                                             const formatPrice = (price: number) => {

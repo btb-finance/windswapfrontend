@@ -80,8 +80,10 @@ interface PoolData {
 
 // Fee tier mapping for CL pools
 const FEE_TIERS: Record<number, string> = {
-    1: '0.01%',
+    1: '0.009%',
+    10: '0.045%',
     50: '0.05%',
+    80: '0.25%',
     100: '0.05%',
     200: '0.30%',
 };
