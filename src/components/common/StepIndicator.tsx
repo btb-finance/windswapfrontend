@@ -87,9 +87,9 @@ export function LockVoteEarnSteps({ currentStep = 0 }: { currentStep?: number })
     return (
         <StepIndicator
             steps={[
-                { label: 'Lock', icon: '🔐', description: 'Lock YAKA tokens' },
-                { label: 'Vote', icon: '🗳️', description: 'Choose pools' },
-                { label: 'Earn', icon: '💰', description: 'Get rewards' },
+                { label: 'Lock', description: 'Lock WIND tokens' },
+                { label: 'Vote', description: 'Choose pools' },
+                { label: 'Earn', description: 'Get rewards' },
             ]}
             currentStep={currentStep}
         />
@@ -100,9 +100,9 @@ export function AddLiquiditySteps({ currentStep = 0 }: { currentStep?: number })
     return (
         <StepIndicator
             steps={[
-                { label: 'Select', icon: '🪙', description: 'Pick tokens' },
-                { label: 'Amount', icon: '📊', description: 'Enter amounts' },
-                { label: 'Confirm', icon: '✅', description: 'Add liquidity' },
+                { label: 'Select', description: 'Pick tokens' },
+                { label: 'Amount', description: 'Enter amounts' },
+                { label: 'Confirm', description: 'Add liquidity' },
             ]}
             currentStep={currentStep}
         />

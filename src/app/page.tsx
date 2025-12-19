@@ -74,25 +74,21 @@ export default function Home() {
       title: 'Trade Tokens',
       description: 'Swap any token with deep liquidity and minimal slippage.',
       href: '/swap',
-      icon: '🔄',
     },
     {
       title: 'Provide Liquidity',
       description: 'Earn trading fees by depositing tokens into pools.',
       href: '/liquidity',
-      icon: '💧',
     },
     {
       title: 'Vote & Earn',
-      description: 'Lock YAKA to vote on pool rewards and earn your share.',
+      description: 'Lock WIND to vote on pool rewards and earn your share.',
       href: '/vote',
-      icon: '🗳️',
     },
     {
       title: 'Portfolio',
       description: 'Track your positions, staked LP, and pending rewards.',
       href: '/portfolio',
-      icon: '📊',
     },
   ];
 
@@ -107,16 +103,16 @@ export default function Home() {
         >
           <div className="flex gap-3 justify-center mb-6 flex-wrap">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30 text-sm font-medium">
-              <span className="text-primary">⚡</span>
+              <span className="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
               <span>V3 Concentrated Liquidity</span>
             </div>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 text-sm font-medium">
-              <span className="text-green-400">🔐</span>
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
               <span>ve(3,3) Tokenomics</span>
             </div>
           </div>
           <h1 className="text-5xl md:text-7xl font-bold mb-6">
-            <span className="gradient-text">YAKA</span> Finance
+            <span className="gradient-text">Wind Swap</span>
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-6">
             The Next-Gen DEX on Sei Network
@@ -156,30 +152,18 @@ export default function Home() {
           transition={{ delay: 0.2 }}
         >
           <div className="stat-card text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="icon-container icon-container-sm">📊</div>
-            </div>
             <p className="text-sm text-gray-400 mb-1">Total Pools</p>
             <p className="text-3xl font-bold">{poolCount ? Number(poolCount).toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="icon-container icon-container-sm" style={{ background: 'linear-gradient(135deg, #10b981, #34d399)' }}>🗳️</div>
-            </div>
             <p className="text-sm text-gray-400 mb-1">Active Gauges</p>
             <p className="text-3xl font-bold">{gaugeCount ? Number(gaugeCount).toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="icon-container icon-container-sm" style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }}>🔐</div>
-            </div>
-            <p className="text-sm text-gray-400 mb-1">YAKA Locked</p>
+            <p className="text-sm text-gray-400 mb-1">WIND Locked</p>
             <p className="text-3xl font-bold">{formattedVeSupply}</p>
           </div>
           <div className="stat-card text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="icon-container icon-container-sm" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>⛓️</div>
-            </div>
             <p className="text-sm text-gray-400 mb-1">Network</p>
             <p className="text-3xl font-bold">Sei</p>
           </div>
@@ -207,22 +191,38 @@ export default function Home() {
 
           <div className="grid md:grid-cols-4 gap-6 text-center">
             <div className="p-4">
-              <div className="icon-container mx-auto mb-4">🔐</div>
-              <div className="font-semibold mb-2">Lock YAKA</div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <div className="font-semibold mb-2">Lock WIND</div>
               <div className="text-sm text-gray-400">Get voting power that grows with lock time</div>
             </div>
             <div className="p-4">
-              <div className="icon-container icon-container-success mx-auto mb-4">🗳️</div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+              </div>
               <div className="font-semibold mb-2">Vote for Pools</div>
-              <div className="text-sm text-gray-400">Direct YAKA rewards to your favorite pools</div>
+              <div className="text-sm text-gray-400">Direct WIND rewards to your favorite pools</div>
             </div>
             <div className="p-4">
-              <div className="icon-container icon-container-warning mx-auto mb-4">📈</div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
               <div className="font-semibold mb-2">Pools Grow</div>
               <div className="text-sm text-gray-400">Voted pools attract more liquidity</div>
             </div>
             <div className="p-4">
-              <div className="icon-container mx-auto mb-4" style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }}>💰</div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
               <div className="font-semibold mb-2">Earn Rewards</div>
               <div className="text-sm text-gray-400">Get trading fees + bonus incentives</div>
             </div>
@@ -230,7 +230,7 @@ export default function Home() {
 
           <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 text-center">
             <span className="text-sm text-gray-300">
-              <strong className="text-primary">The Flywheel:</strong> Good pools earn more → LPs join → Better trades → Protocol grows 🚀
+              <strong className="text-primary">The Flywheel:</strong> Good pools earn more → LPs join → Better trades → Protocol grows
             </span>
           </div>
         </motion.div>
@@ -245,7 +245,7 @@ export default function Home() {
         >
           <h2 className="text-3xl font-bold text-center mb-4">Get Started</h2>
           <p className="text-gray-400 text-center max-w-xl mx-auto mb-10">
-            Everything you need to trade, earn, and participate in YAKA governance.
+            Everything you need to trade, earn, and participate in Wind Swap governance.
           </p>
         </motion.div>
 
@@ -259,12 +259,9 @@ export default function Home() {
             >
               <Link href={feature.href}>
                 <div className="feature-card h-full cursor-pointer">
-                  <div className="icon-container mb-4" style={{ position: 'relative', zIndex: 1 }}>
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-xl font-semibold mb-2" style={{ position: 'relative', zIndex: 1 }}>{feature.title}</h3>
-                  <p className="text-gray-400 text-sm" style={{ position: 'relative', zIndex: 1 }}>{feature.description}</p>
-                  <div className="mt-4 text-primary text-sm font-medium" style={{ position: 'relative', zIndex: 1 }}>
+                  <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                  <p className="text-gray-400 text-sm">{feature.description}</p>
+                  <div className="mt-4 text-primary text-sm font-medium">
                     Get Started →
                   </div>
                 </div>
@@ -289,8 +286,10 @@ export default function Home() {
             {/* V2 */}
             <div className="p-6 rounded-xl bg-white/5 border border-white/10">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-gray-500/20 flex items-center justify-center text-xl">
-                  💧
+                <div className="w-12 h-12 rounded-full bg-gray-500/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg">Classic (V2)</h3>
@@ -316,8 +315,10 @@ export default function Home() {
             {/* V3 */}
             <div className="p-6 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/30">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-xl">
-                  ⚡
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg">Concentrated (V3)</h3>
@@ -361,7 +362,7 @@ export default function Home() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    🔄 Swap Tokens
+                    Swap Tokens
                   </motion.button>
                 </Link>
                 <Link href="/liquidity">
@@ -370,7 +371,7 @@ export default function Home() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    💧 Manage Positions
+                    Manage Positions
                   </motion.button>
                 </Link>
                 <Link href="/vote">
@@ -379,7 +380,7 @@ export default function Home() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    🗳️ Vote & Earn
+                    Vote & Earn
                   </motion.button>
                 </Link>
               </div>
@@ -412,37 +413,25 @@ export default function Home() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-primary">💧</span>
-                    <span className="text-xs text-gray-400">LP Positions</span>
-                  </div>
+                  <div className="text-xs text-gray-400 mb-2">LP Positions</div>
                   <div className="text-2xl font-bold">{totalLPPositions || 0}</div>
                   <div className="text-xs text-gray-500">CL + V2</div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-500/5 border border-yellow-500/20">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-yellow-400">⚡</span>
-                    <span className="text-xs text-gray-400">CL Positions</span>
-                  </div>
+                  <div className="text-xs text-gray-400 mb-2">CL Positions</div>
                   <div className="text-2xl font-bold">{clCount || 0}</div>
                   <div className="text-xs text-gray-500">Concentrated</div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/5 border border-green-500/20">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-green-400">💧</span>
-                    <span className="text-xs text-gray-400">V2 Positions</span>
-                  </div>
+                  <div className="text-xs text-gray-400 mb-2">V2 Positions</div>
                   <div className="text-2xl font-bold">{v2Positions?.length || 0}</div>
                   <div className="text-xs text-gray-500">Classic AMM</div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-secondary">🔐</span>
-                    <span className="text-xs text-gray-400">veNFTs</span>
-                  </div>
+                  <div className="text-xs text-gray-400 mb-2">veNFTs</div>
                   <div className="text-2xl font-bold">{totalVeNFTs}</div>
                   <div className="text-xs text-gray-500">Vote Power</div>
                 </div>
@@ -450,18 +439,18 @@ export default function Home() {
 
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link href="/liquidity" className="flex-1 min-w-[200px]">
-                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition flex items-center justify-center gap-2">
-                    💧 Add Liquidity
+                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition">
+                    Add Liquidity
                   </button>
                 </Link>
                 <Link href="/liquidity" className="flex-1 min-w-[200px]">
-                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition flex items-center justify-center gap-2">
-                    ⚡ Manage Staking
+                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition">
+                    Manage Staking
                   </button>
                 </Link>
                 <Link href="/vote" className="flex-1 min-w-[200px]">
-                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition flex items-center justify-center gap-2">
-                    🔐 Lock YAKA
+                  <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition">
+                    Lock WIND
                   </button>
                 </Link>
               </div>
@@ -470,7 +459,7 @@ export default function Home() {
         </>
       )}
 
-      {/* YAKA Token Section */}
+      {/* WIND Token Section */}
       <section className="py-12">
         <motion.div
           className="glass-card p-8"
@@ -480,13 +469,13 @@ export default function Home() {
         >
           <div className="flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="flex items-center gap-6">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-3xl font-bold text-white shadow-lg shadow-primary/30">
-                Y
+              <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg shadow-primary/30">
+                <img src="/logo.png" alt="WIND" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold mb-1">YAKA Token</h2>
+                <h2 className="text-2xl font-bold mb-1">WIND Token</h2>
                 <p className="text-gray-400">
-                  The governance token of YAKA Finance. Lock to vote and earn.
+                  The governance token of Wind Swap. Lock to vote and earn.
                 </p>
               </div>
             </div>
@@ -497,7 +486,7 @@ export default function Home() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  Get YAKA
+                  Get WIND
                 </motion.button>
               </Link>
               <Link href="/vote">
@@ -516,4 +505,3 @@ export default function Home() {
     </div>
   );
 }
-
