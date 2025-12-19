@@ -576,7 +576,7 @@ export default function AdminPage() {
                     <span className="gradient-text">Admin Dashboard</span>
                 </h1>
                 <p className="text-gray-400 max-w-2xl mx-auto">
-                    Protocol administration for YAKA Finance. Whitelist tokens, create gauges, and manage factories.
+                    Protocol administration for WIND Finance. Whitelist tokens, create gauges, and manage factories.
                 </p>
             </motion.div>
 
@@ -1014,7 +1014,7 @@ export default function AdminPage() {
                                         <div className="text-xs text-gray-400 mb-1">Weekly Emissions</div>
                                         <div className="text-xl font-bold text-green-400">
                                             {weeklyEmissions !== undefined
-                                                ? `${(Number(weeklyEmissions) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} YAKA`
+                                                ? `${(Number(weeklyEmissions) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} WIND`
                                                 : 'Loading...'}
                                         </div>
                                     </div>
@@ -1092,7 +1092,7 @@ export default function AdminPage() {
                                 <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 mb-4">
                                     <div className="text-sm text-gray-300 mb-2 font-medium">What this does:</div>
                                     <ul className="text-sm text-gray-400 space-y-1.5 list-disc list-inside">
-                                        <li>Sends weekly YAKA emissions to all gauge contracts</li>
+                                        <li>Sends weekly WIND emissions to all gauge contracts</li>
                                         <li>Claims LP trading fees from pools and sends them to voters</li>
                                         <li>Must be called weekly after each epoch ends</li>
                                     </ul>
@@ -1106,7 +1106,7 @@ export default function AdminPage() {
                                         </div>
                                     </div>
                                     <div className="p-3 rounded-lg bg-white/5">
-                                        <div className="text-xs text-gray-400 mb-1">Weekly YAKA</div>
+                                        <div className="text-xs text-gray-400 mb-1">Weekly WIND</div>
                                         <div className="text-xl font-bold text-green-400">
                                             {weeklyEmissions !== undefined
                                                 ? `${(Number(weeklyEmissions) / 1e18 / 1000).toFixed(0)}K`

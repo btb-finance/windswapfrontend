@@ -776,7 +776,7 @@ export default function PortfolioPage() {
                 args: [position.tokenId],
             });
 
-            alert('Position staked successfully! You will now earn YAKA rewards.');
+            alert('Position staked successfully! You will now earn WIND rewards.');
             refetchCL();
         } catch (err) {
             console.error('Stake position error:', err);
@@ -807,7 +807,7 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Claim YAKA rewards from gauge
+    // Claim WIND rewards from gauge
     const handleClaimRewards = async (pos: StakedPosition) => {
         if (!address) return;
         setActionLoading(true);
@@ -946,7 +946,7 @@ export default function PortfolioPage() {
                     <span className="gradient-text">My Portfolio</span>
                 </h1>
                 <p className="text-gray-400">
-                    Track your LP positions, locked YAKA, and rewards
+                    Track your LP positions, locked WIND, and rewards
                 </p>
             </motion.div>
 
@@ -969,7 +969,7 @@ export default function PortfolioPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                 >
-                    <div className="text-xs text-gray-400 mb-1">Locked YAKA</div>
+                    <div className="text-xs text-gray-400 mb-1">Locked WIND</div>
                     <div className="text-2xl font-bold text-primary">
                         {parseFloat(formatUnits(totalLockedYaka, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </div>
@@ -986,7 +986,7 @@ export default function PortfolioPage() {
                     <div className="text-2xl font-bold text-green-400">
                         {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">YAKA to claim</div>
+                    <div className="text-xs text-gray-500 mt-1">WIND to claim</div>
                 </motion.div>
 
                 <motion.div
@@ -999,7 +999,7 @@ export default function PortfolioPage() {
                     <div className="text-2xl font-bold text-secondary">
                         {parseFloat(formatUnits(totalVotingPower, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">veYAKA</div>
+                    <div className="text-xs text-gray-500 mt-1">veWIND</div>
                 </motion.div>
             </div>
 
@@ -1070,15 +1070,15 @@ export default function PortfolioPage() {
                     {/* Locks Overview */}
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold">Locked YAKA (veNFTs)</h3>
+                            <h3 className="font-semibold">Locked WIND (veNFTs)</h3>
                             <Link href="/vote" className="text-sm text-primary hover:underline">Manage Locks →</Link>
                         </div>
                         {loadingVeNFTs ? (
                             <div className="text-center py-8 text-gray-400">Loading locks...</div>
                         ) : veNFTs.length === 0 ? (
                             <div className="text-center py-8">
-                                <p className="text-gray-400 mb-4">No locked YAKA</p>
-                                <Link href="/vote" className="btn-primary px-6 py-2 rounded-lg">Lock YAKA</Link>
+                                <p className="text-gray-400 mb-4">No locked WIND</p>
+                                <Link href="/vote" className="btn-primary px-6 py-2 rounded-lg">Lock WIND</Link>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -1090,12 +1090,12 @@ export default function PortfolioPage() {
                                             <div>
                                                 <div className="font-medium text-sm">veNFT #{nft.tokenId.toString()}</div>
                                                 <div className="text-xs text-gray-400">
-                                                    {parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString()} YAKA locked
+                                                    {parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString()} WIND locked
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-sm font-medium text-primary">
-                                                    {parseFloat(formatUnits(nft.votingPower, 18)).toFixed(2)} veYAKA
+                                                    {parseFloat(formatUnits(nft.votingPower, 18)).toFixed(2)} veWIND
                                                 </div>
                                                 <div className="text-xs text-gray-400">
                                                     {isPermanent ? 'Permanent Lock' : `Unlocks ${lockEndDate.toLocaleDateString()}`}
@@ -1131,7 +1131,7 @@ export default function PortfolioPage() {
                                         </div>
                                         <div className="text-right">
                                             <div className="text-sm font-medium text-green-400">
-                                                {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} YAKA
+                                                {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND
                                             </div>
                                             <div className="text-xs text-gray-400">pending</div>
                                         </div>
@@ -1276,7 +1276,7 @@ export default function PortfolioPage() {
                                 <div className="text-xl font-bold text-green-400">
                                     {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)}
                                 </div>
-                                <div className="text-xs text-gray-500">YAKA rewards</div>
+                                <div className="text-xs text-gray-500">WIND rewards</div>
                             </div>
                             <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
                                 <div className="text-xs text-gray-400 mb-1">Active Gauges</div>
@@ -1303,7 +1303,7 @@ export default function PortfolioPage() {
                                 </div>
                                 <p className="text-gray-400 mb-2">No staked positions</p>
                                 <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                                    Stake your LP positions to earn YAKA emissions
+                                    Stake your LP positions to earn WIND emissions
                                 </p>
                                 <Link href="/liquidity" className="btn-primary px-6 py-3 rounded-lg">View Your Positions</Link>
                             </div>
@@ -1345,13 +1345,13 @@ export default function PortfolioPage() {
                                                 <div className="p-3 rounded-lg bg-white/5">
                                                     <div className="text-xs text-gray-400 mb-1">Pending Rewards</div>
                                                     <div className="font-semibold text-green-400">
-                                                        {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} YAKA
+                                                        {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} WIND
                                                     </div>
                                                 </div>
                                                 <div className="p-3 rounded-lg bg-white/5">
                                                     <div className="text-xs text-gray-400 mb-1">Est. Daily</div>
                                                     <div className="font-semibold text-blue-400">
-                                                        ~{dailyRewards.toFixed(4)} YAKA
+                                                        ~{dailyRewards.toFixed(4)} WIND
                                                     </div>
                                                 </div>
                                                 <div className="p-3 rounded-lg bg-white/5">
@@ -1368,7 +1368,7 @@ export default function PortfolioPage() {
                                                     disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
                                                     className="flex-1 py-2.5 px-4 text-sm rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50 font-medium"
                                                 >
-                                                    {actionLoading ? '...' : `Claim ${parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} YAKA`}
+                                                    {actionLoading ? '...' : `Claim ${parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND`}
                                                 </button>
                                                 <button
                                                     onClick={() => handleUnstakePosition(pos)}
@@ -1398,11 +1398,11 @@ export default function PortfolioPage() {
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
                                 <span className="text-4xl">🔒</span>
                             </div>
-                            <p className="text-gray-400 mb-4">No YAKA locked yet</p>
+                            <p className="text-gray-400 mb-4">No WIND locked yet</p>
                             <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                                Lock YAKA to get veYAKA voting power and earn protocol revenue
+                                Lock WIND to get veWIND voting power and earn protocol revenue
                             </p>
-                            <Link href="/vote" className="btn-primary px-6 py-3 rounded-lg">Lock YAKA</Link>
+                            <Link href="/vote" className="btn-primary px-6 py-3 rounded-lg">Lock WIND</Link>
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -1420,11 +1420,11 @@ export default function PortfolioPage() {
                                         <div className="grid grid-cols-3 gap-4">
                                             <div>
                                                 <div className="text-xs text-gray-400">Locked Amount</div>
-                                                <div className="font-medium">{parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString()} YAKA</div>
+                                                <div className="font-medium">{parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString()} WIND</div>
                                             </div>
                                             <div>
                                                 <div className="text-xs text-gray-400">Voting Power</div>
-                                                <div className="font-medium text-primary">{parseFloat(formatUnits(nft.votingPower, 18)).toFixed(2)} veYAKA</div>
+                                                <div className="font-medium text-primary">{parseFloat(formatUnits(nft.votingPower, 18)).toFixed(2)} veWIND</div>
                                             </div>
                                             <div>
                                                 <div className="text-xs text-gray-400">Unlock Date</div>
@@ -1455,7 +1455,7 @@ export default function PortfolioPage() {
                             </button>
                         </div>
                         <div className="text-4xl font-bold gradient-text mb-2">
-                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} YAKA
+                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
                         </div>
                         <div className="text-sm text-gray-400">
                             From {stakedPositions.length} staked position{stakedPositions.length !== 1 ? 's' : ''}
@@ -1470,7 +1470,7 @@ export default function PortfolioPage() {
                         ) : stakedPositions.length === 0 ? (
                             <div className="text-center py-8">
                                 <p className="text-gray-400 mb-4">No staked positions earning rewards</p>
-                                <p className="text-sm text-gray-500 mb-6">Stake your LP positions to start earning YAKA</p>
+                                <p className="text-sm text-gray-500 mb-6">Stake your LP positions to start earning WIND</p>
                                 <Link href="/liquidity" className="btn-primary px-6 py-2 rounded-lg">View Positions</Link>
                             </div>
                         ) : (
@@ -1486,7 +1486,7 @@ export default function PortfolioPage() {
                                         <div className="flex items-center gap-4">
                                             <div className="text-right">
                                                 <div className="font-semibold text-green-400">
-                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} YAKA
+                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} WIND
                                                 </div>
                                                 <div className="text-xs text-gray-400">pending</div>
                                             </div>

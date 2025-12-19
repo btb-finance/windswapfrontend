@@ -5,10 +5,10 @@ import { motion } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { formatUnits, Address } from 'viem';
 import Link from 'next/link';
-import { useVeYAKA, LOCK_DURATIONS } from '@/hooks/useVeYAKA';
+import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
-import { YAKA } from '@/config/tokens';
+import { WIND } from '@/config/tokens';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
@@ -39,7 +39,7 @@ export default function VotePage() {
         isLoading,
         error,
         refetch,
-    } = useVeYAKA();
+    } = useVeWIND();
 
     const {
         gauges,
@@ -52,7 +52,7 @@ export default function VotePage() {
         refetch: refetchGauges,
     } = useVoter();
 
-    const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(YAKA);
+    const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(WIND);
 
     // Auto-select first veNFT when positions load
     useEffect(() => {
@@ -132,7 +132,7 @@ export default function VotePage() {
     };
 
     const tabConfig = [
-        { key: 'lock' as const, label: 'Lock YAKA', icon: '🔐', description: 'Get voting power' },
+        { key: 'lock' as const, label: 'Lock WIND', icon: '🔐', description: 'Get voting power' },
         { key: 'vote' as const, label: 'Vote', icon: '🗳️', description: 'Choose pools' },
         { key: 'rewards' as const, label: 'Rewards', icon: '💰', description: 'Claim earnings' },
     ];
@@ -149,7 +149,7 @@ export default function VotePage() {
                     <span className="gradient-text">Vote</span> & Earn
                 </h1>
                 <p className="text-gray-400 max-w-xl mx-auto">
-                    Lock your YAKA tokens to get voting power. Vote for pools to direct weekly rewards, and earn your share of fees and bonuses!
+                    Lock your WIND tokens to get voting power. Vote for pools to direct weekly rewards, and earn your share of fees and bonuses!
                 </p>
             </motion.div>
 
@@ -173,7 +173,7 @@ export default function VotePage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                 >
-                    <div className="text-xs text-gray-400 mb-2">Your YAKA Balance</div>
+                    <div className="text-xs text-gray-400 mb-2">Your WIND Balance</div>
                     <div className="text-2xl font-bold">{formattedYakaBalance || '0'}</div>
                 </motion.div>
                 <motion.div
@@ -183,7 +183,7 @@ export default function VotePage() {
                     transition={{ delay: 0.15 }}
                 >
                     <div className="text-xs text-gray-400 mb-2">
-                        <Tooltip content="Voting Power NFTs represent your locked YAKA and give you the right to vote on pool rewards">
+                        <Tooltip content="Voting Power NFTs represent your locked WIND and give you the right to vote on pool rewards">
                             Your Voting NFTs
                         </Tooltip>
                     </div>
@@ -201,7 +201,7 @@ export default function VotePage() {
                         </Tooltip>
                     </div>
                     <div className="text-2xl font-bold text-green-400">
-                        {formatUnits(totalClaimable, 18).slice(0, 8)} <span className="text-sm">YAKA</span>
+                        {formatUnits(totalClaimable, 18).slice(0, 8)} <span className="text-sm">WIND</span>
                     </div>
                 </motion.div>
             </div>
@@ -258,17 +258,17 @@ export default function VotePage() {
             {activeTab === 'lock' && (
                 <motion.div className="max-w-lg mx-auto" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     <div className="glass-card p-6">
-                        <h2 className="text-xl font-semibold mb-2">Lock YAKA to Get Voting Power</h2>
+                        <h2 className="text-xl font-semibold mb-2">Lock WIND to Get Voting Power</h2>
                         <p className="text-sm text-gray-400 mb-6">
                             The longer you lock, the more voting power you receive. Locked tokens earn rewards automatically!
                         </p>
 
-                        {/* YAKA Amount */}
+                        {/* WIND Amount */}
                         <div className="mb-5">
                             <label className="text-sm text-gray-400 mb-2 block">Amount to Lock</label>
                             <div className="token-input-row">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm text-gray-400">Available: {formattedYakaBalance || '0'} YAKA</span>
+                                    <span className="text-sm text-gray-400">Available: {formattedYakaBalance || '0'} WIND</span>
                                     <button
                                         onClick={() => setLockAmount(formattedYakaBalance || '0')}
                                         className="text-sm text-primary hover:text-primary/80 font-medium"
@@ -317,7 +317,7 @@ export default function VotePage() {
                             <div className="space-y-3">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-400">Voting Power</span>
-                                    <span className="font-semibold text-primary">{estimatedVotingPower} veYAKA</span>
+                                    <span className="font-semibold text-primary">{estimatedVotingPower} veWIND</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-400">Unlock Date</span>
@@ -337,7 +337,7 @@ export default function VotePage() {
                             whileHover={{ scale: 1.01 }}
                             whileTap={{ scale: 0.99 }}
                         >
-                            {isLoading ? 'Creating Lock...' : !isConnected ? 'Connect Wallet' : 'Lock YAKA & Get Voting Power'}
+                            {isLoading ? 'Creating Lock...' : !isConnected ? 'Connect Wallet' : 'Lock WIND & Get Voting Power'}
                         </motion.button>
                     </div>
 
@@ -357,8 +357,8 @@ export default function VotePage() {
                                         <div key={position.tokenId.toString()} className="p-4 rounded-xl bg-white/5 border border-white/10">
                                             <div className="flex justify-between items-start">
                                                 <div>
-                                                    <div className="text-sm text-gray-400 mb-1">veYAKA #{position.tokenId.toString()}</div>
-                                                    <div className="text-xl font-bold">{parseFloat(formatUnits(position.amount, 18)).toFixed(2)} YAKA</div>
+                                                    <div className="text-sm text-gray-400 mb-1">veWIND #{position.tokenId.toString()}</div>
+                                                    <div className="text-xl font-bold">{parseFloat(formatUnits(position.amount, 18)).toFixed(2)} WIND</div>
                                                     <div className="text-xs text-gray-500 mt-1">
                                                         {position.isPermanent ? (
                                                             <span className="text-primary">∞ Permanent Lock</span>
@@ -415,7 +415,7 @@ export default function VotePage() {
                                         <div className="flex items-center gap-3">
                                             <span className="text-2xl">🔐</span>
                                             <div>
-                                                <p className="font-semibold">Lock YAKA to Vote</p>
+                                                <p className="font-semibold">Lock WIND to Vote</p>
                                                 <p className="text-sm text-gray-400">You need voting power to participate in gauge voting</p>
                                             </div>
                                         </div>
@@ -423,7 +423,7 @@ export default function VotePage() {
                                             onClick={() => setActiveTab('lock')}
                                             className="px-4 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-medium hover:opacity-90"
                                         >
-                                            Lock YAKA
+                                            Lock WIND
                                         </button>
                                     </div>
                                 </div>
@@ -460,8 +460,8 @@ export default function VotePage() {
                                         <h2 className="text-lg font-semibold">Pool Vote Weights</h2>
                                         <p className="text-sm text-gray-400">
                                             {positions.length > 0
-                                                ? "Allocate your voting power to pools. They'll receive weekly YAKA rewards!"
-                                                : "See how votes are distributed across pools. Lock YAKA to participate!"}
+                                                ? "Allocate your voting power to pools. They'll receive weekly WIND rewards!"
+                                                : "See how votes are distributed across pools. Lock WIND to participate!"}
                                         </p>
                                     </div>
                                     <div className="text-right text-sm">
@@ -649,7 +649,7 @@ export default function VotePage() {
                         <EmptyState
                             icon="💰"
                             title="No Rewards Yet"
-                            description="Lock YAKA and vote to start earning rewards. Voters receive a share of trading fees from the pools they vote for!"
+                            description="Lock WIND and vote to start earning rewards. Voters receive a share of trading fees from the pools they vote for!"
                             action={{
                                 label: 'Start Earning',
                                 onClick: () => setActiveTab('lock')
@@ -668,9 +668,9 @@ export default function VotePage() {
                                 {positions.map((position) => (
                                     <div key={position.tokenId.toString()} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
                                         <div>
-                                            <div className="text-sm text-gray-400">veYAKA #{position.tokenId.toString()}</div>
+                                            <div className="text-sm text-gray-400">veWIND #{position.tokenId.toString()}</div>
                                             <div className="text-xl font-bold text-green-400">
-                                                {parseFloat(formatUnits(position.claimable, 18)).toFixed(4)} YAKA
+                                                {parseFloat(formatUnits(position.claimable, 18)).toFixed(4)} WIND
                                             </div>
                                         </div>
                                         <motion.button
@@ -700,7 +700,7 @@ export default function VotePage() {
                 <InfoCard
                     icon="🗳️"
                     title="Direct Pool Rewards"
-                    description="Your votes decide which pools get weekly YAKA rewards. Vote for productive pools to grow the ecosystem!"
+                    description="Your votes decide which pools get weekly WIND rewards. Vote for productive pools to grow the ecosystem!"
                 />
                 <InfoCard
                     icon="💰"

@@ -527,7 +527,7 @@ function LiquidityPageContent() {
         setActionLoading(false);
     };
 
-    // Stake CL position in gauge to earn YAKA rewards
+    // Stake CL position in gauge to earn WIND rewards
     const handleStakeCL = async (position: typeof clPositions[0]) => {
         if (!address) return;
         setActionLoading(true);
@@ -619,7 +619,7 @@ function LiquidityPageContent() {
             });
 
             console.log('Position staked successfully!');
-            alert('Position staked successfully! You will now earn YAKA rewards.');
+            alert('Position staked successfully! You will now earn WIND rewards.');
             refetchCL();
         } catch (err) {
             console.error('Stake CL position error:', err);
@@ -1817,7 +1817,7 @@ function LiquidityPageContent() {
                                     <h3 className="text-lg font-semibold mb-4 mt-6 flex items-center gap-2">
                                         <span className="text-green-400">⚡</span> Staked Positions
                                         <span className="text-xs font-normal text-green-400 px-2 py-0.5 rounded-full bg-green-500/20">
-                                            Earning YAKA
+                                            Earning WIND
                                         </span>
                                     </h3>
                                     <div className="space-y-3">
@@ -1918,7 +1918,7 @@ function LiquidityPageContent() {
                                                     {/* Staking Info */}
                                                     <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 mb-3">
                                                         <div className="text-xs text-green-400 flex items-center gap-2">
-                                                            <span>🔥</span> Earning YAKA rewards
+                                                            <span>🔥</span> Earning WIND rewards
                                                         </div>
                                                         <div className="text-xs text-gray-400 mt-1">
                                                             Visit <a href="/portfolio" className="text-primary hover:underline">Portfolio</a> to view all rewards
@@ -1990,7 +1990,7 @@ function LiquidityPageContent() {
                             </div>
                             <h3 className="text-xl font-bold mb-2">Liquidity Added Successfully!</h3>
                             <p className="text-gray-400 text-sm">
-                                Your position has been created. <span className="text-primary font-semibold">Stake it now</span> to earn YAKA emissions!
+                                Your position has been created. <span className="text-primary font-semibold">Stake it now</span> to earn WIND emissions!
                             </p>
                         </div>
 
@@ -2000,7 +2000,7 @@ function LiquidityPageContent() {
                                 <span className="font-semibold">Why Stake?</span>
                             </div>
                             <ul className="text-sm text-gray-300 space-y-1 ml-9">
-                                <li>• Earn YAKA token rewards</li>
+                                <li>• Earn WIND token rewards</li>
                                 <li>• Boost gauge voting power</li>
                                 <li>• Maximize your LP returns</li>
                             </ul>

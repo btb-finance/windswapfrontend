@@ -401,12 +401,12 @@ export default function PoolsPage() {
         fetchRewardRates();
     }, [validV2PoolAddresses.length, validClPoolAddresses.length]);
 
-    // Format weekly YAKA rewards
+    // Format weekly WIND rewards
     const formatWeeklyRewards = (poolAddress: string) => {
         const rewardRate = poolRewards.get(poolAddress.toLowerCase());
         if (!rewardRate || rewardRate === BigInt(0)) return null;
 
-        // rewardRate is YAKA per second, convert to per week (7 * 24 * 60 * 60 = 604800)
+        // rewardRate is WIND per second, convert to per week (7 * 24 * 60 * 60 = 604800)
         const weeklyRewards = rewardRate * BigInt(604800);
         const weeklyFloat = parseFloat(formatUnits(weeklyRewards, 18));
 
@@ -659,7 +659,7 @@ export default function PoolsPage() {
                                     const weeklyAmount = formatWeeklyRewards(pool.address);
                                     if (weeklyAmount) {
                                         return (
-                                            <Tooltip content={`${weeklyAmount} YAKA distributed per week`}>
+                                            <Tooltip content={`${weeklyAmount} WIND distributed per week`}>
                                                 <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 cursor-help">
                                                     🔥 {weeklyAmount}/wk
                                                 </span>
