@@ -1134,6 +1134,116 @@ export default function AdminPage() {
                                 </button>
                             </div>
 
+                            {/* Tick Spacing & Fee Tier Reference */}
+                            <div className="glass-card p-6">
+                                <h3 className="text-lg font-semibold mb-4">📊 Tick Spacing & Fee Tier Reference</h3>
+
+                                <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 mb-4">
+                                    <div className="text-sm text-gray-300 mb-2 font-medium">How it works:</div>
+                                    <ul className="text-sm text-gray-400 space-y-1 list-disc list-inside">
+                                        <li><strong>Tick Spacing</strong> = precision of price points in the pool</li>
+                                        <li><strong>Smaller</strong> spacing = more precise, better for stablecoins</li>
+                                        <li><strong>Larger</strong> spacing = fewer ticks, better for volatile pairs</li>
+                                        <li><strong>Fee (bps)</strong> = basis points, 100 bps = 1%</li>
+                                    </ul>
+                                </div>
+
+                                <div className="text-sm font-medium text-primary mb-3">🏆 Competitive Fee Tiers (Beat Competitors!)</div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-white/10">
+                                                <th className="text-left py-2 px-2 text-gray-400">Use Case</th>
+                                                <th className="text-center py-2 px-2 text-gray-400">Tick Spacing</th>
+                                                <th className="text-center py-2 px-2 text-gray-400">Fee (bps)</th>
+                                                <th className="text-center py-2 px-2 text-gray-400">Fee %</th>
+                                                <th className="text-center py-2 px-2 text-gray-400">Competitor</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr className="border-b border-white/5 bg-green-500/5">
+                                                <td className="py-2 px-2 text-green-400 font-medium">Stablecoins (USDC/USDT)</td>
+                                                <td className="text-center py-2 px-2 font-mono">1</td>
+                                                <td className="text-center py-2 px-2 font-mono text-green-400">9</td>
+                                                <td className="text-center py-2 px-2 text-green-400 font-bold">0.009%</td>
+                                                <td className="text-center py-2 px-2 text-gray-500">vs 0.01%</td>
+                                            </tr>
+                                            <tr className="border-b border-white/5 bg-green-500/5">
+                                                <td className="py-2 px-2 text-green-400 font-medium">Correlated (ETH/WETH)</td>
+                                                <td className="text-center py-2 px-2 font-mono">10</td>
+                                                <td className="text-center py-2 px-2 font-mono text-green-400">45</td>
+                                                <td className="text-center py-2 px-2 text-green-400 font-bold">0.045%</td>
+                                                <td className="text-center py-2 px-2 text-gray-500">vs 0.05%</td>
+                                            </tr>
+                                            <tr className="border-b border-white/5 bg-green-500/5">
+                                                <td className="py-2 px-2 text-green-400 font-medium">Standard Pairs</td>
+                                                <td className="text-center py-2 px-2 font-mono">50</td>
+                                                <td className="text-center py-2 px-2 font-mono text-green-400">250</td>
+                                                <td className="text-center py-2 px-2 text-green-400 font-bold">0.25%</td>
+                                                <td className="text-center py-2 px-2 text-gray-500">vs 0.30%</td>
+                                            </tr>
+                                            <tr className="border-b border-white/5">
+                                                <td className="py-2 px-2">Volatile Pairs</td>
+                                                <td className="text-center py-2 px-2 font-mono">200</td>
+                                                <td className="text-center py-2 px-2 font-mono">3000</td>
+                                                <td className="text-center py-2 px-2">0.30%</td>
+                                                <td className="text-center py-2 px-2 text-gray-500">standard</td>
+                                            </tr>
+                                            <tr className="border-b border-white/5">
+                                                <td className="py-2 px-2">High Volatility / Exotic</td>
+                                                <td className="text-center py-2 px-2 font-mono">2000</td>
+                                                <td className="text-center py-2 px-2 font-mono">10000</td>
+                                                <td className="text-center py-2 px-2">1.00%</td>
+                                                <td className="text-center py-2 px-2 text-gray-500">standard</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                                    <div className="text-sm text-yellow-400 font-medium mb-2">⚠️ Important Notes:</div>
+                                    <ul className="text-xs text-gray-400 space-y-1 list-disc list-inside">
+                                        <li>Tick spacing must be divisible into 887272 (max tick)</li>
+                                        <li>Common valid spacings: 1, 2, 5, 10, 20, 50, 60, 100, 200, 500, 1000, 2000</li>
+                                        <li>Lower fees attract more volume but less revenue per trade</li>
+                                        <li>Match tick spacing to expected price movement frequency</li>
+                                    </ul>
+                                </div>
+
+                                <div className="mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                                    <div className="text-sm text-primary font-medium mb-2">🚀 Quick Add Competitive Tiers:</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => { setNewTickSpacing('1'); setNewFee('9'); }}
+                                            className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
+                                        >
+                                            0.009% (ts=1)
+                                        </button>
+                                        <button
+                                            onClick={() => { setNewTickSpacing('10'); setNewFee('45'); }}
+                                            className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
+                                        >
+                                            0.045% (ts=10)
+                                        </button>
+                                        <button
+                                            onClick={() => { setNewTickSpacing('50'); setNewFee('250'); }}
+                                            className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
+                                        >
+                                            0.25% (ts=50)
+                                        </button>
+                                        <button
+                                            onClick={() => { setNewTickSpacing('100'); setNewFee('500'); }}
+                                            className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
+                                        >
+                                            0.05% (ts=100)
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Click to populate the "Enable CL Fee Tier" form in the Factories tab
+                                    </p>
+                                </div>
+                            </div>
+
                             {/* Contract Addresses */}
                             <div className="glass-card p-6">
                                 <h3 className="text-lg font-semibold mb-4">Contract Addresses</h3>
