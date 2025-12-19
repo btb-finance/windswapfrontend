@@ -375,9 +375,8 @@ export function SwapInterface() {
                                 : 'Swap'}
             </motion.button>
 
-            {/* Footer */}
             <div className="mt-4 text-center text-xs text-gray-500">
-                Powered by YAKA Smart Router (V2 + V3)
+                Powered by Wind Swap Smart Router (V2 + V3)
             </div>
         </div>
     );

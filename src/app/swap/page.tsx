@@ -16,7 +16,7 @@ export default function SwapPage() {
                     <span className="gradient-text">Swap</span> Tokens
                 </h1>
                 <p className="text-gray-400 max-w-lg mx-auto">
-                    Trade tokens instantly with low slippage using YAKA&apos;s V2 and Slipstream pools.
+                    Trade tokens instantly with low slippage using Wind Swap V2 and Slipstream pools.
                 </p>
             </motion.div>
 
