@@ -1,4 +1,4 @@
-// Token List for YAKA DEX on Sei
+// Token List for Wind Swap DEX on Sei
 
 export interface Token {
     address: string;
@@ -28,14 +28,17 @@ export const WSEI: Token = {
     logoURI: '/tokens/sei.svg',
 };
 
-// YAKA Protocol Token
-export const YAKA: Token = {
+// WIND Protocol Token
+export const WIND: Token = {
     address: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D',
-    symbol: 'YAKA',
-    name: 'YAKA',
+    symbol: 'WIND',
+    name: 'Wind Swap',
     decimals: 18,
-    logoURI: '/tokens/yaka.svg',
+    logoURI: '/logo.png',
 };
+
+// Legacy alias for backwards compatibility
+export const YAKA = WIND;
 
 // Common stablecoins and tokens on Sei
 export const USDC: Token = {
@@ -58,7 +61,7 @@ export const USDT: Token = {
 export const DEFAULT_TOKEN_LIST: Token[] = [
     SEI,
     WSEI,
-    YAKA,
+    WIND,
     USDC,
     USDT,
 ];
@@ -67,7 +70,8 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
 export const TOKEN_ADDRESSES = {
     SEI: SEI.address,
     WSEI: WSEI.address,
-    YAKA: YAKA.address,
+    WIND: WIND.address,
+    YAKA: WIND.address, // Legacy alias
     USDC: USDC.address,
     USDT: USDT.address,
 } as const;

@@ -26,13 +26,13 @@ export function Header() {
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-2 md:gap-3">
                             <motion.div
-                                className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center"
+                                className="w-9 h-9 md:w-10 md:h-10 rounded-xl overflow-hidden"
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                             >
-                                <span className="text-white font-bold text-base md:text-lg">Y</span>
+                                <img src="/logo.png" alt="Wind Swap" className="w-full h-full object-contain" />
                             </motion.div>
-                            <span className="text-lg md:text-xl font-bold gradient-text">YAKA</span>
+                            <span className="text-lg md:text-xl font-bold gradient-text">Wind Swap</span>
                         </Link>
 
                         {/* Desktop Navigation */}
@@ -111,8 +111,8 @@ export function Header() {
                                                 href={link.href}
                                                 onClick={() => setMobileMenuOpen(false)}
                                                 className={`px-4 py-3 rounded-xl font-medium transition-all ${isActive
-                                                        ? 'bg-gradient-to-r from-primary to-secondary text-white'
-                                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                                    ? 'bg-gradient-to-r from-primary to-secondary text-white'
+                                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
                                                     }`}
                                             >
                                                 {link.label}

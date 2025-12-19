@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YAKA Finance | DEX on Sei",
-  description: "The premier AMM and ve-tokenomics DEX on Sei Network. Swap, provide liquidity, and earn rewards.",
-  keywords: ["DEX", "Sei", "AMM", "DeFi", "YAKA", "ve-tokenomics", "concentrated liquidity"],
+  title: "Wind Swap | DEX on Sei",
+  description: "The premier AMM and ve-tokenomics DEX on Sei Network. Swap, provide liquidity, and earn rewards with WIND.",
+  keywords: ["DEX", "Sei", "AMM", "DeFi", "Wind Swap", "WIND", "ve-tokenomics", "concentrated liquidity"],
 };
 
 export default function RootLayout({

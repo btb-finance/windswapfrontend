@@ -1,11 +1,12 @@
-// YAKA Finance Contract Addresses - Sei Mainnet
+// Wind Swap Contract Addresses - Sei Mainnet
 
 // ============================================
 // V2 Core Contracts
 // ============================================
 export const V2_CONTRACTS = {
-    // Protocol Token
-    YAKA: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D',
+    // Protocol Token (WIND)
+    WIND: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D',
+    YAKA: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D', // Legacy alias
 
     // Core Voting Escrow
     VotingEscrow: '0xE0d5DCB4D4Afc0f9Ab930616F4f18990ee17519b',

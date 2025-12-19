@@ -24,7 +24,7 @@ import '@rainbow-me/rainbowkit/styles.css';
 const projectId = 'ecd20f8c23408a4397afc0f5466eb6b6';
 
 const config = getDefaultConfig({
-    appName: 'YAKA Finance',
+    appName: 'Wind Swap',
     projectId,
     chains: [sei],
     transports: {
