@@ -12,6 +12,7 @@ import { SwapSettings } from './SwapSettings';
 import { useSwap } from '@/hooks/useSwap';
 import { useSwapV3 } from '@/hooks/useSwapV3';
 import { useTokenBalance } from '@/hooks/useToken';
+import { useMixedRouteQuoter } from '@/hooks/useMixedRouteQuoter';
 
 interface Route {
     from: Address;
@@ -21,11 +22,12 @@ interface Route {
 }
 
 interface BestRoute {
-    type: 'v2' | 'v3';
+    type: 'v2' | 'v3' | 'multi-hop';
     amountOut: string;
     tickSpacing?: number;
     feeLabel: string;
     stable?: boolean;
+    via?: string; // Intermediate token for multi-hop
 }
 
 export function SwapInterface() {
@@ -52,6 +54,7 @@ export function SwapInterface() {
     // Hooks
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
     const { getQuoteV3, executeSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
+    const { findBestRoute: findMultiHopRoute } = useMixedRouteQuoter();
     const { formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
 
@@ -156,6 +159,17 @@ export function SwapInterface() {
                     }
                 }
 
+                // === Multi-hop Quote (via WSEI/USDC) ===
+                const multiHopQuote = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
+                if (multiHopQuote && parseFloat(multiHopQuote.amountOut) > 0) {
+                    routes.push({
+                        type: 'multi-hop',
+                        amountOut: multiHopQuote.amountOut,
+                        feeLabel: multiHopQuote.via ? `via ${multiHopQuote.via}` : 'Multi-hop',
+                        via: multiHopQuote.via,
+                    });
+                }
+
                 // Find best route
                 if (routes.length > 0) {
                     const best = routes.reduce((a, b) =>
@@ -179,7 +193,7 @@ export function SwapInterface() {
 
         const debounce = setTimeout(findBestRoute, 300);
         return () => clearTimeout(debounce);
-    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, getQuoteV3]);
+    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, getQuoteV3, findMultiHopRoute]);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
