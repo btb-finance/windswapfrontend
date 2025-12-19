@@ -67,7 +67,7 @@ export function useSwapV3() {
         }
     }, []);
 
-    // Get quote for specific tick spacing
+    // Get quote for specific tick spacing - directly call quoter (faster than checking pool first)
     const getQuoteForTickSpacing = useCallback(async (
         tokenIn: Token,
         tokenOut: Token,
@@ -79,27 +79,9 @@ export function useSwapV3() {
         try {
             const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
             const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
-
-            // Check if pool exists first
-            const poolExists = await checkPoolExists(
-                actualTokenIn.address,
-                actualTokenOut.address,
-                tickSpacing
-            );
-
-            if (!poolExists) {
-                return {
-                    amountOut: '0',
-                    gasEstimate: BigInt(0),
-                    sqrtPriceX96After: BigInt(0),
-                    tickSpacing,
-                    poolExists: false,
-                };
-            }
-
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
 
-            // Call quoter
+            // Call quoter directly - it will fail if pool doesn't exist (faster than checking first)
             const response = await fetch('https://evm-rpc.sei-apis.com', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -121,23 +103,24 @@ export function useSwapV3() {
 
             const result = await response.json();
 
-            if (result.result && result.result !== '0x') {
+            if (result.result && result.result !== '0x' && result.result.length > 66) {
                 const decoded = decodeQuoterResult(result.result);
-                return {
-                    amountOut: formatUnits(decoded.amountOut, actualTokenOut.decimals),
-                    gasEstimate: decoded.gasEstimate,
-                    sqrtPriceX96After: decoded.sqrtPriceX96After,
-                    tickSpacing,
-                    poolExists: true,
-                };
+                if (decoded.amountOut > BigInt(0)) {
+                    return {
+                        amountOut: formatUnits(decoded.amountOut, actualTokenOut.decimals),
+                        gasEstimate: decoded.gasEstimate,
+                        sqrtPriceX96After: decoded.sqrtPriceX96After,
+                        tickSpacing,
+                        poolExists: true,
+                    };
+                }
             }
 
             return null;
-        } catch (err) {
-            console.error(`Quote error for tickSpacing ${tickSpacing}:`, err);
+        } catch {
             return null;
         }
-    }, [checkPoolExists]);
+    }, []);
 
     // Get best quote across all tick spacings (AUTO mode)
     const getQuoteV3 = useCallback(async (
