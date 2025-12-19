@@ -1164,21 +1164,21 @@ export default function AdminPage() {
                                             <tr className="border-b border-white/5 bg-green-500/5">
                                                 <td className="py-2 px-2 text-green-400 font-medium">Stablecoins (USDC/USDT)</td>
                                                 <td className="text-center py-2 px-2 font-mono">1</td>
-                                                <td className="text-center py-2 px-2 font-mono text-green-400">9</td>
+                                                <td className="text-center py-2 px-2 font-mono text-green-400">90</td>
                                                 <td className="text-center py-2 px-2 text-green-400 font-bold">0.009%</td>
                                                 <td className="text-center py-2 px-2 text-gray-500">vs 0.01%</td>
                                             </tr>
                                             <tr className="border-b border-white/5 bg-green-500/5">
                                                 <td className="py-2 px-2 text-green-400 font-medium">Correlated (ETH/WETH)</td>
                                                 <td className="text-center py-2 px-2 font-mono">10</td>
-                                                <td className="text-center py-2 px-2 font-mono text-green-400">45</td>
+                                                <td className="text-center py-2 px-2 font-mono text-green-400">450</td>
                                                 <td className="text-center py-2 px-2 text-green-400 font-bold">0.045%</td>
                                                 <td className="text-center py-2 px-2 text-gray-500">vs 0.05%</td>
                                             </tr>
                                             <tr className="border-b border-white/5 bg-green-500/5">
                                                 <td className="py-2 px-2 text-green-400 font-medium">Standard Pairs</td>
                                                 <td className="text-center py-2 px-2 font-mono">50</td>
-                                                <td className="text-center py-2 px-2 font-mono text-green-400">250</td>
+                                                <td className="text-center py-2 px-2 font-mono text-green-400">2500</td>
                                                 <td className="text-center py-2 px-2 text-green-400 font-bold">0.25%</td>
                                                 <td className="text-center py-2 px-2 text-gray-500">vs 0.30%</td>
                                             </tr>
@@ -1214,19 +1214,19 @@ export default function AdminPage() {
                                     <div className="text-sm text-primary font-medium mb-2">🚀 Quick Add Competitive Tiers:</div>
                                     <div className="flex flex-wrap gap-2">
                                         <button
-                                            onClick={() => { setNewTickSpacing('1'); setNewFee('9'); }}
+                                            onClick={() => { setNewTickSpacing('1'); setNewFee('90'); }}
                                             className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
                                         >
                                             0.009% (ts=1)
                                         </button>
                                         <button
-                                            onClick={() => { setNewTickSpacing('10'); setNewFee('45'); }}
+                                            onClick={() => { setNewTickSpacing('10'); setNewFee('450'); }}
                                             className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
                                         >
                                             0.045% (ts=10)
                                         </button>
                                         <button
-                                            onClick={() => { setNewTickSpacing('50'); setNewFee('250'); }}
+                                            onClick={() => { setNewTickSpacing('50'); setNewFee('2500'); }}
                                             className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
                                         >
                                             0.25% (ts=50)
