@@ -20,6 +20,7 @@ import {
 } from '@rainbow-me/rainbowkit/wallets';
 import { sei } from '@/config/chains';
 import { PoolDataProvider } from '@/providers/PoolDataProvider';
+import { UserBalanceProvider } from '@/providers/UserBalanceProvider';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const projectId = 'ecd20f8c23408a4397afc0f5466eb6b6';
@@ -74,7 +75,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     modalSize="compact"
                 >
                     <PoolDataProvider>
-                        {children}
+                        <UserBalanceProvider>
+                            {children}
+                        </UserBalanceProvider>
                     </PoolDataProvider>
                 </RainbowKitProvider>
             </QueryClientProvider>

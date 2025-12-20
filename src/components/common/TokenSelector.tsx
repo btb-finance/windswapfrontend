@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Token, DEFAULT_TOKEN_LIST } from '@/config/tokens';
+import { useUserBalances } from '@/providers/UserBalanceProvider';
 
 interface TokenSelectorProps {
     isOpen: boolean;
@@ -102,6 +103,9 @@ export function TokenSelector({
     const [loadingCustom, setLoadingCustom] = useState(false);
     const [customError, setCustomError] = useState<string | null>(null);
 
+    // Get global balances (sorted by balance)
+    const { sortedTokens, getBalance } = useUserBalances();
+
     // Fetch custom token when valid address is entered
     const fetchCustomToken = useCallback(async (addr: string) => {
         if (!isValidAddress(addr)) {
@@ -134,7 +138,8 @@ export function TokenSelector({
     }, []);
 
     useEffect(() => {
-        const filtered = DEFAULT_TOKEN_LIST.filter((token) => {
+        // Use sortedTokens (tokens with balance first)
+        const filtered = sortedTokens.filter((token) => {
             // Exclude the already selected token in the other input
             if (excludeToken && token.address === excludeToken.address) return false;
 
@@ -158,7 +163,7 @@ export function TokenSelector({
             setCustomToken(null);
             setCustomError(null);
         }
-    }, [search, excludeToken, fetchCustomToken]);
+    }, [search, excludeToken, fetchCustomToken, sortedTokens]);
 
     const handleSelect = (token: Token) => {
         onSelect(token);
@@ -301,8 +306,19 @@ export function TokenSelector({
                                             <p className="text-sm text-gray-400">{token.name}</p>
                                         </div>
 
-                                        {/* Balance Placeholder */}
-                                        <p className="text-sm text-gray-400">--</p>
+                                        {/* Balance */}
+                                        {(() => {
+                                            const balanceInfo = getBalance(token.address);
+                                            const bal = balanceInfo?.formatted || '0';
+                                            const numBal = parseFloat(bal);
+                                            return numBal > 0 ? (
+                                                <p className="text-sm text-white font-medium">
+                                                    {numBal > 1000 ? numBal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : numBal.toFixed(4)}
+                                                </p>
+                                            ) : (
+                                                <p className="text-sm text-gray-500">0</p>
+                                            );
+                                        })()}
                                     </button>
                                 ))
                             )}
