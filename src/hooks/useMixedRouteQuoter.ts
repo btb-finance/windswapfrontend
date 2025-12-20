@@ -75,7 +75,7 @@ export function useMixedRouteQuoter() {
         }));
 
         try {
-            const response = await fetch('https://evm-rpc.sei-apis.com', {
+            const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(batchBody)

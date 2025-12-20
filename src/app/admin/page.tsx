@@ -420,7 +420,7 @@ export default function AdminPage() {
         try {
             // Auto-detect the pool's factory by calling pool.factory()
             // This ensures we use the correct factory (CLFactory vs PoolFactory)
-            const factoryResult = await fetch('https://evm-rpc.sei-apis.com', {
+            const factoryResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -456,7 +456,7 @@ export default function AdminPage() {
         if (!poolAddress) return;
         setError(null);
         try {
-            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
+            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -73,7 +73,7 @@ export function useVeYAKA() {
 
     // Fetch single position
     const fetchPosition = async (owner: Address, index: number): Promise<VeYAKAPosition> => {
-        const rpcUrl = 'https://evm-rpc.sei-apis.com';
+        const rpcUrl = 'https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8';
 
         // Get tokenId from index using ownerToNFTokenIdList(address,uint256)
         const tokenIdData = await fetch(rpcUrl, {

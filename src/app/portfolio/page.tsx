@@ -166,7 +166,7 @@ export default function PortfolioPage() {
                 console.log('Fetching for position tokens:', selectedPosition.token0, selectedPosition.token1);
 
                 const [bal0Response, bal1Response, slot0Response] = await Promise.all([
-                    fetch('https://evm-rpc.sei-apis.com', {
+                    fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -176,7 +176,7 @@ export default function PortfolioPage() {
                             id: 1,
                         }),
                     }).then(r => r.json()),
-                    fetch('https://evm-rpc.sei-apis.com', {
+                    fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -199,7 +199,7 @@ export default function PortfolioPage() {
                         const token1Padded = token1.slice(2).padStart(64, '0');
                         const tickPadded = tickSpacing.toString(16).padStart(64, '0');
 
-                        const poolRes = await fetch('https://evm-rpc.sei-apis.com', {
+                        const poolRes = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -212,7 +212,7 @@ export default function PortfolioPage() {
 
                         if (poolRes.result && poolRes.result !== '0x' + '0'.repeat(64)) {
                             const poolAddress = '0x' + poolRes.result.slice(-40);
-                            const slot0Res = await fetch('https://evm-rpc.sei-apis.com', {
+                            const slot0Res = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -238,7 +238,7 @@ export default function PortfolioPage() {
 
                 // For WSEI, fetch native SEI balance instead
                 if (isToken0WSEI) {
-                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com', {
+                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -258,7 +258,7 @@ export default function PortfolioPage() {
                 }
 
                 if (isToken1WSEI) {
-                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com', {
+                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -384,7 +384,7 @@ export default function PortfolioPage() {
 
             try {
                 // Get veNFT count
-                const countResult = await fetch('https://evm-rpc.sei-apis.com', {
+                const countResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -401,7 +401,7 @@ export default function PortfolioPage() {
 
                 for (let i = 0; i < count; i++) {
                     // Get tokenId at index using ownerToNFTokenIdList (0x8bf9d84c)
-                    const tokenIdResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    const tokenIdResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -418,7 +418,7 @@ export default function PortfolioPage() {
                     const tokenId = BigInt(tokenIdResult.result);
 
                     // Get locked data using locked(uint256) - selector 0xb45a3c0e
-                    const lockedResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    const lockedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -432,7 +432,7 @@ export default function PortfolioPage() {
                     }).then(r => r.json());
 
                     // Get voting power using balanceOfNFT(uint256) - selector 0xe7e242d4
-                    const vpResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    const vpResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -479,7 +479,7 @@ export default function PortfolioPage() {
 
             try {
                 // Step 1: Get all CL pools from CLFactory
-                const poolCountResult = await fetch('https://evm-rpc.sei-apis.com', {
+                const poolCountResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -498,7 +498,7 @@ export default function PortfolioPage() {
                 // Step 2: Get all pool addresses
                 const clPools: string[] = [];
                 for (let i = 0; i < Math.min(poolCount, 50); i++) {
-                    const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    const poolResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -523,7 +523,7 @@ export default function PortfolioPage() {
                 // Step 3: Check each pool for a gauge and staked positions
                 for (const poolAddress of clPools) {
                     // Get gauge address for pool from Voter
-                    const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    const gaugeResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -544,7 +544,7 @@ export default function PortfolioPage() {
                     console.log('[Portfolio] Found gauge for pool:', poolAddress, '->', gaugeAddr);
 
                     // Get staked token IDs for this user
-                    const stakedResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    const stakedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -574,7 +574,7 @@ export default function PortfolioPage() {
 
                         // Get pending rewards using earned(address,uint256) which simulates reward growth
                         // Selector: 0x3e491d47 = earned(address,uint256)
-                        const rewardsResult = await fetch('https://evm-rpc.sei-apis.com', {
+                        const rewardsResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -588,7 +588,7 @@ export default function PortfolioPage() {
                         }).then(r => r.json());
 
                         // Get reward rate
-                        const rateResult = await fetch('https://evm-rpc.sei-apis.com', {
+                        const rateResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -602,7 +602,7 @@ export default function PortfolioPage() {
                         }).then(r => r.json());
 
                         // Get position data from NFT manager
-                        const positionResult = await fetch('https://evm-rpc.sei-apis.com', {
+                        const positionResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -773,7 +773,7 @@ export default function PortfolioPage() {
                 ? position.tickSpacing.toString(16).padStart(64, '0')
                 : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(position.tickSpacing) + BigInt(1)).toString(16);
 
-            const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+            const poolResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -792,7 +792,7 @@ export default function PortfolioPage() {
             const poolAddress = '0x' + poolResult.result.slice(-40);
 
             // Get gauge address from Voter
-            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
+            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -944,7 +944,7 @@ export default function PortfolioPage() {
 
             // Helper to check allowance
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
-                const result = await fetch('https://evm-rpc.sei-apis.com', {
+                const result = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

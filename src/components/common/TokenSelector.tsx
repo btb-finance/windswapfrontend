@@ -27,7 +27,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
         const decimalsSelector = '0x313ce567';
 
         const [symbolResult, nameResult, decimalsResult] = await Promise.all([
-            fetch('https://evm-rpc.sei-apis.com', {
+            fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -37,7 +37,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
                     id: 1,
                 }),
             }).then(r => r.json()),
-            fetch('https://evm-rpc.sei-apis.com', {
+            fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -47,7 +47,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
                     id: 2,
                 }),
             }).then(r => r.json()),
-            fetch('https://evm-rpc.sei-apis.com', {
+            fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

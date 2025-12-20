@@ -37,7 +37,7 @@ async function batchRpcCall(calls: { to: string; data: string }[]): Promise<stri
         id: i + 1
     }));
 
-    const response = await fetch('https://evm-rpc.sei-apis.com', {
+    const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch)
@@ -70,7 +70,7 @@ export function UserBalanceProvider({ children }: { children: ReactNode }) {
             const addressPadded = address.slice(2).toLowerCase().padStart(64, '0');
 
             // Get native SEI balance
-            const nativeBalanceRes = await fetch('https://evm-rpc.sei-apis.com', {
+            const nativeBalanceRes = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

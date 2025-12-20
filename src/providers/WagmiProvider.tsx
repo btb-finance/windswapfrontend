@@ -30,7 +30,7 @@ const config = getDefaultConfig({
     projectId,
     chains: [sei],
     transports: {
-        [sei.id]: http('https://evm-rpc.sei-apis.com'),
+        [sei.id]: http('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8'),
     },
     ssr: true,
     // EIP-6963: Enable multi-injected provider discovery for better wallet detection

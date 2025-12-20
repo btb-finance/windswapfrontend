@@ -91,7 +91,7 @@ export function useCLPositions() {
 
 // Fetch a single position by owner index
 async function fetchPositionByIndex(owner: string, index: number): Promise<CLPosition | null> {
-    const rpcUrl = 'https://evm-rpc.sei-apis.com';
+    const rpcUrl = 'https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8';
 
     try {
         // 1. Get tokenId at index using tokenOfOwnerByIndex
