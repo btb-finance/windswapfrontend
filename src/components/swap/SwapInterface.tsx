@@ -320,29 +320,23 @@ export function SwapInterface() {
 
     return (
         <div className="swap-card max-w-md mx-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4 md:mb-6">
-                <h2 className="text-lg md:text-xl font-semibold">Swap</h2>
-                <div className="flex items-center gap-1.5 md:gap-2">
-                    {/* Best Route Badge - hide "Best:" text on mobile */}
+            {/* Header - Compact */}
+            <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base sm:text-lg font-bold">Swap</h2>
+                <div className="flex items-center gap-1">
                     {bestRoute && (
-                        <span className={`px-2 py-1 text-xs rounded-lg ${bestRoute.type === 'v3'
+                        <span className={`px-1.5 py-0.5 text-[10px] rounded ${bestRoute.type === 'v3' || bestRoute.type === 'multi-hop'
                             ? 'bg-green-500/20 text-green-400'
                             : 'bg-primary/20 text-primary'
                             }`}>
-                            <span className="hidden md:inline">Best: </span>{bestRoute.feeLabel}
+                            {bestRoute.feeLabel}
                         </span>
                     )}
                     {noRouteFound && (
-                        <span className="px-2 py-1 text-xs rounded-lg bg-red-500/20 text-red-400">
-                            No Route
-                        </span>
+                        <span className="px-1.5 py-0.5 text-[10px] rounded bg-red-500/20 text-red-400">No Route</span>
                     )}
                     {isQuoting && (
-                        <span className="px-2 py-1 text-xs rounded-lg bg-white/10 text-gray-400">
-                            <span className="hidden md:inline">Finding best...</span>
-                            <span className="md:hidden">...</span>
-                        </span>
+                        <span className="px-1.5 py-0.5 text-[10px] rounded bg-white/10 text-gray-400">...</span>
                     )}
                     <SwapSettings
                         slippage={slippage}
@@ -355,23 +349,15 @@ export function SwapInterface() {
 
             {/* Error Display */}
             {error && (
-                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
                     {error}
                 </div>
             )}
 
             {/* Success Display */}
             {txHash && (
-                <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
-                    Transaction submitted!{' '}
-                    <a
-                        href={`https://seiscan.io/tx/${txHash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                    >
-                        View on SeiScan
-                    </a>
+                <div className="mb-3 p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-xs">
+                    Success! <a href={`https://seitrace.com/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">View →</a>
                 </div>
             )}
 
@@ -411,46 +397,34 @@ export function SwapInterface() {
                 disabled
             />
 
-            {/* Rate Info */}
+            {/* Rate Info - Compact */}
             {rate && tokenIn && tokenOut && (
-                <div className="mt-4 p-3 rounded-xl bg-white/5">
-                    <div className="flex justify-between text-sm">
+                <div className="mt-3 p-2 rounded-lg bg-white/5 text-xs space-y-1">
+                    <div className="flex justify-between">
                         <span className="text-gray-400">Rate</span>
-                        <span>
-                            1 {tokenIn.symbol} = {rate} {tokenOut.symbol}
-                        </span>
+                        <span>1 {tokenIn.symbol} = {parseFloat(rate).toFixed(4)} {tokenOut.symbol}</span>
                     </div>
-                    <div className="flex justify-between text-sm mt-1">
-                        <span className="text-gray-400">Route</span>
-                        <span className={bestRoute?.type === 'v3' ? 'text-green-400' : 'text-primary'}>
-                            {bestRoute?.feeLabel || '--'}
-                        </span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-1">
+                    <div className="flex justify-between">
                         <span className="text-gray-400">Min. received</span>
-                        <span>{amountOutMin} {tokenOut.symbol}</span>
+                        <span>{parseFloat(amountOutMin).toFixed(4)} {tokenOut.symbol}</span>
                     </div>
                 </div>
             )}
 
             {/* Approve/Swap Button */}
             {needsApproval && canSwap ? (
-                <motion.button
+                <button
                     onClick={handleApprove}
                     disabled={isApproving}
-                    className="w-full btn-primary py-4 mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                    className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
                 >
                     {isApproving ? 'Approving...' : `Approve ${tokenIn?.symbol}`}
-                </motion.button>
+                </button>
             ) : (
-                <motion.button
+                <button
                     onClick={handleSwap}
                     disabled={!canSwap || isLoading}
-                    className="w-full btn-primary py-4 mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    whileHover={canSwap ? { scale: 1.01 } : {}}
-                    whileTap={canSwap ? { scale: 0.99 } : {}}
+                    className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
                 >
                     {isLoading
                         ? 'Swapping...'
@@ -461,11 +435,11 @@ export function SwapInterface() {
                                 : !amountIn
                                     ? 'Enter Amount'
                                     : 'Swap'}
-                </motion.button>
+                </button>
             )}
 
-            <div className="mt-4 text-center text-xs text-gray-500">
-                Powered by Wind Swap Smart Router (V2 + V3)
+            <div className="mt-3 text-center text-[10px] text-gray-500">
+                Auto-routes via V2 + V3 pools
             </div>
         </div>
     );
