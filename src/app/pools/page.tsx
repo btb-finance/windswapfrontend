@@ -127,65 +127,39 @@ export default function PoolsPage() {
     const totalPoolCount = v2Pools.length + clPools.length;
 
     return (
-        <div className="container mx-auto px-6">
-            {/* Page Header */}
+        <div className="container mx-auto px-3 sm:px-6">
+            {/* Page Header - Compact for mobile */}
             <motion.div
-                className="text-center mb-8"
+                className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4 sm:mb-6"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-4xl font-bold mb-4">
-                    <span className="gradient-text">Explore</span> Pools
+                <h1 className="text-2xl sm:text-3xl font-bold">
+                    <span className="gradient-text">Pools</span>
+                    <span className="text-sm sm:text-base font-normal text-gray-400 ml-2">
+                        {totalPoolCount > 0 && `(${totalPoolCount})`}
+                    </span>
                 </h1>
-                <p className="text-gray-400 max-w-xl mx-auto">
-                    Discover trading pools and find the best opportunities to earn.
-                    {totalPoolCount > 0 && ` ${totalPoolCount} pools available.`}
-                </p>
                 <motion.button
                     onClick={openCreatePoolModal}
-                    className="mt-4 btn-primary px-6 py-3"
+                    className="btn-primary px-4 py-2 text-sm font-medium"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                 >
-                    + Create New Pool
+                    + New Pool
                 </motion.button>
             </motion.div>
 
-            {/* Pool Type Stats */}
+            {/* Filters Row - Compact */}
             <motion.div
-                className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-            >
-                <div className="stat-card text-center">
-                    <p className="text-sm text-gray-400 mb-1">Total Pools</p>
-                    <p className="text-2xl font-bold">{totalPoolCount || '--'}</p>
-                </div>
-                <div className="stat-card text-center">
-                    <p className="text-sm text-gray-400 mb-1">V2 (Classic)</p>
-                    <p className="text-2xl font-bold">{v2Pools.length || '--'}</p>
-                </div>
-                <div className="stat-card text-center bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/20">
-                    <p className="text-sm text-gray-400 mb-1">V3 (Concentrated)</p>
-                    <p className="text-2xl font-bold text-cyan-400">{clPools.length || '--'}</p>
-                </div>
-                <div className="stat-card text-center">
-                    <p className="text-sm text-gray-400 mb-1">Network</p>
-                    <p className="text-2xl font-bold">Sei</p>
-                </div>
-            </motion.div>
-
-            {/* Filters Row */}
-            <motion.div
-                className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8"
+                className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4 mb-4 sm:mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15 }}
             >
-                <div className="flex gap-4 items-center flex-wrap">
-                    {/* Pool Type Toggle */}
-                    <div className="glass p-1 rounded-xl inline-flex">
+                <div className="flex gap-2 items-center">
+                    {/* Pool Type Toggle - Compact */}
+                    <div className="glass p-0.5 sm:p-1 rounded-lg inline-flex flex-1 sm:flex-none">
                         {[
                             { key: 'all' as PoolType, label: 'All' },
                             { key: 'v2' as PoolType, label: 'V2' },
@@ -194,7 +168,7 @@ export default function PoolsPage() {
                             <button
                                 key={type.key}
                                 onClick={() => setPoolType(type.key)}
-                                className={`px-4 py-2 rounded-lg font-medium transition text-sm ${poolType === type.key
+                                className={`flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg font-medium transition text-xs sm:text-sm ${poolType === type.key
                                     ? type.key === 'cl'
                                         ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
                                         : 'bg-primary text-white'
@@ -206,18 +180,18 @@ export default function PoolsPage() {
                         ))}
                     </div>
 
-                    {/* Sort Dropdown */}
+                    {/* Sort - hidden on mobile */}
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value as SortBy)}
-                        className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-primary cursor-pointer"
+                        className="hidden sm:block px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-primary cursor-pointer"
                     >
                         <option value="tvl">Sort by TVL</option>
                     </select>
                 </div>
 
-                {/* Search */}
-                <div className="relative">
+                {/* Search - full width on mobile */}
+                <div className="relative w-full sm:w-auto">
                     <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -225,8 +199,8 @@ export default function PoolsPage() {
                         type="text"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search by token..."
-                        className="pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-primary w-64"
+                        placeholder="Search..."
+                        className="w-full sm:w-48 pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm outline-none focus:border-primary"
                     />
                 </div>
             </motion.div>
@@ -267,50 +241,50 @@ export default function PoolsPage() {
                     sortedPools.map((pool, index) => (
                         <motion.div
                             key={pool.address}
-                            className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 p-4 md:p-5 border-b border-white/5 hover:bg-white/5 transition"
+                            className="flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b border-white/5 hover:bg-white/5 transition"
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 + index * 0.02 }}
                         >
                             {/* Pool Info */}
-                            <div className="md:col-span-4 flex items-center gap-3">
-                                <div className="relative">
-                                    <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-sm font-bold ${pool.poolType === 'CL'
+                            <div className="md:col-span-4 flex items-center gap-2">
+                                <div className="relative flex-shrink-0">
+                                    <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
                                         ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
                                         : 'bg-gradient-to-br from-primary to-secondary'
                                         }`}>
                                         {pool.token0.symbol[0]}
                                     </div>
-                                    <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-sm font-bold absolute left-5 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                    <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
                                         ? 'bg-gradient-to-br from-blue-500 to-purple-500'
                                         : 'bg-gradient-to-br from-secondary to-accent'
                                         }`}>
                                         {pool.token1.symbol[0]}
                                     </div>
                                 </div>
-                                <div className="ml-3 md:ml-4 flex-1">
-                                    <div className="font-semibold text-base md:text-lg">
+                                <div className="ml-4 md:ml-4 flex-1 min-w-0">
+                                    <div className="font-semibold text-sm md:text-lg truncate">
                                         {pool.token0.symbol}/{pool.token1.symbol}
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1 text-[10px] md:text-xs">
                                         {pool.poolType === 'CL' && pool.tickSpacing && (
-                                            <span className="text-xs text-cyan-400">
-                                                {getFeeTier(pool.tickSpacing)} fee
+                                            <span className="text-cyan-400">
+                                                {getFeeTier(pool.tickSpacing)}
                                             </span>
                                         )}
                                         {pool.poolType === 'V2' && (
-                                            <span className="text-xs text-gray-500">
+                                            <span className="text-gray-500">
                                                 {pool.stable ? 'Stable' : 'Volatile'}
                                             </span>
                                         )}
                                     </div>
                                 </div>
                                 {/* Mobile: Type badge inline */}
-                                <span className={`md:hidden text-xs px-2 py-1 rounded-full font-medium ${pool.poolType === 'CL'
+                                <span className={`md:hidden text-[10px] px-1.5 py-0.5 rounded font-medium ${pool.poolType === 'CL'
                                     ? 'bg-cyan-500/20 text-cyan-400'
                                     : 'bg-primary/20 text-primary'
                                     }`}>
-                                    {pool.poolType === 'CL' ? 'CL' : 'AMM'}
+                                    {pool.poolType === 'CL' ? 'CL' : 'V2'}
                                 </span>
                             </div>
 
@@ -356,24 +330,24 @@ export default function PoolsPage() {
                             </div>
 
                             {/* Mobile: TVL + Action Row */}
-                            <div className="flex md:hidden items-center justify-between gap-3">
-                                <div className="flex-1 text-xs">
-                                    <div className="font-medium">{pool.reserve0} {pool.token0.symbol}</div>
-                                    <div className="text-gray-400">{pool.reserve1} {pool.token1.symbol}</div>
+                            <div className="flex md:hidden items-center justify-between gap-2">
+                                <div className="flex-1 text-[10px] min-w-0">
+                                    <div className="font-medium truncate">{pool.reserve0} {pool.token0.symbol}</div>
+                                    <div className="text-gray-400 truncate">{pool.reserve1} {pool.token1.symbol}</div>
                                 </div>
                                 {formatWeeklyRewards(pool.address) && (
-                                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex-shrink-0">
                                         🔥 {formatWeeklyRewards(pool.address)}
                                     </span>
                                 )}
                                 <button
                                     onClick={() => openAddLiquidityModal(pool)}
-                                    className={`px-3 py-2 rounded-lg font-medium text-sm ${pool.poolType === 'CL'
-                                        ? 'bg-cyan-500/20 text-cyan-400'
-                                        : 'bg-primary/20 text-primary'
+                                    className={`px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 ${pool.poolType === 'CL'
+                                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
+                                        : 'bg-gradient-to-r from-primary to-secondary text-white'
                                         }`}
                                 >
-                                    + Add LP
+                                    Add
                                 </button>
                             </div>
 
