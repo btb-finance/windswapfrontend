@@ -740,68 +740,116 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             )}
                                         </div>
 
-                                        {/* Preset Range Buttons - scrollable on mobile */}
+                                        {/* Range Strategy Selection - One Click! */}
                                         <div>
-                                            <div className="text-xs text-gray-400 mb-2 font-medium">Quick Range</div>
-                                            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                                            <div className="text-xs text-gray-400 mb-3 font-medium">Select Range Strategy</div>
+                                            <div className="grid grid-cols-4 gap-2">
                                                 <button
                                                     onClick={() => { setPriceLower(''); setPriceUpper(''); }}
-                                                    className={`flex-shrink-0 py-3 px-4 text-sm rounded-xl transition-all font-medium active:scale-[0.98] ${!priceLower && !priceUpper
-                                                        ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
-                                                        : 'bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10'}`}
+                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${!priceLower && !priceUpper
+                                                        ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border-2 border-primary/50 shadow-lg'
+                                                        : 'bg-white/5 hover:bg-white/10 border border-white/10'}`}
                                                 >
-                                                    Full Range
+                                                    <div className="text-lg mb-1">∞</div>
+                                                    <div className="text-xs font-medium">Full</div>
                                                 </button>
-                                                {[5, 10, 25, 50].map(p => (
-                                                    <button
-                                                        key={p}
-                                                        onClick={() => setPresetRange(p)}
-                                                        disabled={!currentPrice}
-                                                        className={`flex-shrink-0 py-3 px-4 text-sm rounded-xl transition-all font-medium active:scale-[0.98] ${currentPrice
-                                                            ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
-                                                            : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
-                                                    >
-                                                        ±{p}%
-                                                    </button>
-                                                ))}
+                                                <button
+                                                    onClick={() => setPresetRange(2)}
+                                                    disabled={!currentPrice}
+                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${currentPrice
+                                                        ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                                >
+                                                    <div className="text-lg mb-1">🎯</div>
+                                                    <div className="text-xs font-medium">Tight</div>
+                                                    <div className="text-[10px] text-gray-500">±2%</div>
+                                                </button>
+                                                <button
+                                                    onClick={() => setPresetRange(10)}
+                                                    disabled={!currentPrice}
+                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${currentPrice
+                                                        ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                                >
+                                                    <div className="text-lg mb-1">⚖️</div>
+                                                    <div className="text-xs font-medium">Standard</div>
+                                                    <div className="text-[10px] text-gray-500">±10%</div>
+                                                </button>
+                                                <button
+                                                    onClick={() => setPresetRange(50)}
+                                                    disabled={!currentPrice}
+                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${currentPrice
+                                                        ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                                >
+                                                    <div className="text-lg mb-1">🌊</div>
+                                                    <div className="text-xs font-medium">Wide</div>
+                                                    <div className="text-[10px] text-gray-500">±50%</div>
+                                                </button>
                                             </div>
                                         </div>
 
-                                        {/* Min/Max Price Inputs */}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="p-4 rounded-xl bg-gradient-to-br from-red-500/5 to-orange-500/5 border border-red-500/20">
-                                                <div className="text-xs text-red-400 font-medium mb-2 flex items-center gap-1">
-                                                    <span>↓</span> Min Price
+                                        {/* Visual Price Range Display with +/- controls */}
+                                        {(priceLower || priceUpper) && currentPrice && (
+                                            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <span className="text-xs text-gray-400 font-medium">Your Range</span>
+                                                    <span className="text-xs text-primary">
+                                                        {priceLower && priceUpper ?
+                                                            `±${(((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100).toFixed(0)}%`
+                                                            : 'Custom'}
+                                                    </span>
                                                 </div>
-                                                <input
-                                                    type="number"
-                                                    inputMode="decimal"
-                                                    value={priceLower}
-                                                    onChange={(e) => setPriceLower(e.target.value)}
-                                                    placeholder="0"
-                                                    className="w-full bg-transparent text-xl sm:text-2xl font-bold text-center outline-none placeholder-gray-600"
-                                                />
-                                                <div className="text-xs text-gray-500 text-center mt-1">
-                                                    {tokenB?.symbol || 'B'}/{tokenA?.symbol || 'A'}
+
+                                                {/* Visual range bar */}
+                                                <div className="relative h-2 bg-white/10 rounded-full mb-4 overflow-hidden">
+                                                    <div
+                                                        className="absolute h-full bg-gradient-to-r from-red-500 via-green-500 to-red-500 rounded-full"
+                                                        style={{
+                                                            left: `${Math.max(0, Math.min(50, (1 - (currentPrice - parseFloat(priceLower || '0')) / currentPrice) * 50))}%`,
+                                                            right: `${Math.max(0, Math.min(50, (1 - (parseFloat(priceUpper || '999999') - currentPrice) / currentPrice) * 50))}%`
+                                                        }}
+                                                    />
+                                                    <div className="absolute left-1/2 top-0 w-0.5 h-full bg-white -translate-x-1/2" />
+                                                </div>
+
+                                                {/* Min/Max with +/- buttons */}
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="text-center">
+                                                        <div className="text-xs text-red-400 mb-1">Min</div>
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button
+                                                                onClick={() => setPriceLower((parseFloat(priceLower || '0') * 0.95).toFixed(6))}
+                                                                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
+                                                            >−</button>
+                                                            <span className="font-bold text-lg min-w-[80px]">
+                                                                {priceLower ? parseFloat(priceLower).toFixed(4) : '0'}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => setPriceLower((parseFloat(priceLower || '0') * 1.05).toFixed(6))}
+                                                                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
+                                                            >+</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <div className="text-xs text-green-400 mb-1">Max</div>
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button
+                                                                onClick={() => setPriceUpper((parseFloat(priceUpper || '999999') * 0.95).toFixed(6))}
+                                                                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
+                                                            >−</button>
+                                                            <span className="font-bold text-lg min-w-[80px]">
+                                                                {priceUpper ? parseFloat(priceUpper).toFixed(4) : '∞'}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => setPriceUpper((parseFloat(priceUpper || '1') * 1.05).toFixed(6))}
+                                                                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
+                                                            >+</button>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/5 to-emerald-500/5 border border-green-500/20">
-                                                <div className="text-xs text-green-400 font-medium mb-2 flex items-center gap-1">
-                                                    <span>↑</span> Max Price
-                                                </div>
-                                                <input
-                                                    type="number"
-                                                    inputMode="decimal"
-                                                    value={priceUpper}
-                                                    onChange={(e) => setPriceUpper(e.target.value)}
-                                                    placeholder="∞"
-                                                    className="w-full bg-transparent text-xl sm:text-2xl font-bold text-center outline-none placeholder-gray-600"
-                                                />
-                                                <div className="text-xs text-gray-500 text-center mt-1">
-                                                    {tokenB?.symbol || 'B'}/{tokenA?.symbol || 'A'}
-                                                </div>
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
                                 )}
 
