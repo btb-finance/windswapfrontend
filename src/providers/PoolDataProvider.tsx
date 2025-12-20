@@ -134,6 +134,33 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
         setGaugesLoading(true);
         try {
+            // Step 0: Instant load from static GAUGE_LIST for fast display
+            try {
+                const { GAUGE_LIST } = await import('@/config/gauges');
+
+                // Build quick pool list from gauges for instant display
+                const quickClPools: PoolData[] = GAUGE_LIST.map(g => ({
+                    address: g.pool as Address,
+                    token0: { address: g.token0 as Address, symbol: g.symbol0, decimals: 18 },
+                    token1: { address: g.token1 as Address, symbol: g.symbol1, decimals: 18 },
+                    poolType: g.type,
+                    stable: false,
+                    tickSpacing: g.type === 'CL' ? 200 : undefined,
+                    reserve0: '0',
+                    reserve1: '0',
+                    tvl: '0',
+                }));
+
+                // Set pools immediately for fast display
+                if (quickClPools.length > 0) {
+                    setClPools(quickClPools.filter(p => p.poolType === 'CL'));
+                    setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
+                    setIsLoading(false); // Show pools immediately!
+                }
+            } catch (e) {
+                console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
+            }
+
             // Step 1: Get pool counts
             const countCalls = [
                 { to: V2_CONTRACTS.PoolFactory, data: '0xefde4e64' }, // allPoolsLength()
@@ -262,10 +289,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const t1 = newTokenMap.get(p.token1.toLowerCase());
                 const r0 = t0 ? formatUnits(p.reserve0, t0.decimals) : '0';
                 const r1 = t1 ? formatUnits(p.reserve1, t1.decimals) : '0';
+                const known0 = KNOWN_TOKENS[p.token0.toLowerCase()];
+                const known1 = KNOWN_TOKENS[p.token1.toLowerCase()];
                 return {
                     address: p.addr,
-                    token0: t0 || { address: p.token0, symbol: 'UNK', decimals: 18 },
-                    token1: t1 || { address: p.token1, symbol: 'UNK', decimals: 18 },
+                    token0: t0 || (known0 ? { address: p.token0, ...known0 } : { address: p.token0, symbol: 'UNK', decimals: 18 }),
+                    token1: t1 || (known1 ? { address: p.token1, ...known1 } : { address: p.token1, symbol: 'UNK', decimals: 18 }),
                     poolType: 'V2' as const,
                     stable: p.stable,
                     reserve0: r0,
@@ -277,10 +306,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             const newClPools: PoolData[] = clDetails.map(p => {
                 const t0 = newTokenMap.get(p.token0.toLowerCase());
                 const t1 = newTokenMap.get(p.token1.toLowerCase());
+                const known0 = KNOWN_TOKENS[p.token0.toLowerCase()];
+                const known1 = KNOWN_TOKENS[p.token1.toLowerCase()];
                 return {
                     address: p.addr,
-                    token0: t0 || { address: p.token0, symbol: 'UNK', decimals: 18 },
-                    token1: t1 || { address: p.token1, symbol: 'UNK', decimals: 18 },
+                    token0: t0 || (known0 ? { address: p.token0, ...known0 } : { address: p.token0, symbol: 'UNK', decimals: 18 }),
+                    token1: t1 || (known1 ? { address: p.token1, ...known1 } : { address: p.token1, symbol: 'UNK', decimals: 18 }),
                     poolType: 'CL' as const,
                     tickSpacing: p.tickSpacing,
                     reserve0: '0',
