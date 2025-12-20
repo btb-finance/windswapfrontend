@@ -28,6 +28,15 @@ interface AddLiquidityModalProps {
     initialPool?: PoolConfig;
 }
 
+// Mobile-optimized styles
+const mobileStyles = {
+    overlay: "fixed inset-0 z-50 flex items-end sm:items-center justify-center",
+    modal: "relative z-10 w-full sm:max-w-lg max-h-[95vh] sm:max-h-[85vh] overflow-hidden bg-[#0d0d14] sm:rounded-2xl rounded-t-3xl border border-white/10 shadow-2xl flex flex-col",
+    header: "sticky top-0 z-20 flex items-center justify-between px-4 py-4 sm:px-6 sm:py-5 border-b border-white/10 bg-[#0d0d14]/95 backdrop-blur-sm",
+    scrollArea: "flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 space-y-5",
+    footer: "sticky bottom-0 z-20 px-4 py-4 sm:px-6 sm:py-5 border-t border-white/10 bg-[#0d0d14]/95 backdrop-blur-sm",
+};
+
 export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidityModalProps) {
     const { isConnected, address } = useAccount();
     const [poolType, setPoolType] = useState<PoolType>(initialPool?.poolType || 'v2');
@@ -450,31 +459,42 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 {isOpen && (
                     <motion.div
                         key="modal-backdrop"
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                        className={mobileStyles.overlay}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                     >
                         {/* Backdrop */}
                         <div
-                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                             onClick={onClose}
                         />
 
-                        {/* Modal */}
+                        {/* Modal - Bottom sheet on mobile, centered on desktop */}
                         <motion.div
                             key="modal-content"
-                            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto glass-card p-6"
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className={mobileStyles.modal}
+                            initial={{ opacity: 0, y: 100 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 100 }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
                         >
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl font-semibold">Add Liquidity</h2>
+                            {/* Sticky Header */}
+                            <div className={mobileStyles.header}>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg sm:text-xl font-bold">Add Liquidity</h2>
+                                        <p className="text-xs text-gray-400 hidden sm:block">Deposit tokens to earn fees</p>
+                                    </div>
+                                </div>
                                 <button
                                     onClick={onClose}
-                                    className="p-2 rounded-lg hover:bg-white/10 transition"
+                                    className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
                                 >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -482,320 +502,382 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                 </button>
                             </div>
 
-                            {/* Error Display */}
-                            {error && (
-                                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                                    {error}
-                                </div>
-                            )}
-
-                            {/* Success Display */}
-                            {txHash && txProgress === 'done' && (
-                                <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
-                                    Liquidity added!{' '}
-                                    <a
-                                        href={`https://seitrace.com/tx/${txHash}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="underline"
-                                    >
-                                        View on SeiTrace
-                                    </a>
-                                </div>
-                            )}
-
-                            {/* Pool Type Selection */}
-                            <div className="mb-6">
-                                <label className="text-sm text-gray-400 mb-3 block">Choose Pool Type</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => setPoolType('v2')}
-                                        className={`p-4 rounded-xl text-left transition-all ${poolType === 'v2'
-                                            ? 'bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/40'
-                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                                            }`}
-                                    >
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="text-2xl">💧</span>
-                                            <span className="font-semibold">Classic</span>
+                            {/* Scrollable Content Area */}
+                            <div className={mobileStyles.scrollArea}>
+                                {/* Error Display */}
+                                {error && (
+                                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                <span className="text-red-400 text-xs">!</span>
+                                            </div>
+                                            <p className="text-red-400 text-sm">{error}</p>
                                         </div>
-                                        <div className="text-xs text-gray-400">Simple 50/50 split</div>
-                                    </button>
-                                    <button
-                                        onClick={() => setPoolType('cl')}
-                                        className={`p-4 rounded-xl text-left transition-all ${poolType === 'cl'
-                                            ? 'bg-gradient-to-br from-secondary/20 to-cyan-500/10 border-2 border-secondary/40'
-                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                                            }`}
-                                    >
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="text-2xl">⚡</span>
-                                            <span className="font-semibold">Concentrated</span>
-                                        </div>
-                                        <div className="text-xs text-gray-400">Higher yields</div>
-                                    </button>
-                                </div>
-                            </div>
+                                    </div>
+                                )}
 
-                            {/* V2 Stable/Volatile Toggle */}
-                            {poolType === 'v2' && (
-                                <div className="mb-6">
-                                    <label className="text-sm text-gray-400 mb-2 block">Pool Curve</label>
+                                {/* Success Display */}
+                                {txHash && txProgress === 'done' && (
+                                    <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                                <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-green-400 font-medium">Liquidity Added!</p>
+                                                <a
+                                                    href={`https://seitrace.com/tx/${txHash}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-sm text-green-400/70 underline truncate block"
+                                                >
+                                                    View on SeiTrace →
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Pool Type Selection */}
+                                <div>
+                                    <label className="text-sm text-gray-400 mb-3 block font-medium">Pool Type</label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
-                                            onClick={() => setStable(false)}
-                                            className={`p-3 rounded-xl text-center transition ${!stable
-                                                ? 'bg-primary/10 border border-primary/30 text-white'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            onClick={() => setPoolType('v2')}
+                                            className={`p-4 rounded-xl text-center transition-all active:scale-[0.98] ${poolType === 'v2'
+                                                ? 'bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/50 shadow-lg shadow-primary/10'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/8'
                                                 }`}
                                         >
-                                            Volatile
+                                            <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                                                <span className="text-2xl">💧</span>
+                                            </div>
+                                            <div className="font-semibold mb-1">Classic V2</div>
+                                            <div className="text-xs text-gray-400">Simple 50/50</div>
                                         </button>
                                         <button
-                                            onClick={() => setStable(true)}
-                                            className={`p-3 rounded-xl text-center transition ${stable
-                                                ? 'bg-primary/10 border border-primary/30 text-white'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            onClick={() => setPoolType('cl')}
+                                            className={`p-4 rounded-xl text-center transition-all active:scale-[0.98] ${poolType === 'cl'
+                                                ? 'bg-gradient-to-br from-secondary/20 to-cyan-500/10 border-2 border-secondary/50 shadow-lg shadow-secondary/10'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/8'
                                                 }`}
                                         >
-                                            Stable
+                                            <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center">
+                                                <span className="text-2xl">⚡</span>
+                                            </div>
+                                            <div className="font-semibold mb-1">Concentrated</div>
+                                            <div className="text-xs text-gray-400">Higher yields</div>
                                         </button>
                                     </div>
                                 </div>
-                            )}
 
-                            {/* CL Fee Tier */}
-                            {poolType === 'cl' && (
-                                <div className="mb-6">
-                                    <label className="text-sm text-gray-400 mb-2 block">Fee Tier</label>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {[
-                                            { spacing: 1, fee: '0.009%' },
-                                            { spacing: 10, fee: '0.045%' },
-                                            { spacing: 80, fee: '0.25%' },
-                                            { spacing: 2000, fee: '1%' },
-                                        ].map(({ spacing, fee }) => (
+                                {/* V2 Stable/Volatile Toggle */}
+                                {poolType === 'v2' && (
+                                    <div>
+                                        <label className="text-sm text-gray-400 mb-3 block font-medium">Pool Curve</label>
+                                        <div className="grid grid-cols-2 gap-3">
                                             <button
-                                                key={spacing}
-                                                onClick={() => setTickSpacing(spacing)}
-                                                className={`p-2 rounded-lg text-center text-sm transition ${tickSpacing === spacing
-                                                    ? 'bg-secondary/10 border border-secondary/30 text-white'
-                                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                onClick={() => setStable(false)}
+                                                className={`py-4 px-4 rounded-xl text-center font-medium transition-all active:scale-[0.98] ${!stable
+                                                    ? 'bg-primary/15 border-2 border-primary/40 text-white'
+                                                    : 'bg-white/5 border border-white/10 hover:bg-white/8 text-gray-300'
                                                     }`}
                                             >
-                                                {fee}
+                                                <span className="block text-lg mb-1">📈</span>
+                                                Volatile
                                             </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* CL Price Range */}
-                            {poolType === 'cl' && (
-                                <div className="mb-6">
-                                    {/* Current Price Display or Initial Price Input */}
-                                    <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
-                                        {poolExists ? (
-                                            <>
-                                                <div className="text-xs text-gray-400 mb-1">
-                                                    <span className="text-green-400">● Pool Price</span>
-                                                </div>
-                                                <div className="text-lg font-semibold">
-                                                    {tokenA && tokenB && currentPrice ? (
-                                                        <>1 {tokenA.symbol} = <span className="text-primary">{currentPrice.toFixed(6)}</span> {tokenB.symbol}</>
-                                                    ) : 'Select tokens'}
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div className="text-xs text-yellow-400 mb-2">
-                                                    ⚠ No pool exists - set initial price to create
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-gray-400 text-sm">1 {tokenA?.symbol || 'Token A'} =</span>
-                                                    <input
-                                                        type="number"
-                                                        value={initialPrice}
-                                                        onChange={(e) => setInitialPrice(e.target.value)}
-                                                        placeholder="0.0"
-                                                        className="flex-1 p-2 rounded-lg bg-white/10 border border-white/20 text-lg font-semibold text-center"
-                                                    />
-                                                    <span className="text-gray-400 text-sm">{tokenB?.symbol || 'Token B'}</span>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Preset Range Buttons */}
-                                    <div className="mb-4">
-                                        <div className="text-xs text-gray-400 mb-2">Quick Range Presets</div>
-                                        <div className="grid grid-cols-5 gap-2">
                                             <button
-                                                onClick={() => { setPriceLower(''); setPriceUpper(''); }}
-                                                className={`py-2 text-sm rounded-xl transition font-medium ${!priceLower && !priceUpper
-                                                    ? 'bg-gradient-to-r from-primary to-secondary text-white'
-                                                    : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
+                                                onClick={() => setStable(true)}
+                                                className={`py-4 px-4 rounded-xl text-center font-medium transition-all active:scale-[0.98] ${stable
+                                                    ? 'bg-primary/15 border-2 border-primary/40 text-white'
+                                                    : 'bg-white/5 border border-white/10 hover:bg-white/8 text-gray-300'
+                                                    }`}
                                             >
-                                                Full
+                                                <span className="block text-lg mb-1">💎</span>
+                                                Stable
                                             </button>
-                                            {[5, 10, 25, 50].map(p => (
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* CL Fee Tier - 2x2 grid on mobile, 4 columns on desktop */}
+                                {poolType === 'cl' && (
+                                    <div>
+                                        <label className="text-sm text-gray-400 mb-3 block font-medium">Fee Tier</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            {[
+                                                { spacing: 1, fee: '0.009%', label: 'Lowest', best: 'Stables' },
+                                                { spacing: 10, fee: '0.045%', label: 'Low', best: 'Most pairs' },
+                                                { spacing: 80, fee: '0.25%', label: 'Medium', best: 'Popular' },
+                                                { spacing: 2000, fee: '1%', label: 'High', best: 'Exotic' },
+                                            ].map(({ spacing, fee, label, best }) => (
                                                 <button
-                                                    key={p}
-                                                    onClick={() => setPresetRange(p)}
-                                                    disabled={!currentPrice}
-                                                    className={`py-2 text-sm rounded-xl transition font-medium ${currentPrice
-                                                        ? 'bg-white/5 hover:bg-white/10 text-gray-300'
-                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
+                                                    key={spacing}
+                                                    onClick={() => setTickSpacing(spacing)}
+                                                    className={`p-3 sm:p-2 rounded-xl text-center transition-all active:scale-[0.98] ${tickSpacing === spacing
+                                                        ? 'bg-secondary/15 border-2 border-secondary/40 text-white'
+                                                        : 'bg-white/5 border border-white/10 hover:bg-white/8'
+                                                        }`}
                                                 >
-                                                    ±{p}%
+                                                    <div className="text-base sm:text-sm font-bold">{fee}</div>
+                                                    <div className="text-xs text-gray-400 mt-1 hidden sm:block">{best}</div>
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
-
-                                    {/* Min/Max Price Inputs */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="p-3 rounded-xl bg-gradient-to-br from-red-500/5 to-orange-500/5 border border-red-500/20">
-                                            <div className="text-xs text-red-400 font-medium mb-2">Min Price</div>
-                                            <input
-                                                type="number"
-                                                value={priceLower}
-                                                onChange={(e) => setPriceLower(e.target.value)}
-                                                placeholder="0"
-                                                className="w-full bg-transparent text-xl font-bold text-center outline-none placeholder-gray-600"
-                                            />
-                                        </div>
-                                        <div className="p-3 rounded-xl bg-gradient-to-br from-green-500/5 to-emerald-500/5 border border-green-500/20">
-                                            <div className="text-xs text-green-400 font-medium mb-2">Max Price</div>
-                                            <input
-                                                type="number"
-                                                value={priceUpper}
-                                                onChange={(e) => setPriceUpper(e.target.value)}
-                                                placeholder="∞"
-                                                className="w-full bg-transparent text-xl font-bold text-center outline-none placeholder-gray-600"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Token A */}
-                            <div className="mb-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <label className="text-sm text-gray-400">Token A</label>
-                                    <span className="text-sm text-gray-400">
-                                        Balance: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
-                                    </span>
-                                </div>
-                                <div className="token-input-row">
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="text"
-                                            value={amountA}
-                                            onChange={(e) => setAmountA(e.target.value)}
-                                            placeholder="0.0"
-                                            className="flex-1 min-w-0 bg-transparent text-xl font-medium outline-none placeholder-gray-600"
-                                        />
-                                        <button onClick={() => setSelectorOpen('A')} className="token-select">
-                                            {tokenA ? <span className="font-semibold">{tokenA.symbol}</span> : <span className="text-primary">Select</span>}
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Plus Icon */}
-                            <div className="flex justify-center my-2">
-                                <div className="p-2 rounded-lg bg-white/5">
-                                    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                    </svg>
-                                </div>
-                            </div>
-
-                            {/* Token B */}
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between mb-2">
-                                    <label className="text-sm text-gray-400">
-                                        Token B
-                                        {poolType === 'cl' && (
-                                            <span className="ml-2 text-xs text-primary">(auto-calculated)</span>
-                                        )}
-                                    </label>
-                                    <span className="text-sm text-gray-400">
-                                        Balance: {balanceB ? parseFloat(balanceB).toFixed(4) : '--'}
-                                    </span>
-                                </div>
-                                <div className="token-input-row">
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="text"
-                                            value={amountB}
-                                            onChange={(e) => poolType !== 'cl' && setAmountB(e.target.value)}
-                                            readOnly={poolType === 'cl'}
-                                            placeholder={poolType === 'cl' ? 'Enter Token A first' : '0.0'}
-                                            className={`flex-1 min-w-0 bg-transparent text-xl font-medium outline-none placeholder-gray-600 ${poolType === 'cl' ? 'cursor-not-allowed text-gray-400' : ''}`}
-                                        />
-                                        <button onClick={() => setSelectorOpen('B')} className="token-select">
-                                            {tokenB ? <span className="font-semibold">{tokenB.symbol}</span> : <span className="text-primary">Select</span>}
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Transaction Progress */}
-                            {txProgress !== 'idle' && txProgress !== 'done' && (
-                                <div className={`mb-6 p-4 rounded-xl ${txProgress === 'error' ? 'bg-red-500/10 border border-red-500/30' : 'bg-primary/10 border border-primary/30'}`}>
-                                    <div className="flex items-center gap-3 mb-2">
-                                        {txProgress === 'error' ? (
-                                            <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-white text-xs">✕</div>
-                                        ) : (
-                                            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                        )}
-                                        <span className="font-medium">
-                                            {txProgress === 'approving0' && 'Approving Token 1...'}
-                                            {txProgress === 'approving1' && 'Approving Token 2...'}
-                                            {txProgress === 'minting' && 'Creating Position...'}
-                                            {txProgress === 'error' && 'Transaction Failed'}
-                                        </span>
-                                    </div>
-                                    {txError && (
-                                        <p className="text-sm text-red-400 mt-2">{txError}</p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Action Button */}
-                            <motion.button
-                                onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
-                                disabled={!canAdd || isLoading}
-                                className="w-full btn-primary py-4"
-                                whileHover={canAdd ? { scale: 1.01 } : {}}
-                                whileTap={canAdd ? { scale: 0.99 } : {}}
-                            >
-                                {isLoading ? (
-                                    <span className="flex items-center justify-center gap-2">
-                                        <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                        </svg>
-                                        Adding Liquidity...
-                                    </span>
-                                ) : !isConnected ? (
-                                    'Connect Wallet'
-                                ) : !tokenA || !tokenB ? (
-                                    'Select Tokens'
-                                ) : !amountA || !amountB ? (
-                                    'Enter Amounts'
-                                ) : (
-                                    `Add ${poolType === 'cl' ? 'CL' : 'V2'} Liquidity`
                                 )}
-                            </motion.button>
+
+                                {/* CL Price Range */}
+                                {poolType === 'cl' && (
+                                    <div className="space-y-4">
+                                        {/* Current Price Display or Initial Price Input */}
+                                        <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                            {poolExists ? (
+                                                <div className="text-center">
+                                                    <div className="text-xs text-gray-400 mb-2 flex items-center justify-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                                                        Current Pool Price
+                                                    </div>
+                                                    <div className="text-xl sm:text-2xl font-bold">
+                                                        {tokenA && tokenB && currentPrice ? (
+                                                            <>
+                                                                <span className="text-gray-400 text-base font-normal">1 {tokenA.symbol} = </span>
+                                                                <span className="text-primary">{currentPrice.toFixed(4)}</span>
+                                                                <span className="text-gray-400 text-base font-normal"> {tokenB.symbol}</span>
+                                                            </>
+                                                        ) : 'Select tokens'}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <span className="text-yellow-400 text-lg">⚠️</span>
+                                                        <span className="text-sm text-yellow-400 font-medium">New Pool - Set Initial Price</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3">
+                                                        <span className="text-gray-400 text-sm whitespace-nowrap">1 {tokenA?.symbol || '?'} =</span>
+                                                        <input
+                                                            type="number"
+                                                            inputMode="decimal"
+                                                            value={initialPrice}
+                                                            onChange={(e) => setInitialPrice(e.target.value)}
+                                                            placeholder="0.0"
+                                                            className="flex-1 min-w-0 bg-transparent text-xl font-bold text-center outline-none placeholder-gray-600"
+                                                        />
+                                                        <span className="text-gray-400 text-sm whitespace-nowrap">{tokenB?.symbol || '?'}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Preset Range Buttons - scrollable on mobile */}
+                                        <div>
+                                            <div className="text-xs text-gray-400 mb-2 font-medium">Quick Range</div>
+                                            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                                                <button
+                                                    onClick={() => { setPriceLower(''); setPriceUpper(''); }}
+                                                    className={`flex-shrink-0 py-3 px-4 text-sm rounded-xl transition-all font-medium active:scale-[0.98] ${!priceLower && !priceUpper
+                                                        ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                                                        : 'bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10'}`}
+                                                >
+                                                    Full Range
+                                                </button>
+                                                {[5, 10, 25, 50].map(p => (
+                                                    <button
+                                                        key={p}
+                                                        onClick={() => setPresetRange(p)}
+                                                        disabled={!currentPrice}
+                                                        className={`flex-shrink-0 py-3 px-4 text-sm rounded-xl transition-all font-medium active:scale-[0.98] ${currentPrice
+                                                            ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                            : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                                    >
+                                                        ±{p}%
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Min/Max Price Inputs */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="p-4 rounded-xl bg-gradient-to-br from-red-500/5 to-orange-500/5 border border-red-500/20">
+                                                <div className="text-xs text-red-400 font-medium mb-2 flex items-center gap-1">
+                                                    <span>↓</span> Min Price
+                                                </div>
+                                                <input
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    value={priceLower}
+                                                    onChange={(e) => setPriceLower(e.target.value)}
+                                                    placeholder="0"
+                                                    className="w-full bg-transparent text-xl sm:text-2xl font-bold text-center outline-none placeholder-gray-600"
+                                                />
+                                                <div className="text-xs text-gray-500 text-center mt-1">
+                                                    {tokenB?.symbol || 'B'}/{tokenA?.symbol || 'A'}
+                                                </div>
+                                            </div>
+                                            <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/5 to-emerald-500/5 border border-green-500/20">
+                                                <div className="text-xs text-green-400 font-medium mb-2 flex items-center gap-1">
+                                                    <span>↑</span> Max Price
+                                                </div>
+                                                <input
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    value={priceUpper}
+                                                    onChange={(e) => setPriceUpper(e.target.value)}
+                                                    placeholder="∞"
+                                                    className="w-full bg-transparent text-xl sm:text-2xl font-bold text-center outline-none placeholder-gray-600"
+                                                />
+                                                <div className="text-xs text-gray-500 text-center mt-1">
+                                                    {tokenB?.symbol || 'B'}/{tokenA?.symbol || 'A'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Token Inputs Section */}
+                                <div className="space-y-3">
+                                    {/* Token A */}
+                                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <label className="text-sm text-gray-400 font-medium">You Deposit</label>
+                                            <button
+                                                onClick={() => balanceA && setAmountA(balanceA)}
+                                                className="text-xs text-gray-400 hover:text-primary transition-colors"
+                                            >
+                                                Balance: <span className="font-medium">{balanceA ? parseFloat(balanceA).toFixed(4) : '--'}</span>
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={amountA}
+                                                onChange={(e) => setAmountA(e.target.value)}
+                                                placeholder="0.0"
+                                                className="flex-1 min-w-0 bg-transparent text-2xl sm:text-3xl font-bold outline-none placeholder-gray-600"
+                                            />
+                                            <button
+                                                onClick={() => setSelectorOpen('A')}
+                                                className="flex items-center gap-2 py-2 px-3 sm:py-2.5 sm:px-4 bg-white/10 hover:bg-white/15 rounded-xl transition-colors flex-shrink-0"
+                                            >
+                                                {tokenA && tokenA.logoURI && (
+                                                    <img src={tokenA.logoURI} alt="" className="w-6 h-6 rounded-full" />
+                                                )}
+                                                <span className="font-semibold">{tokenA?.symbol || 'Select'}</span>
+                                                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Plus Divider */}
+                                    <div className="flex justify-center -my-1.5 relative z-10">
+                                        <div className="w-10 h-10 rounded-xl bg-[#1a1a24] border border-white/10 flex items-center justify-center">
+                                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                        </div>
+                                    </div>
+
+                                    {/* Token B */}
+                                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <label className="text-sm text-gray-400 font-medium">
+                                                {poolType === 'cl' ? 'Auto-calculated' : 'You Deposit'}
+                                            </label>
+                                            <button
+                                                onClick={() => balanceB && poolType !== 'cl' && setAmountB(balanceB)}
+                                                className="text-xs text-gray-400 hover:text-primary transition-colors"
+                                            >
+                                                Balance: <span className="font-medium">{balanceB ? parseFloat(balanceB).toFixed(4) : '--'}</span>
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={amountB}
+                                                onChange={(e) => poolType !== 'cl' && setAmountB(e.target.value)}
+                                                readOnly={poolType === 'cl'}
+                                                placeholder={poolType === 'cl' ? 'Enter amount above' : '0.0'}
+                                                className={`flex-1 min-w-0 bg-transparent text-2xl sm:text-3xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' ? 'text-gray-400' : ''}`}
+                                            />
+                                            <button
+                                                onClick={() => setSelectorOpen('B')}
+                                                className="flex items-center gap-2 py-2 px-3 sm:py-2.5 sm:px-4 bg-white/10 hover:bg-white/15 rounded-xl transition-colors flex-shrink-0"
+                                            >
+                                                {tokenB && tokenB.logoURI && (
+                                                    <img src={tokenB.logoURI} alt="" className="w-6 h-6 rounded-full" />
+                                                )}
+                                                <span className="font-semibold">{tokenB?.symbol || 'Select'}</span>
+                                                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Transaction Progress */}
+                                {txProgress !== 'idle' && txProgress !== 'done' && (
+                                    <div className={`p-4 rounded-xl ${txProgress === 'error' ? 'bg-red-500/10 border border-red-500/30' : 'bg-primary/10 border border-primary/30'}`}>
+                                        <div className="flex items-center gap-3">
+                                            {txProgress === 'error' ? (
+                                                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-red-400 text-lg">✕</span>
+                                                </div>
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                                                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="font-medium">
+                                                    {txProgress === 'approving0' && 'Approving Token 1...'}
+                                                    {txProgress === 'approving1' && 'Approving Token 2...'}
+                                                    {txProgress === 'minting' && 'Creating Position...'}
+                                                    {txProgress === 'error' && 'Transaction Failed'}
+                                                </p>
+                                                {txError && (
+                                                    <p className="text-sm text-red-400 mt-1">{txError}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Sticky Footer with Action Button */}
+                            <div className={mobileStyles.footer}>
+                                <motion.button
+                                    onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
+                                    disabled={!canAdd || isLoading}
+                                    className="w-full py-4 sm:py-5 rounded-xl font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
+                                    whileTap={canAdd ? { scale: 0.98 } : {}}
+                                >
+                                    {isLoading ? (
+                                        <span className="flex items-center justify-center gap-3">
+                                            <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            Adding Liquidity...
+                                        </span>
+                                    ) : !isConnected ? (
+                                        'Connect Wallet'
+                                    ) : !tokenA || !tokenB ? (
+                                        'Select Tokens'
+                                    ) : !amountA || !amountB ? (
+                                        'Enter Amounts'
+                                    ) : (
+                                        <>Add {poolType === 'cl' ? 'Concentrated' : 'V2'} Liquidity</>
+                                    )}
+                                </motion.button>
+                            </div>
                         </motion.div>
                     </motion.div>
                 )}
