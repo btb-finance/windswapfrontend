@@ -453,6 +453,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const poolExists = clPoolPrice !== null;
     const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
 
+    // Check if pool config is pre-defined (clicking Add LP on existing pool)
+    const isPoolPreConfigured = !!(initialPool?.token0 && initialPool?.token1);
+
     return (
         <>
             <AnimatePresence>
@@ -540,41 +543,74 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     </div>
                                 )}
 
-                                {/* Pool Type Selection */}
-                                <div>
-                                    <label className="text-sm text-gray-400 mb-3 block font-medium">Pool Type</label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button
-                                            onClick={() => setPoolType('v2')}
-                                            className={`p-4 rounded-xl text-center transition-all active:scale-[0.98] ${poolType === 'v2'
-                                                ? 'bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/50 shadow-lg shadow-primary/10'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/8'
-                                                }`}
-                                        >
-                                            <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
-                                                <span className="text-2xl">💧</span>
+                                {/* Pre-configured Pool Info Badge - shown when clicking Add LP on existing pool */}
+                                {isPoolPreConfigured && (
+                                    <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex -space-x-2">
+                                                    {tokenA?.logoURI && (
+                                                        <img src={tokenA.logoURI} alt="" className="w-8 h-8 rounded-full border-2 border-[#0d0d14]" />
+                                                    )}
+                                                    {tokenB?.logoURI && (
+                                                        <img src={tokenB.logoURI} alt="" className="w-8 h-8 rounded-full border-2 border-[#0d0d14]" />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div className="font-semibold">{tokenA?.symbol}/{tokenB?.symbol}</div>
+                                                    <div className="text-xs text-gray-400">
+                                                        {poolType === 'cl' ? (
+                                                            <>Concentrated • {tickSpacing === 1 ? '0.009%' : tickSpacing === 10 ? '0.045%' : tickSpacing === 80 ? '0.25%' : '1%'} fee</>
+                                                        ) : (
+                                                            <>{stable ? 'Stable' : 'Volatile'} V2 Pool</>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="font-semibold mb-1">Classic V2</div>
-                                            <div className="text-xs text-gray-400">Simple 50/50</div>
-                                        </button>
-                                        <button
-                                            onClick={() => setPoolType('cl')}
-                                            className={`p-4 rounded-xl text-center transition-all active:scale-[0.98] ${poolType === 'cl'
-                                                ? 'bg-gradient-to-br from-secondary/20 to-cyan-500/10 border-2 border-secondary/50 shadow-lg shadow-secondary/10'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/8'
-                                                }`}
-                                        >
-                                            <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center">
-                                                <span className="text-2xl">⚡</span>
+                                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${poolType === 'cl' ? 'bg-secondary/20 text-secondary' : 'bg-primary/20 text-primary'}`}>
+                                                {poolType === 'cl' ? '⚡ CL' : '💧 V2'}
                                             </div>
-                                            <div className="font-semibold mb-1">Concentrated</div>
-                                            <div className="text-xs text-gray-400">Higher yields</div>
-                                        </button>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
-                                {/* V2 Stable/Volatile Toggle */}
-                                {poolType === 'v2' && (
+                                {/* Pool Type Selection - only show when creating new pool */}
+                                {!isPoolPreConfigured && (
+                                    <div>
+                                        <label className="text-sm text-gray-400 mb-3 block font-medium">Pool Type</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                onClick={() => setPoolType('v2')}
+                                                className={`p-4 rounded-xl text-center transition-all active:scale-[0.98] ${poolType === 'v2'
+                                                    ? 'bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/50 shadow-lg shadow-primary/10'
+                                                    : 'bg-white/5 border border-white/10 hover:bg-white/8'
+                                                    }`}
+                                            >
+                                                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                                                    <span className="text-2xl">💧</span>
+                                                </div>
+                                                <div className="font-semibold mb-1">Classic V2</div>
+                                                <div className="text-xs text-gray-400">Simple 50/50</div>
+                                            </button>
+                                            <button
+                                                onClick={() => setPoolType('cl')}
+                                                className={`p-4 rounded-xl text-center transition-all active:scale-[0.98] ${poolType === 'cl'
+                                                    ? 'bg-gradient-to-br from-secondary/20 to-cyan-500/10 border-2 border-secondary/50 shadow-lg shadow-secondary/10'
+                                                    : 'bg-white/5 border border-white/10 hover:bg-white/8'
+                                                    }`}
+                                            >
+                                                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center">
+                                                    <span className="text-2xl">⚡</span>
+                                                </div>
+                                                <div className="font-semibold mb-1">Concentrated</div>
+                                                <div className="text-xs text-gray-400">Higher yields</div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* V2 Stable/Volatile Toggle - only show when creating new V2 pool */}
+                                {poolType === 'v2' && !isPoolPreConfigured && (
                                     <div>
                                         <label className="text-sm text-gray-400 mb-3 block font-medium">Pool Curve</label>
                                         <div className="grid grid-cols-2 gap-3">
@@ -602,8 +638,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     </div>
                                 )}
 
-                                {/* CL Fee Tier - 2x2 grid on mobile, 4 columns on desktop */}
-                                {poolType === 'cl' && (
+                                {/* CL Fee Tier - only show when creating new CL pool */}
+                                {poolType === 'cl' && !isPoolPreConfigured && (
                                     <div>
                                         <label className="text-sm text-gray-400 mb-3 block font-medium">Fee Tier</label>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
