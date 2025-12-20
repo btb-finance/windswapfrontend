@@ -814,6 +814,35 @@ export default function AdminPage() {
                                 </div>
                             </div>
 
+                            {/* Claim Pool Fees */}
+                            <div className="glass-card p-6 bg-gradient-to-br from-green-500/5 to-emerald-500/5 border-green-500/20">
+                                <h3 className="text-lg font-semibold mb-2 text-green-400">💰 Claim Pool Fees</h3>
+                                <p className="text-gray-400 text-sm mb-4">
+                                    Push accumulated trading fees from all pools to the voting reward contracts.
+                                    This makes fees claimable by voters on the Vote page.
+                                </p>
+                                <div className="p-4 rounded-lg bg-white/5 mb-4">
+                                    <h4 className="text-sm font-medium mb-2">How it works:</h4>
+                                    <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                                        <li>Trading fees accumulate in each pool from swaps</li>
+                                        <li>Click &quot;Distribute Fees&quot; to claim from all pools</li>
+                                        <li>Fees are sent to FeesVotingReward contracts</li>
+                                        <li>Voters can then claim their share on the Vote page</li>
+                                    </ol>
+                                </div>
+                                <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 mb-4">
+                                    <span className="text-sm text-gray-400">Active Gauges</span>
+                                    <span className="font-bold">{voterPoolsLength?.toString() || '0'}</span>
+                                </div>
+                                <button
+                                    onClick={handleDistribute}
+                                    disabled={!voterPoolsLength || Number(voterPoolsLength) === 0}
+                                    className="w-full py-3 rounded-lg bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 font-medium hover:from-green-500/30 hover:to-emerald-500/30 transition disabled:opacity-50"
+                                >
+                                    🚀 Distribute Fees to All Gauges
+                                </button>
+                            </div>
+
                             {/* Kill Gauge */}
                             <div className="glass-card p-6">
                                 <h3 className="text-lg font-semibold mb-4 text-red-400">Kill Gauge</h3>
