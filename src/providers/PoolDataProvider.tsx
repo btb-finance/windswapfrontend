@@ -144,8 +144,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             }
 
             const addressResults = await batchRpcCall(addressCalls);
-            const v2Addresses = addressResults.slice(0, v2Count).map(r => `0x${r.slice(-40)}` as Address);
-            const clAddresses = addressResults.slice(v2Count).map(r => `0x${r.slice(-40)}` as Address);
+            const v2Addresses = addressResults.slice(0, v2Count)
+                .map(r => r.length >= 42 ? `0x${r.slice(-40)}` as Address : null)
+                .filter((addr): addr is Address => addr !== null && addr !== '0x0000000000000000000000000000000000000000');
+            const clAddresses = addressResults.slice(v2Count)
+                .map(r => r.length >= 42 ? `0x${r.slice(-40)}` as Address : null)
+                .filter((addr): addr is Address => addr !== null && addr !== '0x0000000000000000000000000000000000000000');
 
             // Step 3: Get pool details (token0, token1, stable/tickSpacing, reserves/liquidity)
             const detailCalls: { to: string; data: string }[] = [];

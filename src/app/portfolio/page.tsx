@@ -9,6 +9,7 @@ import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI, USDC, Token } from '@/config/tokens';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
+import { usePoolData } from '@/providers/PoolDataProvider';
 
 // VotingEscrow ABI for veNFT data
 const VOTING_ESCROW_ABI = [
@@ -111,6 +112,20 @@ export default function PortfolioPage() {
     const [loadingVeNFTs, setLoadingVeNFTs] = useState(true);
     const [loadingStaked, setLoadingStaked] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
+
+    // Use global pool data for token info (instant!)
+    const { getTokenInfo: getGlobalTokenInfo, isLoading: globalLoading } = usePoolData();
+
+    // Shadow outer getTokenInfo - uses global data first, then fallback to token list
+    const getTokenInfo = (addr: string) => {
+        const globalInfo = getGlobalTokenInfo(addr);
+        if (globalInfo) {
+            return { symbol: globalInfo.symbol, decimals: globalInfo.decimals };
+        }
+        // Fallback to local token list
+        const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+        return { symbol: token?.symbol || addr.slice(0, 10) + '...', decimals: token?.decimals || 18 };
+    };
 
     // Increase liquidity modal state
     const [showIncreaseLiquidityModal, setShowIncreaseLiquidityModal] = useState(false);

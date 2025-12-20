@@ -19,7 +19,7 @@ export default function VotePage() {
 
     // Lock state
     const [lockAmount, setLockAmount] = useState('');
-    const [lockDuration, setLockDuration] = useState<keyof typeof LOCK_DURATIONS>('1Y');
+    const [lockDuration, setLockDuration] = useState<keyof typeof LOCK_DURATIONS>('4Y');
     const [txHash, setTxHash] = useState<string | null>(null);
 
     // Vote state
@@ -219,7 +219,7 @@ export default function VotePage() {
                                 }`}
                         >
                             <span className="text-base md:text-lg">{tab.icon}</span>
-                            <span className="text-sm md:text-base hidden sm:inline">{tab.label}</span>
+                            <span className="text-xs md:text-base">{tab.label}</span>
                         </button>
                     ))}
                 </div>
