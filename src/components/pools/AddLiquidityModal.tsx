@@ -824,85 +824,72 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                 )}
 
                                 {/* Token Inputs Section */}
-                                <div className="space-y-3">
+                                <div className="space-y-0.5">
                                     {/* Token A */}
-                                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <label className="text-sm text-gray-400 font-medium">You Deposit</label>
+                                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-xs text-gray-400">You Deposit</label>
                                             <button
                                                 onClick={() => balanceA && setAmountA(balanceA)}
-                                                className="text-xs text-gray-400 hover:text-primary transition-colors"
+                                                className="text-[10px] text-gray-400 hover:text-primary transition-colors"
                                             >
-                                                Balance: <span className="font-medium">{balanceA ? parseFloat(balanceA).toFixed(4) : '--'}</span>
+                                                Bal: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
                                             </button>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
                                             <input
                                                 type="text"
                                                 inputMode="decimal"
                                                 value={amountA}
                                                 onChange={(e) => setAmountA(e.target.value)}
                                                 placeholder="0.0"
-                                                className="flex-1 min-w-0 bg-transparent text-2xl sm:text-3xl font-bold outline-none placeholder-gray-600"
+                                                className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
                                             />
                                             <button
                                                 onClick={() => setSelectorOpen('A')}
-                                                className="flex items-center gap-2 py-2 px-3 sm:py-2.5 sm:px-4 bg-white/10 hover:bg-white/15 rounded-xl transition-colors flex-shrink-0"
+                                                className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
                                             >
                                                 {tokenA && tokenA.logoURI && (
-                                                    <img src={tokenA.logoURI} alt="" className="w-6 h-6 rounded-full" />
+                                                    <img src={tokenA.logoURI} alt="" className="w-5 h-5 rounded-full" />
                                                 )}
-                                                <span className="font-semibold">{tokenA?.symbol || 'Select'}</span>
-                                                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
+                                                <span className="font-semibold text-sm">{tokenA?.symbol || 'Select'}</span>
                                             </button>
                                         </div>
                                     </div>
 
-                                    {/* Plus Divider */}
-                                    <div className="flex justify-center -my-1.5 relative z-10">
-                                        <div className="w-10 h-10 rounded-xl bg-[#1a1a24] border border-white/10 flex items-center justify-center">
-                                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                            </svg>
-                                        </div>
-                                    </div>
+
 
                                     {/* Token B */}
-                                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <label className="text-sm text-gray-400 font-medium">
-                                                {poolType === 'cl' ? 'Auto-calculated' : 'You Deposit'}
+                                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-xs text-gray-400">
+                                                {poolType === 'cl' ? 'Auto-calc' : 'You Deposit'}
                                             </label>
                                             <button
                                                 onClick={() => balanceB && poolType !== 'cl' && setAmountB(balanceB)}
-                                                className="text-xs text-gray-400 hover:text-primary transition-colors"
+                                                className="text-[10px] text-gray-400 hover:text-primary transition-colors"
                                             >
-                                                Balance: <span className="font-medium">{balanceB ? parseFloat(balanceB).toFixed(4) : '--'}</span>
+                                                Bal: {balanceB ? parseFloat(balanceB).toFixed(4) : '--'}
                                             </button>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
                                             <input
                                                 type="text"
                                                 inputMode="decimal"
                                                 value={amountB}
                                                 onChange={(e) => poolType !== 'cl' && setAmountB(e.target.value)}
                                                 readOnly={poolType === 'cl'}
-                                                placeholder={poolType === 'cl' ? 'Enter amount above' : '0.0'}
-                                                className={`flex-1 min-w-0 bg-transparent text-2xl sm:text-3xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' ? 'text-gray-400' : ''}`}
+                                                placeholder={poolType === 'cl' ? 'Auto' : '0.0'}
+                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' ? 'text-gray-400' : ''}`}
                                             />
                                             <button
                                                 onClick={() => setSelectorOpen('B')}
-                                                className="flex items-center gap-2 py-2 px-3 sm:py-2.5 sm:px-4 bg-white/10 hover:bg-white/15 rounded-xl transition-colors flex-shrink-0"
+                                                className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
                                             >
                                                 {tokenB && tokenB.logoURI && (
-                                                    <img src={tokenB.logoURI} alt="" className="w-6 h-6 rounded-full" />
+                                                    <img src={tokenB.logoURI} alt="" className="w-5 h-5 rounded-full" />
                                                 )}
-                                                <span className="font-semibold">{tokenB?.symbol || 'Select'}</span>
-                                                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
+                                                <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
                                             </button>
                                         </div>
                                     </div>
@@ -943,8 +930,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
                                     disabled={!canAdd || isLoading || isCLInProgress}
                                     className={`w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl ${canAdd && !isLoading && !isCLInProgress
-                                            ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.98]'
-                                            : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                        ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.98]'
+                                        : 'bg-gray-700 text-gray-400 cursor-not-allowed'
                                         }`}
                                     whileTap={canAdd ? { scale: 0.98 } : {}}
                                 >
