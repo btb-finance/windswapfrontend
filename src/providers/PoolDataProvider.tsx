@@ -320,10 +320,67 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 };
             });
 
-            // Skip RPC pool updates - use GAUGE_LIST pools from Step 0 instead
-            // (RPC token symbol fetching is unreliable)
-            // setV2Pools(newV2Pools);
-            // setClPools(newClPools);
+            // Merge TVL data from RPC into the GAUGE_LIST pools
+            // For CL pools, fetch actual token balances in each pool
+            const clBalanceCalls: { to: string; data: string; poolAddr: string; isToken0: boolean }[] = [];
+            for (const p of clDetails) {
+                const poolPadded = p.addr.slice(2).toLowerCase().padStart(64, '0');
+                clBalanceCalls.push({ to: p.token0, data: `0x70a08231${poolPadded}`, poolAddr: p.addr, isToken0: true });
+                clBalanceCalls.push({ to: p.token1, data: `0x70a08231${poolPadded}`, poolAddr: p.addr, isToken0: false });
+            }
+
+            const clBalanceResults = await batchRpcCall(clBalanceCalls.map(c => ({ to: c.to, data: c.data })));
+            const clTvlMap = new Map<string, { balance0: bigint; balance1: bigint; token0: Address; token1: Address }>();
+
+            for (let i = 0; i < clBalanceCalls.length; i += 2) {
+                const call = clBalanceCalls[i];
+                const balance0 = clBalanceResults[i] !== '0x' ? BigInt(clBalanceResults[i]) : BigInt(0);
+                const balance1 = clBalanceResults[i + 1] !== '0x' ? BigInt(clBalanceResults[i + 1]) : BigInt(0);
+                const poolDetail = clDetails.find(p => p.addr.toLowerCase() === call.poolAddr.toLowerCase());
+                if (poolDetail) {
+                    clTvlMap.set(call.poolAddr.toLowerCase(), {
+                        balance0,
+                        balance1,
+                        token0: poolDetail.token0,
+                        token1: poolDetail.token1
+                    });
+                }
+            }
+
+            const v2ReservesMap = new Map<string, { reserve0: bigint; reserve1: bigint }>();
+            v2Details.forEach(p => v2ReservesMap.set(p.addr.toLowerCase(), { reserve0: p.reserve0, reserve1: p.reserve1 }));
+
+            // Update CL pools with actual token balance TVL
+            setClPools(prev => prev.map(pool => {
+                const tvlData = clTvlMap.get(pool.address.toLowerCase());
+                if (tvlData) {
+                    // Get token decimals from known tokens or default to common values
+                    const decimals0 = KNOWN_TOKENS[tvlData.token0.toLowerCase()]?.decimals || 18;
+                    const decimals1 = KNOWN_TOKENS[tvlData.token1.toLowerCase()]?.decimals || 18;
+
+                    const val0 = Number(tvlData.balance0) / Math.pow(10, decimals0);
+                    const val1 = Number(tvlData.balance1) / Math.pow(10, decimals1);
+
+                    // Store reserve amounts as formatted strings for display
+                    const reserve0 = val0 > 1000 ? val0.toFixed(0) : val0.toFixed(2);
+                    const reserve1 = val1 > 1000 ? val1.toFixed(0) : val1.toFixed(2);
+                    const tvl = (val0 + val1).toFixed(2);
+
+                    return { ...pool, reserve0, reserve1, tvl };
+                }
+                return pool;
+            }));
+
+            // Update V2 pools with reserve data
+            setV2Pools(prev => prev.map(pool => {
+                const reserves = v2ReservesMap.get(pool.address.toLowerCase());
+                if (reserves) {
+                    const r0 = Number(reserves.reserve0) / 1e18;
+                    const r1 = Number(reserves.reserve1) / 1e18;
+                    return { ...pool, reserve0: r0.toString(), reserve1: r1.toString(), tvl: (r0 + r1).toFixed(2) };
+                }
+                return pool;
+            }));
 
             // Step 5: Fetch reward rates for pools with gauges
             const allPoolAddrs = [...v2Addresses, ...clAddresses];
@@ -494,9 +551,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         fetchAllData();
     }, [fetchAllData]);
 
-    // Auto-refresh every 30s
+    // Auto-refresh every 10 minutes (only if page is still open)
     useEffect(() => {
-        const interval = setInterval(fetchAllData, 30000);
+        const TEN_MINUTES = 10 * 60 * 1000;
+        const interval = setInterval(fetchAllData, TEN_MINUTES);
         return () => clearInterval(interval);
     }, [fetchAllData]);
 

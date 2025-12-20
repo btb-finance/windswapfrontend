@@ -310,7 +310,7 @@ export default function PoolsPage() {
                                     ? 'bg-cyan-500/20 text-cyan-400'
                                     : 'bg-primary/20 text-primary'
                                     }`}>
-                                    {pool.poolType === 'CL' ? 'V3' : 'V2'}
+                                    {pool.poolType === 'CL' ? 'CL' : 'AMM'}
                                 </span>
                             </div>
 
@@ -320,7 +320,7 @@ export default function PoolsPage() {
                                     ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30'
                                     : 'bg-primary/20 text-primary border border-primary/30'
                                     }`}>
-                                    {pool.poolType === 'CL' ? '⚡ V3' : '💧 V2'}
+                                    {pool.poolType === 'CL' ? '⚡ Concentrated' : '💧 Classic'}
                                 </span>
                             </div>
 
@@ -341,22 +341,31 @@ export default function PoolsPage() {
                                 })()}
                             </div>
 
-                            {/* Desktop: TVL */}
+                            {/* Desktop: TVL (Token Amounts) */}
                             <div className="hidden md:flex md:col-span-2 items-center justify-end">
-                                <div className="font-semibold">{formatTVL(pool.tvl, pool.poolType)}</div>
+                                <div className="text-right text-sm">
+                                    {parseFloat(pool.reserve0) > 0 || parseFloat(pool.reserve1) > 0 ? (
+                                        <>
+                                            <div className="font-semibold">{pool.reserve0} {pool.token0.symbol}</div>
+                                            <div className="text-gray-400">{pool.reserve1} {pool.token1.symbol}</div>
+                                        </>
+                                    ) : (
+                                        <span className="text-gray-500">New Pool</span>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Mobile: TVL + Action Row */}
                             <div className="flex md:hidden items-center justify-between gap-3">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xs text-gray-500">TVL:</span>
-                                    <span className="font-medium text-sm">{formatTVL(pool.tvl, pool.poolType)}</span>
-                                    {formatWeeklyRewards(pool.address) && (
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
-                                            🔥 {formatWeeklyRewards(pool.address)}
-                                        </span>
-                                    )}
+                                <div className="flex-1 text-xs">
+                                    <div className="font-medium">{pool.reserve0} {pool.token0.symbol}</div>
+                                    <div className="text-gray-400">{pool.reserve1} {pool.token1.symbol}</div>
                                 </div>
+                                {formatWeeklyRewards(pool.address) && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
+                                        🔥 {formatWeeklyRewards(pool.address)}
+                                    </span>
+                                )}
                                 <button
                                     onClick={() => openAddLiquidityModal(pool)}
                                     className={`px-3 py-2 rounded-lg font-medium text-sm ${pool.poolType === 'CL'
