@@ -1077,14 +1077,14 @@ export default function PortfolioPage() {
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold">Recent LP Positions</h3>
-                            <Link href="/liquidity" className="text-sm text-primary hover:underline">View All →</Link>
+                            <Link href="/pools" className="text-sm text-primary hover:underline">View All →</Link>
                         </div>
                         {clLoading ? (
                             <div className="text-center py-8 text-gray-400">Loading positions...</div>
                         ) : clPositions.length === 0 && v2Positions.length === 0 ? (
                             <div className="text-center py-8">
                                 <p className="text-gray-400 mb-4">No LP positions yet</p>
-                                <Link href="/liquidity" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
+                                <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -1158,14 +1158,14 @@ export default function PortfolioPage() {
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold">Pending Rewards</h3>
-                            <Link href="/liquidity" className="text-sm text-primary hover:underline">Manage Positions →</Link>
+                            <Link href="/pools" className="text-sm text-primary hover:underline">Manage Positions →</Link>
                         </div>
                         {loadingStaked ? (
                             <div className="text-center py-8 text-gray-400">Loading rewards...</div>
                         ) : stakedPositions.length === 0 ? (
                             <div className="text-center py-8">
                                 <p className="text-gray-400 mb-4">No staked positions</p>
-                                <Link href="/liquidity" className="btn-primary px-6 py-2 rounded-lg">Stake LP</Link>
+                                <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Stake LP</Link>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -1295,7 +1295,7 @@ export default function PortfolioPage() {
                         {clPositions.length === 0 && v2Positions.length === 0 && (
                             <div className="text-center py-12">
                                 <p className="text-gray-400 mb-4">No LP positions found</p>
-                                <Link href="/liquidity" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
+                                <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
                             </div>
                         )}
                     </div>
@@ -1309,7 +1309,7 @@ export default function PortfolioPage() {
                     <div className="glass-card p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-semibold">Staked LP Positions</h3>
-                            <Link href="/liquidity" className="text-sm text-primary hover:underline">Manage Stakes →</Link>
+                            <Link href="/pools" className="text-sm text-primary hover:underline">Manage Stakes →</Link>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20">
@@ -1351,7 +1351,7 @@ export default function PortfolioPage() {
                                 <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
                                     Stake your LP positions to earn WIND emissions
                                 </p>
-                                <Link href="/liquidity" className="btn-primary px-6 py-3 rounded-lg">View Your Positions</Link>
+                                <Link href="/pools" className="btn-primary px-6 py-3 rounded-lg">View Your Positions</Link>
                             </div>
                         ) : (
                             <div className="space-y-4">
@@ -1525,7 +1525,7 @@ export default function PortfolioPage() {
                             <div className="text-center py-8">
                                 <p className="text-gray-400 mb-4">No staked positions earning rewards</p>
                                 <p className="text-sm text-gray-500 mb-6">Stake your LP positions to start earning WIND</p>
-                                <Link href="/liquidity" className="btn-primary px-6 py-2 rounded-lg">View Positions</Link>
+                                <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">View Positions</Link>
                             </div>
                         ) : (
                             <div className="space-y-3">

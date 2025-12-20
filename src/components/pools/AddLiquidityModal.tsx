@@ -1,0 +1,818 @@
+'use client';
+
+import { useState, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAccount, useWriteContract } from 'wagmi';
+import { parseUnits, Address, formatUnits } from 'viem';
+import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
+import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
+import { TokenSelector } from '@/components/common/TokenSelector';
+import { useLiquidity } from '@/hooks/useLiquidity';
+import { useTokenBalance } from '@/hooks/useToken';
+import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
+
+type PoolType = 'v2' | 'cl';
+type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'done' | 'error';
+
+interface PoolConfig {
+    token0?: Token;
+    token1?: Token;
+    poolType: PoolType;
+    tickSpacing?: number;
+    stable?: boolean;
+}
+
+interface AddLiquidityModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    initialPool?: PoolConfig;
+}
+
+export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidityModalProps) {
+    const { isConnected, address } = useAccount();
+    const [poolType, setPoolType] = useState<PoolType>(initialPool?.poolType || 'v2');
+
+    // Token state
+    const [tokenA, setTokenA] = useState<Token | undefined>(initialPool?.token0 || SEI);
+    const [tokenB, setTokenB] = useState<Token | undefined>(initialPool?.token1 || USDC);
+    const [amountA, setAmountA] = useState('');
+    const [amountB, setAmountB] = useState('');
+    const [stable, setStable] = useState(initialPool?.stable || false);
+    const [selectorOpen, setSelectorOpen] = useState<'A' | 'B' | null>(null);
+    const [txHash, setTxHash] = useState<string | null>(null);
+
+    // CL specific state
+    const [tickSpacing, setTickSpacing] = useState(initialPool?.tickSpacing || 80);
+    const [priceLower, setPriceLower] = useState('');
+    const [priceUpper, setPriceUpper] = useState('');
+    const [clPoolPrice, setClPoolPrice] = useState<number | null>(null);
+    const [clPoolAddress, setClPoolAddress] = useState<string | null>(null);
+    const [initialPrice, setInitialPrice] = useState('');
+
+    // Transaction state
+    const [txProgress, setTxProgress] = useState<TxStep>('idle');
+    const [txError, setTxError] = useState<string | null>(null);
+
+    // Hooks
+    const { addLiquidity, isLoading, error } = useLiquidity();
+    const { balance: balanceA } = useTokenBalance(tokenA);
+    const { balance: balanceB } = useTokenBalance(tokenB);
+    const { writeContractAsync } = useWriteContract();
+
+    // Initialize from pool config when modal opens
+    useEffect(() => {
+        if (isOpen && initialPool) {
+            if (initialPool.token0) setTokenA(initialPool.token0);
+            if (initialPool.token1) setTokenB(initialPool.token1);
+            setPoolType(initialPool.poolType);
+            if (initialPool.tickSpacing) setTickSpacing(initialPool.tickSpacing);
+            if (initialPool.stable !== undefined) setStable(initialPool.stable);
+        }
+    }, [isOpen, initialPool]);
+
+    // Reset state when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            setAmountA('');
+            setAmountB('');
+            setPriceLower('');
+            setPriceUpper('');
+            setInitialPrice('');
+            setTxProgress('idle');
+            setTxError(null);
+            setTxHash(null);
+        }
+    }, [isOpen]);
+
+    // Fetch CL pool price when tokens or tickSpacing change
+    useEffect(() => {
+        const fetchPoolPrice = async () => {
+            if (!tokenA || !tokenB || poolType !== 'cl') {
+                setClPoolPrice(null);
+                setClPoolAddress(null);
+                return;
+            }
+
+            const actualTokenA = tokenA.isNative ? WSEI : tokenA;
+            const actualTokenB = tokenB.isNative ? WSEI : tokenB;
+
+            const [token0, token1] = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase()
+                ? [actualTokenA, actualTokenB]
+                : [actualTokenB, actualTokenA];
+
+            try {
+                const getPoolSelector = '28af8d0b';
+                const token0Padded = token0.address.slice(2).toLowerCase().padStart(64, '0');
+                const token1Padded = token1.address.slice(2).toLowerCase().padStart(64, '0');
+                const tickHex = tickSpacing.toString(16).padStart(64, '0');
+                const getPoolData = `0x${getPoolSelector}${token0Padded}${token1Padded}${tickHex}`;
+
+                const poolResponse = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{ to: CL_CONTRACTS.CLFactory, data: getPoolData }, 'latest'],
+                        id: 1,
+                    }),
+                });
+
+                const poolResult = await poolResponse.json();
+                if (!poolResult.result || poolResult.result === '0x' + '0'.repeat(64)) {
+                    setClPoolPrice(null);
+                    setClPoolAddress(null);
+                    return;
+                }
+
+                const pool = '0x' + poolResult.result.slice(-40);
+                setClPoolAddress(pool);
+
+                const slot0Selector = '3850c7bd';
+                const slot0Response = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{ to: pool, data: `0x${slot0Selector}` }, 'latest'],
+                        id: 2,
+                    }),
+                });
+
+                const slot0Result = await slot0Response.json();
+                if (!slot0Result.result || slot0Result.result === '0x') {
+                    setClPoolPrice(null);
+                    return;
+                }
+
+                const sqrtPriceX96 = BigInt('0x' + slot0Result.result.slice(2, 66));
+                const Q96 = BigInt(2) ** BigInt(96);
+                const priceRaw = Number(sqrtPriceX96 * sqrtPriceX96 * BigInt(10 ** token0.decimals)) / Number(Q96 * Q96 * BigInt(10 ** token1.decimals));
+                const price = actualTokenA.address.toLowerCase() === token0.address.toLowerCase()
+                    ? priceRaw
+                    : 1 / priceRaw;
+
+                setClPoolPrice(price);
+            } catch (err) {
+                console.error('Error fetching CL pool price:', err);
+                setClPoolPrice(null);
+                setClPoolAddress(null);
+            }
+        };
+
+        fetchPoolPrice();
+    }, [tokenA, tokenB, tickSpacing, poolType]);
+
+    // Auto-calculate Token B amount for CL
+    useEffect(() => {
+        const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
+
+        if (poolType !== 'cl' || !currentPrice || !amountA || parseFloat(amountA) <= 0) {
+            return;
+        }
+
+        const pLower = priceLower ? parseFloat(priceLower) : 0;
+        const pUpper = priceUpper ? parseFloat(priceUpper) : Infinity;
+        const pCurrent = currentPrice;
+
+        if (pLower <= 0 && pUpper === Infinity) {
+            const amtA = parseFloat(amountA);
+            const amtB = amtA * pCurrent;
+            setAmountB(amtB.toFixed(6));
+            return;
+        }
+
+        if (pLower <= 0 || pUpper <= 0 || pLower >= pUpper) {
+            return;
+        }
+
+        const sqrtPriceLower = Math.sqrt(pLower);
+        const sqrtPriceUpper = Math.sqrt(pUpper);
+        const sqrtPriceCurrent = Math.sqrt(pCurrent);
+        const amtA = parseFloat(amountA);
+
+        if (pCurrent <= pLower) {
+            setAmountB('0');
+        } else if (pCurrent >= pUpper) {
+            setAmountB('0');
+        } else {
+            const L = amtA * (sqrtPriceCurrent * sqrtPriceUpper) / (sqrtPriceUpper - sqrtPriceCurrent);
+            const amtB = L * (sqrtPriceCurrent - sqrtPriceLower);
+            setAmountB(amtB.toFixed(6));
+        }
+    }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper]);
+
+    // Handle V2 liquidity add
+    const handleAddLiquidity = async () => {
+        if (!tokenA || !tokenB || !amountA || !amountB) return;
+
+        const result = await addLiquidity(tokenA, tokenB, amountA, amountB, stable);
+
+        if (result) {
+            setTxHash(result.hash);
+            setAmountA('');
+            setAmountB('');
+            setTxProgress('done');
+        }
+    };
+
+    // Handle CL liquidity add
+    const handleAddCLLiquidity = async () => {
+        if (!tokenA || !tokenB || !amountA || !amountB || !address) {
+            return;
+        }
+
+        const amtA = parseFloat(amountA);
+        const amtB = parseFloat(amountB);
+        if (isNaN(amtA) || isNaN(amtB) || amtA <= 0 || amtB <= 0) {
+            alert('Please enter valid amounts for both tokens');
+            return;
+        }
+
+        if (!clPoolPrice && (!initialPrice || parseFloat(initialPrice) <= 0)) {
+            alert('Please set the initial price for this new pool');
+            return;
+        }
+
+        setTxProgress('idle');
+        setTxError(null);
+
+        try {
+            const actualTokenA = tokenA.isNative ? WSEI : tokenA;
+            const actualTokenB = tokenB.isNative ? WSEI : tokenB;
+
+            const isAFirst = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase();
+            const token0 = isAFirst ? actualTokenA : actualTokenB;
+            const token1 = isAFirst ? actualTokenB : actualTokenA;
+            const amount0 = isAFirst ? amountA : amountB;
+            const amount1 = isAFirst ? amountB : amountA;
+            const amount0Wei = parseUnits(amount0, token0.decimals);
+            const amount1Wei = parseUnits(amount1, token1.decimals);
+
+            const priceToTick = (userPrice: number, spacing: number): number => {
+                if (userPrice <= 0) return 0;
+
+                let rawPrice: number;
+
+                if (isAFirst) {
+                    rawPrice = userPrice * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
+                } else {
+                    rawPrice = (1 / userPrice) * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
+                }
+
+                const tick = Math.floor(Math.log(rawPrice) / Math.log(1.0001));
+                return Math.round(tick / spacing) * spacing;
+            };
+
+            let tickLower: number;
+            let tickUpper: number;
+
+            if (priceLower && priceUpper && parseFloat(priceLower) > 0 && parseFloat(priceUpper) > 0) {
+                tickLower = priceToTick(parseFloat(priceLower), tickSpacing);
+                tickUpper = priceToTick(parseFloat(priceUpper), tickSpacing);
+                if (tickLower > tickUpper) {
+                    [tickLower, tickUpper] = [tickUpper, tickLower];
+                }
+            } else {
+                const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
+                tickLower = -maxTick;
+                tickUpper = maxTick;
+            }
+
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            // Check if pool exists
+            const tickSpacingHex = tickSpacing >= 0
+                ? tickSpacing.toString(16).padStart(64, '0')
+                : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(tickSpacing) + BigInt(1)).toString(16);
+            const poolCheckData = `0x28af8d0b${token0.address.slice(2).padStart(64, '0')}${token1.address.slice(2).padStart(64, '0')}${tickSpacingHex}`;
+
+            let poolExists = false;
+            try {
+                const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{ to: CL_CONTRACTS.CLFactory, data: poolCheckData }, 'latest'],
+                        id: 1
+                    })
+                }).then(r => r.json());
+
+                poolExists = poolResult.result && poolResult.result !== '0x0000000000000000000000000000000000000000000000000000000000000000';
+            } catch (err) {
+                poolExists = false;
+            }
+
+            let sqrtPriceX96 = BigInt(0);
+            if (!poolExists) {
+                let rawPrice: number;
+
+                if (initialPrice && parseFloat(initialPrice) > 0) {
+                    const userPrice = parseFloat(initialPrice);
+                    if (isAFirst) {
+                        rawPrice = userPrice * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
+                    } else {
+                        rawPrice = (1 / userPrice) * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
+                    }
+                } else {
+                    rawPrice = Number(amount1Wei) / Number(amount0Wei);
+                }
+
+                const Q96 = BigInt(2) ** BigInt(96);
+                const sqrtPriceFloat = Math.sqrt(rawPrice);
+                const sqrtPriceScaled = sqrtPriceFloat * Number(Q96);
+                sqrtPriceX96 = BigInt(Math.floor(sqrtPriceScaled));
+            }
+
+            // Approve tokens
+            const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
+                const result = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: tokenAddr,
+                            data: `0xdd62ed3e${address!.slice(2).toLowerCase().padStart(64, '0')}${CL_CONTRACTS.NonfungiblePositionManager.slice(2).toLowerCase().padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+                const allowance = result.result ? BigInt(result.result) : BigInt(0);
+                return allowance >= amount;
+            };
+
+            // Approve token0 if needed
+            const token0IsNative = (tokenA.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase()) ||
+                (tokenB.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase());
+            if (!token0IsNative) {
+                const hasAllowance = await checkAllowance(token0.address, amount0Wei);
+                if (!hasAllowance) {
+                    setTxProgress('approving0');
+                    await writeContractAsync({
+                        address: token0.address as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Wei],
+                    });
+                }
+            }
+
+            // Approve token1 if needed
+            const token1IsNative = (tokenA.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase()) ||
+                (tokenB.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase());
+            if (!token1IsNative) {
+                const hasAllowance = await checkAllowance(token1.address, amount1Wei);
+                if (!hasAllowance) {
+                    setTxProgress('approving1');
+                    await writeContractAsync({
+                        address: token1.address as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Wei],
+                    });
+                }
+            }
+
+            // Calculate native value
+            let nativeValue = BigInt(0);
+            if (tokenA.isNative || tokenB.isNative) {
+                if (token0.address.toLowerCase() === WSEI.address.toLowerCase()) {
+                    nativeValue = amount0Wei;
+                } else if (token1.address.toLowerCase() === WSEI.address.toLowerCase()) {
+                    nativeValue = amount1Wei;
+                }
+            }
+
+            // Mint with slippage
+            const slippageBps = BigInt(100);
+            const amount0Min = amount0Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
+            const amount1Min = amount1Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
+
+            setTxProgress('minting');
+            const hash = await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'mint',
+                args: [{
+                    token0: token0.address as Address,
+                    token1: token1.address as Address,
+                    tickSpacing,
+                    tickLower,
+                    tickUpper,
+                    amount0Desired: amount0Wei,
+                    amount1Desired: amount1Wei,
+                    amount0Min,
+                    amount1Min,
+                    recipient: address,
+                    deadline,
+                    sqrtPriceX96,
+                }],
+                value: nativeValue,
+            });
+
+            setTxHash(hash);
+            setAmountA('');
+            setAmountB('');
+            setTxProgress('done');
+        } catch (err: any) {
+            console.error('CL mint error:', err);
+            setTxProgress('error');
+            setTxError(err?.message || 'Transaction failed');
+        }
+    };
+
+    const setPresetRange = (percent: number) => {
+        const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
+        if (currentPrice) {
+            setPriceLower((currentPrice * (1 - percent / 100)).toFixed(6));
+            setPriceUpper((currentPrice * (1 + percent / 100)).toFixed(6));
+        }
+    };
+
+    const canAdd = isConnected &&
+        tokenA &&
+        tokenB &&
+        amountA &&
+        amountB &&
+        parseFloat(amountA) > 0 &&
+        parseFloat(amountB) > 0;
+
+    const poolExists = clPoolPrice !== null;
+    const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
+
+    return (
+        <>
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        key="modal-backdrop"
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        {/* Backdrop */}
+                        <div
+                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                            onClick={onClose}
+                        />
+
+                        {/* Modal */}
+                        <motion.div
+                            key="modal-content"
+                            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto glass-card p-6"
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        >
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-semibold">Add Liquidity</h2>
+                                <button
+                                    onClick={onClose}
+                                    className="p-2 rounded-lg hover:bg-white/10 transition"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Error Display */}
+                            {error && (
+                                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* Success Display */}
+                            {txHash && txProgress === 'done' && (
+                                <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+                                    Liquidity added!{' '}
+                                    <a
+                                        href={`https://seitrace.com/tx/${txHash}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="underline"
+                                    >
+                                        View on SeiTrace
+                                    </a>
+                                </div>
+                            )}
+
+                            {/* Pool Type Selection */}
+                            <div className="mb-6">
+                                <label className="text-sm text-gray-400 mb-3 block">Choose Pool Type</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setPoolType('v2')}
+                                        className={`p-4 rounded-xl text-left transition-all ${poolType === 'v2'
+                                            ? 'bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/40'
+                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="text-2xl">💧</span>
+                                            <span className="font-semibold">Classic</span>
+                                        </div>
+                                        <div className="text-xs text-gray-400">Simple 50/50 split</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setPoolType('cl')}
+                                        className={`p-4 rounded-xl text-left transition-all ${poolType === 'cl'
+                                            ? 'bg-gradient-to-br from-secondary/20 to-cyan-500/10 border-2 border-secondary/40'
+                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="text-2xl">⚡</span>
+                                            <span className="font-semibold">Concentrated</span>
+                                        </div>
+                                        <div className="text-xs text-gray-400">Higher yields</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* V2 Stable/Volatile Toggle */}
+                            {poolType === 'v2' && (
+                                <div className="mb-6">
+                                    <label className="text-sm text-gray-400 mb-2 block">Pool Curve</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => setStable(false)}
+                                            className={`p-3 rounded-xl text-center transition ${!stable
+                                                ? 'bg-primary/10 border border-primary/30 text-white'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            Volatile
+                                        </button>
+                                        <button
+                                            onClick={() => setStable(true)}
+                                            className={`p-3 rounded-xl text-center transition ${stable
+                                                ? 'bg-primary/10 border border-primary/30 text-white'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            Stable
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* CL Fee Tier */}
+                            {poolType === 'cl' && (
+                                <div className="mb-6">
+                                    <label className="text-sm text-gray-400 mb-2 block">Fee Tier</label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {[
+                                            { spacing: 1, fee: '0.009%' },
+                                            { spacing: 10, fee: '0.045%' },
+                                            { spacing: 80, fee: '0.25%' },
+                                            { spacing: 2000, fee: '1%' },
+                                        ].map(({ spacing, fee }) => (
+                                            <button
+                                                key={spacing}
+                                                onClick={() => setTickSpacing(spacing)}
+                                                className={`p-2 rounded-lg text-center text-sm transition ${tickSpacing === spacing
+                                                    ? 'bg-secondary/10 border border-secondary/30 text-white'
+                                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                    }`}
+                                            >
+                                                {fee}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* CL Price Range */}
+                            {poolType === 'cl' && (
+                                <div className="mb-6">
+                                    {/* Current Price Display or Initial Price Input */}
+                                    <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                        {poolExists ? (
+                                            <>
+                                                <div className="text-xs text-gray-400 mb-1">
+                                                    <span className="text-green-400">● Pool Price</span>
+                                                </div>
+                                                <div className="text-lg font-semibold">
+                                                    {tokenA && tokenB && currentPrice ? (
+                                                        <>1 {tokenA.symbol} = <span className="text-primary">{currentPrice.toFixed(6)}</span> {tokenB.symbol}</>
+                                                    ) : 'Select tokens'}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="text-xs text-yellow-400 mb-2">
+                                                    ⚠ No pool exists - set initial price to create
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-gray-400 text-sm">1 {tokenA?.symbol || 'Token A'} =</span>
+                                                    <input
+                                                        type="number"
+                                                        value={initialPrice}
+                                                        onChange={(e) => setInitialPrice(e.target.value)}
+                                                        placeholder="0.0"
+                                                        className="flex-1 p-2 rounded-lg bg-white/10 border border-white/20 text-lg font-semibold text-center"
+                                                    />
+                                                    <span className="text-gray-400 text-sm">{tokenB?.symbol || 'Token B'}</span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Preset Range Buttons */}
+                                    <div className="mb-4">
+                                        <div className="text-xs text-gray-400 mb-2">Quick Range Presets</div>
+                                        <div className="grid grid-cols-5 gap-2">
+                                            <button
+                                                onClick={() => { setPriceLower(''); setPriceUpper(''); }}
+                                                className={`py-2 text-sm rounded-xl transition font-medium ${!priceLower && !priceUpper
+                                                    ? 'bg-gradient-to-r from-primary to-secondary text-white'
+                                                    : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
+                                            >
+                                                Full
+                                            </button>
+                                            {[5, 10, 25, 50].map(p => (
+                                                <button
+                                                    key={p}
+                                                    onClick={() => setPresetRange(p)}
+                                                    disabled={!currentPrice}
+                                                    className={`py-2 text-sm rounded-xl transition font-medium ${currentPrice
+                                                        ? 'bg-white/5 hover:bg-white/10 text-gray-300'
+                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
+                                                >
+                                                    ±{p}%
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Min/Max Price Inputs */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="p-3 rounded-xl bg-gradient-to-br from-red-500/5 to-orange-500/5 border border-red-500/20">
+                                            <div className="text-xs text-red-400 font-medium mb-2">Min Price</div>
+                                            <input
+                                                type="number"
+                                                value={priceLower}
+                                                onChange={(e) => setPriceLower(e.target.value)}
+                                                placeholder="0"
+                                                className="w-full bg-transparent text-xl font-bold text-center outline-none placeholder-gray-600"
+                                            />
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-gradient-to-br from-green-500/5 to-emerald-500/5 border border-green-500/20">
+                                            <div className="text-xs text-green-400 font-medium mb-2">Max Price</div>
+                                            <input
+                                                type="number"
+                                                value={priceUpper}
+                                                onChange={(e) => setPriceUpper(e.target.value)}
+                                                placeholder="∞"
+                                                className="w-full bg-transparent text-xl font-bold text-center outline-none placeholder-gray-600"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Token A */}
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-sm text-gray-400">Token A</label>
+                                    <span className="text-sm text-gray-400">
+                                        Balance: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
+                                    </span>
+                                </div>
+                                <div className="token-input-row">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={amountA}
+                                            onChange={(e) => setAmountA(e.target.value)}
+                                            placeholder="0.0"
+                                            className="flex-1 min-w-0 bg-transparent text-xl font-medium outline-none placeholder-gray-600"
+                                        />
+                                        <button onClick={() => setSelectorOpen('A')} className="token-select">
+                                            {tokenA ? <span className="font-semibold">{tokenA.symbol}</span> : <span className="text-primary">Select</span>}
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Plus Icon */}
+                            <div className="flex justify-center my-2">
+                                <div className="p-2 rounded-lg bg-white/5">
+                                    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                </div>
+                            </div>
+
+                            {/* Token B */}
+                            <div className="mb-6">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-sm text-gray-400">
+                                        Token B
+                                        {poolType === 'cl' && (
+                                            <span className="ml-2 text-xs text-primary">(auto-calculated)</span>
+                                        )}
+                                    </label>
+                                    <span className="text-sm text-gray-400">
+                                        Balance: {balanceB ? parseFloat(balanceB).toFixed(4) : '--'}
+                                    </span>
+                                </div>
+                                <div className="token-input-row">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={amountB}
+                                            onChange={(e) => poolType !== 'cl' && setAmountB(e.target.value)}
+                                            readOnly={poolType === 'cl'}
+                                            placeholder={poolType === 'cl' ? 'Enter Token A first' : '0.0'}
+                                            className={`flex-1 min-w-0 bg-transparent text-xl font-medium outline-none placeholder-gray-600 ${poolType === 'cl' ? 'cursor-not-allowed text-gray-400' : ''}`}
+                                        />
+                                        <button onClick={() => setSelectorOpen('B')} className="token-select">
+                                            {tokenB ? <span className="font-semibold">{tokenB.symbol}</span> : <span className="text-primary">Select</span>}
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Transaction Progress */}
+                            {txProgress !== 'idle' && txProgress !== 'done' && (
+                                <div className={`mb-6 p-4 rounded-xl ${txProgress === 'error' ? 'bg-red-500/10 border border-red-500/30' : 'bg-primary/10 border border-primary/30'}`}>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        {txProgress === 'error' ? (
+                                            <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-white text-xs">✕</div>
+                                        ) : (
+                                            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                        )}
+                                        <span className="font-medium">
+                                            {txProgress === 'approving0' && 'Approving Token 1...'}
+                                            {txProgress === 'approving1' && 'Approving Token 2...'}
+                                            {txProgress === 'minting' && 'Creating Position...'}
+                                            {txProgress === 'error' && 'Transaction Failed'}
+                                        </span>
+                                    </div>
+                                    {txError && (
+                                        <p className="text-sm text-red-400 mt-2">{txError}</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Action Button */}
+                            <motion.button
+                                onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
+                                disabled={!canAdd || isLoading}
+                                className="w-full btn-primary py-4"
+                                whileHover={canAdd ? { scale: 1.01 } : {}}
+                                whileTap={canAdd ? { scale: 0.99 } : {}}
+                            >
+                                {isLoading ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        Adding Liquidity...
+                                    </span>
+                                ) : !isConnected ? (
+                                    'Connect Wallet'
+                                ) : !tokenA || !tokenB ? (
+                                    'Select Tokens'
+                                ) : !amountA || !amountB ? (
+                                    'Enter Amounts'
+                                ) : (
+                                    `Add ${poolType === 'cl' ? 'CL' : 'V2'} Liquidity`
+                                )}
+                            </motion.button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Token Selector */}
+            <TokenSelector
+                isOpen={selectorOpen !== null}
+                onClose={() => setSelectorOpen(null)}
+                onSelect={(token) => {
+                    if (selectorOpen === 'A') setTokenA(token);
+                    else setTokenB(token);
+                    setSelectorOpen(null);
+                }}
+                selectedToken={selectorOpen === 'A' ? tokenA : tokenB}
+                excludeToken={selectorOpen === 'A' ? tokenB : tokenA}
+            />
+        </>
+    );
+}

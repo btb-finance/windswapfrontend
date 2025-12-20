@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { formatUnits, Address } from 'viem';
-import Link from 'next/link';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
+import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
+import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
 
 type PoolType = 'all' | 'v2' | 'cl';
 type SortBy = 'tvl' | 'apr';
@@ -19,13 +20,56 @@ const FEE_TIERS: Record<number, string> = {
     2000: '1%',
 };
 
+// Pool config for modal
+interface PoolConfig {
+    token0?: Token;
+    token1?: Token;
+    poolType: 'v2' | 'cl';
+    tickSpacing?: number;
+    stable?: boolean;
+}
+
+// Helper to find token by address
+const findTokenByAddress = (addr: string): Token | undefined => {
+    const lowerAddr = addr.toLowerCase();
+    if (lowerAddr === WSEI.address.toLowerCase()) {
+        return SEI; // Use SEI for native token UI
+    }
+    return DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === lowerAddr);
+};
+
 export default function PoolsPage() {
     const [poolType, setPoolType] = useState<PoolType>('all');
     const [sortBy, setSortBy] = useState<SortBy>('tvl');
     const [search, setSearch] = useState('');
 
+    // Modal state
+    const [modalOpen, setModalOpen] = useState(false);
+    const [selectedPool, setSelectedPool] = useState<PoolConfig | undefined>(undefined);
+
     // Use globally prefetched pool data - instant load!
     const { v2Pools, clPools, allPools, poolRewards, isLoading } = usePoolData();
+
+    // Open modal for a specific pool
+    const openAddLiquidityModal = (pool: typeof allPools[0]) => {
+        const token0 = findTokenByAddress(pool.token0.address);
+        const token1 = findTokenByAddress(pool.token1.address);
+        setSelectedPool({
+            token0,
+            token1,
+            poolType: pool.poolType === 'CL' ? 'cl' : 'v2',
+            tickSpacing: pool.tickSpacing,
+            stable: pool.stable,
+        });
+        setModalOpen(true);
+    };
+
+    // Open modal for new pool creation
+    const openCreatePoolModal = () => {
+        setSelectedPool(undefined);
+        setModalOpen(true);
+    };
+
 
     // Format weekly WIND rewards
     const formatWeeklyRewards = (poolAddress: string) => {
@@ -97,6 +141,14 @@ export default function PoolsPage() {
                     Discover trading pools and find the best opportunities to earn.
                     {totalPoolCount > 0 && ` ${totalPoolCount} pools available.`}
                 </p>
+                <motion.button
+                    onClick={openCreatePoolModal}
+                    className="mt-4 btn-primary px-6 py-3"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                >
+                    + Create New Pool
+                </motion.button>
             </motion.div>
 
             {/* Pool Type Stats */}
@@ -305,35 +357,42 @@ export default function PoolsPage() {
                                         </span>
                                     )}
                                 </div>
-                                <Link href={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}&type=${pool.poolType.toLowerCase()}${pool.poolType === 'CL' && pool.tickSpacing ? `&tickSpacing=${pool.tickSpacing}` : ''}${pool.poolType === 'V2' ? `&stable=${pool.stable}` : ''}`}>
-                                    <button className={`px-3 py-2 rounded-lg font-medium text-sm ${pool.poolType === 'CL'
+                                <button
+                                    onClick={() => openAddLiquidityModal(pool)}
+                                    className={`px-3 py-2 rounded-lg font-medium text-sm ${pool.poolType === 'CL'
                                         ? 'bg-cyan-500/20 text-cyan-400'
                                         : 'bg-primary/20 text-primary'
-                                        }`}>
-                                        + Add LP
-                                    </button>
-                                </Link>
+                                        }`}
+                                >
+                                    + Add LP
+                                </button>
                             </div>
 
                             {/* Desktop: Action */}
                             <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                <Link href={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}&type=${pool.poolType.toLowerCase()}${pool.poolType === 'CL' && pool.tickSpacing ? `&tickSpacing=${pool.tickSpacing}` : ''}${pool.poolType === 'V2' ? `&stable=${pool.stable}` : ''}`}>
-                                    <motion.button
-                                        className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
-                                            ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
-                                            : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
-                                            }`}
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                    >
-                                        + Add LP
-                                    </motion.button>
-                                </Link>
+                                <motion.button
+                                    onClick={() => openAddLiquidityModal(pool)}
+                                    className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
+                                        ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
+                                        : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
+                                        }`}
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    + Add LP
+                                </motion.button>
                             </div>
                         </motion.div>
                     ))
                 )}
             </motion.div>
+
+            {/* Add Liquidity Modal */}
+            <AddLiquidityModal
+                isOpen={modalOpen}
+                onClose={() => setModalOpen(false)}
+                initialPool={selectedPool}
+            />
         </div>
     );
 }

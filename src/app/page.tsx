@@ -78,7 +78,7 @@ export default function Home() {
     {
       title: 'Provide Liquidity',
       description: 'Earn trading fees by depositing tokens into pools.',
-      href: '/liquidity',
+      href: '/pools',
     },
     {
       title: 'Vote & Earn',
@@ -130,7 +130,7 @@ export default function Home() {
                 Start Trading
               </motion.button>
             </Link>
-            <Link href="/liquidity">
+            <Link href="/pools">
               <motion.button
                 className="btn-secondary text-lg px-8 py-4"
                 whileHover={{ scale: 1.02 }}
@@ -365,7 +365,7 @@ export default function Home() {
                     Swap Tokens
                   </motion.button>
                 </Link>
-                <Link href="/liquidity">
+                <Link href="/pools">
                   <motion.button
                     className="w-full py-4 rounded-xl bg-white/5 border border-white/10 font-medium hover:bg-white/10 transition-all flex items-center justify-center gap-2"
                     whileHover={{ scale: 1.02 }}
@@ -438,12 +438,12 @@ export default function Home() {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href="/liquidity" className="flex-1 min-w-[200px]">
+                <Link href="/pools" className="flex-1 min-w-[200px]">
                   <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition">
                     Add Liquidity
                   </button>
                 </Link>
-                <Link href="/liquidity" className="flex-1 min-w-[200px]">
+                <Link href="/portfolio" className="flex-1 min-w-[200px]">
                   <button className="w-full py-3 px-4 rounded-lg bg-white/5 border border-white/10 text-sm font-medium hover:bg-white/10 transition">
                     Manage Staking
                   </button>
