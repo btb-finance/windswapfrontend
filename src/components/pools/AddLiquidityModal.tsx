@@ -591,7 +591,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     <div className="font-semibold">{tokenA?.symbol}/{tokenB?.symbol}</div>
                                                     <div className="text-xs text-gray-400">
                                                         {poolType === 'cl' ? (
-                                                            <>Concentrated • {tickSpacing === 1 ? '0.009%' : tickSpacing === 10 ? '0.045%' : tickSpacing === 80 ? '0.25%' : '1%'} fee</>
+                                                            <>Concentrated • {tickSpacing === 1 ? '0.01%' : tickSpacing === 10 ? '0.045%' : tickSpacing === 80 ? '0.25%' : '1%'} fee</>
                                                         ) : (
                                                             <>{stable ? 'Stable' : 'Volatile'} V2 Pool</>
                                                         )}
@@ -675,7 +675,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                         <label className="text-sm text-gray-400 mb-3 block font-medium">Fee Tier</label>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                             {[
-                                                { spacing: 1, fee: '0.009%', label: 'Lowest', best: 'Stables' },
+                                                { spacing: 1, fee: '0.01%', label: 'Lowest', best: 'Stables' },
                                                 { spacing: 10, fee: '0.045%', label: 'Low', best: 'Most pairs' },
                                                 { spacing: 80, fee: '0.25%', label: 'Medium', best: 'Popular' },
                                                 { spacing: 2000, fee: '1%', label: 'High', best: 'Exotic' },
