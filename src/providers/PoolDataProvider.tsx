@@ -145,7 +145,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     token1: { address: g.token1 as Address, symbol: g.symbol1, decimals: 18 },
                     poolType: g.type,
                     stable: false,
-                    tickSpacing: g.type === 'CL' ? 200 : undefined,
+                    tickSpacing: g.tickSpacing,
                     reserve0: '0',
                     reserve1: '0',
                     tvl: '0',

@@ -9,6 +9,7 @@ export interface GaugeConfig {
     symbol0: string;
     symbol1: string;
     type: 'V2' | 'CL';
+    tickSpacing?: number;
     isAlive: boolean;
 }
 
@@ -21,6 +22,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'USDC',
         symbol1: 'WSEI',
         type: 'CL',
+        tickSpacing: 80,
         isAlive: true,
     },
     {
@@ -31,6 +33,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'USDC.n',
         symbol1: 'USDC',
         type: 'CL',
+        tickSpacing: 10,
         isAlive: true,
     },
     {
@@ -41,6 +44,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'USDT',
         symbol1: 'USDC',
         type: 'CL',
+        tickSpacing: 10,
         isAlive: true,
     },
     {
@@ -51,6 +55,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'DRG',
         symbol1: 'USDC',
         type: 'CL',
+        tickSpacing: 80,
         isAlive: true,
     },
     {
@@ -61,6 +66,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'WBTC',
         symbol1: 'WSEI',
         type: 'CL',
+        tickSpacing: 80,
         isAlive: true,
     },
     {
@@ -71,6 +77,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'SEIYAN',
         symbol1: 'USDC',
         type: 'CL',
+        tickSpacing: 80,
         isAlive: true,
     },
     {
@@ -81,6 +88,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'MILLI',
         symbol1: 'USDC',
         type: 'CL',
+        tickSpacing: 80,
         isAlive: true,
     },
     {
@@ -91,6 +99,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'USDC',
         symbol1: 'Frog',
         type: 'CL',
+        tickSpacing: 80,
         isAlive: true,
     },
     {
@@ -101,6 +110,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'WETH',
         symbol1: 'USDC',
         type: 'CL',
+        tickSpacing: 80,
         isAlive: true,
     },
 ];
