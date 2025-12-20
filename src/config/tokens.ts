@@ -93,7 +93,7 @@ export const MILLI: Token = {
     address: '0x95597eb8d227a7c4b4f5e807a815c5178ee6dbe1',
     symbol: 'MILLI',
     name: 'MILLI',
-    decimals: 18,
+    decimals: 6,
 };
 
 export const GGC: Token = {
@@ -121,7 +121,7 @@ export const SEIYAN: Token = {
     address: '0x5f0e07dfee5832faa00c63f2d33a0d79150e8598',
     symbol: 'SEIYAN',
     name: 'SEIYAN',
-    decimals: 18,
+    decimals: 6,
 };
 
 export const S8N: Token = {
@@ -159,6 +159,14 @@ export const LARRY: Token = {
     decimals: 18,
 };
 
+export const WETH: Token = {
+    address: '0x160345fc359604fc6e70e3c5facbde5f7a9342d8',
+    symbol: 'WETH',
+    name: 'Wrapped Ether',
+    decimals: 18,
+    logoURI: '/tokens/eth.svg',
+};
+
 // Default token list
 export const DEFAULT_TOKEN_LIST: Token[] = [
     SEI,
@@ -167,6 +175,7 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
     USDC,
     USDT,
     WBTC,
+    WETH,
     USDCT,
     USDCN,
     DRG,
@@ -191,6 +200,7 @@ export const TOKEN_ADDRESSES = {
     USDC: USDC.address,
     USDT: USDT.address,
     WBTC: WBTC.address,
+    WETH: WETH.address,
     USDCT: USDCT.address,
     USDCN: USDCN.address,
     DRG: DRG.address,

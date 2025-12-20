@@ -253,7 +253,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             return;
         }
 
-        setTxProgress('idle');
+        // Set state to block re-entry
+        setTxProgress('approving0');
         setTxError(null);
 
         try {
