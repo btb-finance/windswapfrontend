@@ -320,8 +320,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 };
             });
 
-            setV2Pools(newV2Pools);
-            setClPools(newClPools);
+            // Skip RPC pool updates - use GAUGE_LIST pools from Step 0 instead
+            // (RPC token symbol fetching is unreliable)
+            // setV2Pools(newV2Pools);
+            // setClPools(newClPools);
 
             // Step 5: Fetch reward rates for pools with gauges
             const allPoolAddrs = [...v2Addresses, ...clAddresses];
