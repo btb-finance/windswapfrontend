@@ -784,7 +784,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             })()}
                                         </div>
 
-                                        {/* Visual Price Range Display with +/- controls */}
+                                        {/* Visual Price Range Display with Draggable Slider */}
                                         {(priceLower || priceUpper) && currentPrice && (
                                             <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                                                 <div className="flex items-center justify-between mb-3">
@@ -796,22 +796,78 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     </span>
                                                 </div>
 
-                                                {/* Visual range bar */}
-                                                <div className="relative h-2 bg-white/10 rounded-full mb-4 overflow-hidden">
-                                                    <div
-                                                        className="absolute h-full bg-gradient-to-r from-red-500 via-green-500 to-red-500 rounded-full"
-                                                        style={{
-                                                            left: `${Math.max(0, Math.min(50, (1 - (currentPrice - parseFloat(priceLower || '0')) / currentPrice) * 50))}%`,
-                                                            right: `${Math.max(0, Math.min(50, (1 - (parseFloat(priceUpper || '999999') - currentPrice) / currentPrice) * 50))}%`
-                                                        }}
+                                                {/* Draggable Range Slider */}
+                                                <div className="relative h-10 mb-4">
+                                                    {/* Track background */}
+                                                    <div className="absolute top-1/2 left-0 right-0 h-2 bg-white/10 rounded-full -translate-y-1/2" />
+
+                                                    {/* Active range (colored part) */}
+                                                    {(() => {
+                                                        const lower = parseFloat(priceLower || '0');
+                                                        const upper = parseFloat(priceUpper || String(currentPrice * 2));
+                                                        const minRange = currentPrice * 0.1;
+                                                        const maxRange = currentPrice * 3;
+                                                        const leftPercent = Math.max(0, Math.min(100, ((lower - minRange) / (maxRange - minRange)) * 100));
+                                                        const rightPercent = Math.max(0, Math.min(100, ((upper - minRange) / (maxRange - minRange)) * 100));
+                                                        return (
+                                                            <div
+                                                                className="absolute top-1/2 h-2 bg-gradient-to-r from-primary via-green-400 to-secondary rounded-full -translate-y-1/2"
+                                                                style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
+                                                            />
+                                                        );
+                                                    })()}
+
+                                                    {/* Current price marker */}
+                                                    {(() => {
+                                                        const minRange = currentPrice * 0.1;
+                                                        const maxRange = currentPrice * 3;
+                                                        const currentPercent = Math.max(0, Math.min(100, ((currentPrice - minRange) / (maxRange - minRange)) * 100));
+                                                        return (
+                                                            <div
+                                                                className="absolute top-1/2 w-1 h-4 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-10"
+                                                                style={{ left: `${currentPercent}%` }}
+                                                            >
+                                                                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[8px] text-gray-400 whitespace-nowrap">
+                                                                    Current
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {/* Lower bound thumb (draggable) */}
+                                                    <input
+                                                        type="range"
+                                                        min={currentPrice * 0.1}
+                                                        max={currentPrice * 3}
+                                                        step={currentPrice * 0.01}
+                                                        value={parseFloat(priceLower || String(currentPrice * 0.5))}
+                                                        onChange={(e) => setPriceLower(parseFloat(e.target.value).toFixed(6))}
+                                                        className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-grab z-20"
                                                     />
-                                                    <div className="absolute left-1/2 top-0 w-0.5 h-full bg-white -translate-x-1/2" />
+
+                                                    {/* Upper bound thumb (draggable) */}
+                                                    <input
+                                                        type="range"
+                                                        min={currentPrice * 0.1}
+                                                        max={currentPrice * 3}
+                                                        step={currentPrice * 0.01}
+                                                        value={parseFloat(priceUpper || String(currentPrice * 1.5))}
+                                                        onChange={(e) => setPriceUpper(parseFloat(e.target.value).toFixed(6))}
+                                                        className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-green-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-green-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-grab z-20"
+                                                    />
                                                 </div>
 
-                                                {/* Min/Max with +/- buttons */}
+                                                {/* Min/Max with +/- buttons and percentage */}
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div className="text-center">
-                                                        <div className="text-xs text-red-400 mb-1">Min</div>
+                                                        <div className="flex items-center justify-center gap-2 mb-1">
+                                                            <span className="text-xs text-red-400">Min Price</span>
+                                                            {priceLower && currentPrice && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
+                                                                    {(((parseFloat(priceLower) - currentPrice) / currentPrice) * 100).toFixed(1)}%
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 0.95).toFixed(6))}
@@ -827,7 +883,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                         </div>
                                                     </div>
                                                     <div className="text-center">
-                                                        <div className="text-xs text-green-400 mb-1">Max</div>
+                                                        <div className="flex items-center justify-center gap-2 mb-1">
+                                                            <span className="text-xs text-green-400">Max Price</span>
+                                                            {priceUpper && currentPrice && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                                                                    +{(((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100).toFixed(1)}%
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '999999') * 0.95).toFixed(6))}
@@ -843,8 +906,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                         </div>
                                                     </div>
                                                 </div>
+
                                             </div>
                                         )}
+
                                     </div>
                                 )}
 
