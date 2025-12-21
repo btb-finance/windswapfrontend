@@ -835,8 +835,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             <button
                                                                 onClick={() => {
                                                                     // Set range above current price - only deposit token0
-                                                                    const lower = currentPrice * 1.02;
-                                                                    const upper = currentPrice * 1.50;
+                                                                    const lower = currentPrice * 1.0045; // +0.45% from current
+                                                                    const upper = currentPrice * 1.10;  // +10% from current
                                                                     setPriceLower(lower.toFixed(6));
                                                                     setPriceUpper(upper.toFixed(6));
                                                                     // Clear amounts - Above means deposit token0 (aboveToken)
@@ -858,8 +858,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             <button
                                                                 onClick={() => {
                                                                     // Set range below current price - only deposit token1
-                                                                    const lower = currentPrice * 0.50;
-                                                                    const upper = currentPrice * 0.98;
+                                                                    const lower = currentPrice * 0.90;  // -10% from current
+                                                                    const upper = currentPrice * 0.9955; // -0.45% from current
                                                                     setPriceLower(lower.toFixed(6));
                                                                     setPriceUpper(upper.toFixed(6));
                                                                     // Clear amounts - Below means deposit token1 (belowToken)
