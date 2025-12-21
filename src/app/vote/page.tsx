@@ -65,6 +65,12 @@ export default function VotePage() {
     const [voteWeights, setVoteWeights] = useState<Record<string, number>>({});
     const [isVoting, setIsVoting] = useState(false);
 
+    // Lock management state
+    const [managingNFT, setManagingNFT] = useState<bigint | null>(null);
+    const [increaseAmountValue, setIncreaseAmountValue] = useState('');
+    const [extendDuration, setExtendDuration] = useState<keyof typeof LOCK_DURATIONS>('4Y');
+    const [mergeTarget, setMergeTarget] = useState<bigint | null>(null);
+
     // Hooks
     const {
         positions,
@@ -74,10 +80,12 @@ export default function VotePage() {
         extendLock,
         withdraw,
         claimRebases,
+        merge,
         isLoading,
         error,
         refetch,
     } = useVeYAKA();
+
 
     const {
         gauges,
@@ -187,6 +195,41 @@ export default function VotePage() {
     const handleClaimRebases = async (tokenId: bigint) => {
         const result = await claimRebases(tokenId);
         if (result) setTxHash(result.hash);
+    };
+
+    const handleIncreaseAmount = async (tokenId: bigint) => {
+        if (!increaseAmountValue || parseFloat(increaseAmountValue) <= 0) return;
+        const result = await increaseAmount(tokenId, increaseAmountValue);
+        if (result) {
+            setTxHash(result.hash);
+            setIncreaseAmountValue('');
+            setManagingNFT(null);
+        }
+    };
+
+    const handleExtendLock = async (tokenId: bigint) => {
+        const result = await extendLock(tokenId, LOCK_DURATIONS[extendDuration]);
+        if (result) {
+            setTxHash(result.hash);
+            setManagingNFT(null);
+        }
+    };
+
+    const handleMaxLock = async (tokenId: bigint) => {
+        // Max lock is 4 years
+        const result = await extendLock(tokenId, LOCK_DURATIONS['4Y']);
+        if (result) {
+            setTxHash(result.hash);
+        }
+    };
+
+    const handleMerge = async (fromTokenId: bigint, toTokenId: bigint) => {
+        const result = await merge(fromTokenId, toTokenId);
+        if (result) {
+            setTxHash(result.hash);
+            setMergeTarget(null);
+            setManagingNFT(null);
+        }
     };
 
     const handleVote = async () => {
@@ -415,21 +458,7 @@ export default function VotePage() {
                         <div className="mb-3">
                             <label className="text-xs text-gray-400 mb-2 block">Lock Duration</label>
                             <div className="grid grid-cols-4 gap-1">
-                                {(Object.keys(LOCK_DURATIONS) as Array<keyof typeof LOCK_DURATIONS>).slice(0, 4).map((duration) => (
-                                    <button
-                                        key={duration}
-                                        onClick={() => setLockDuration(duration)}
-                                        className={`py-2 rounded-lg text-xs font-medium transition ${lockDuration === duration
-                                            ? 'bg-primary text-white'
-                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                                            }`}
-                                    >
-                                        {duration}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="grid grid-cols-3 gap-1 mt-1">
-                                {(Object.keys(LOCK_DURATIONS) as Array<keyof typeof LOCK_DURATIONS>).slice(4).map((duration) => (
+                                {(['1M', '6M', '1Y', '4Y'] as const).map((duration) => (
                                     <button
                                         key={duration}
                                         onClick={() => setLockDuration(duration)}
@@ -443,6 +472,7 @@ export default function VotePage() {
                                 ))}
                             </div>
                         </div>
+
 
                         {/* Preview - Inline */}
                         <div className="flex items-center justify-between text-xs mb-3 p-2 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10">
@@ -469,31 +499,162 @@ export default function VotePage() {
                     {positions.length > 0 && (
                         <div className="glass-card p-3 sm:p-4 mt-3">
                             <h3 className="text-sm font-semibold mb-2">Your veNFTs ({positions.length})</h3>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {positions.map((position) => {
                                     const isExpired = position.end < BigInt(Math.floor(Date.now() / 1000)) && !position.isPermanent;
                                     const endDate = new Date(Number(position.end) * 1000);
+                                    const isManaging = managingNFT === position.tokenId;
 
                                     return (
-                                        <div key={position.tokenId.toString()} className="p-2 rounded-lg bg-white/5 border border-white/10">
+                                        <div key={position.tokenId.toString()} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                            {/* Position Info */}
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0">
                                                     <div className="text-xs text-gray-400">#{position.tokenId.toString()}</div>
-                                                    <div className="font-bold text-sm">{parseFloat(formatUnits(position.amount, 18)).toFixed(0)} WIND</div>
+                                                    <div className="font-bold text-sm">{parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND</div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="font-bold text-sm text-primary">{parseFloat(formatUnits(position.votingPower, 18)).toFixed(0)} veWIND</div>
+                                                    <div className="font-bold text-sm text-primary">{parseFloat(formatUnits(position.votingPower, 18)).toLocaleString()} veWIND</div>
                                                     <div className="text-[10px] text-gray-400">
                                                         {position.isPermanent ? '∞ Permanent' : isExpired ? '🔓 Unlocked' : endDate.toLocaleDateString()}
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* Action Buttons - show for non-expired locks */}
+                                            {!isExpired && (
+                                                <div className="flex gap-2 mt-2">
+                                                    <button
+                                                        onClick={() => setManagingNFT(isManaging ? null : position.tokenId)}
+                                                        className={`flex-1 py-1.5 text-[10px] rounded transition ${isManaging ? 'bg-primary text-white' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}
+                                                    >
+                                                        {isManaging ? '✕ Close' : '⚙️ Manage'}
+                                                    </button>
+                                                    {!position.isPermanent && (
+                                                        <button
+                                                            onClick={() => handleMaxLock(position.tokenId)}
+                                                            disabled={isLoading}
+                                                            className="flex-1 py-1.5 text-[10px] rounded bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30 transition disabled:opacity-50"
+                                                        >
+                                                            🔒 Max Lock (4Y)
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Management Panel */}
+                                            {isManaging && !isExpired && (
+                                                <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+                                                    {/* Increase Amount - available for all locks */}
+                                                    <div>
+                                                        <label className="text-[10px] text-gray-400 mb-1 block">Add More WIND</label>
+                                                        <div className="flex gap-2">
+                                                            <div className="flex-1 flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
+                                                                <input
+                                                                    type="text"
+                                                                    value={increaseAmountValue}
+                                                                    onChange={(e) => setIncreaseAmountValue(e.target.value)}
+                                                                    placeholder="0.0"
+                                                                    className="flex-1 min-w-0 bg-transparent text-sm font-bold outline-none placeholder-gray-600"
+                                                                />
+                                                                <button
+                                                                    onClick={() => setIncreaseAmountValue(formattedYakaBalance || '0')}
+                                                                    className="px-2 py-0.5 text-[8px] font-medium rounded bg-white/10 hover:bg-white/20 text-primary"
+                                                                >
+                                                                    MAX
+                                                                </button>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleIncreaseAmount(position.tokenId)}
+                                                                disabled={isLoading || !increaseAmountValue || parseFloat(increaseAmountValue) <= 0}
+                                                                className="px-3 py-2 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
+                                                            >
+                                                                + Add
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Extend Lock - only for non-permanent locks */}
+                                                    {!position.isPermanent && (
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-400 mb-1 block">Extend Lock Duration</label>
+                                                            <div className="flex gap-2">
+                                                                <div className="flex-1 grid grid-cols-4 gap-1">
+                                                                    {(['1M', '3M', '1Y', '4Y'] as const).map((duration) => (
+                                                                        <button
+                                                                            key={duration}
+                                                                            onClick={() => setExtendDuration(duration)}
+                                                                            className={`py-1 rounded text-[10px] font-medium transition ${extendDuration === duration
+                                                                                ? 'bg-primary text-white'
+                                                                                : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                                                }`}
+                                                                        >
+                                                                            {duration}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleExtendLock(position.tokenId)}
+                                                                    disabled={isLoading}
+                                                                    className="px-3 py-2 text-[10px] font-medium rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition disabled:opacity-50"
+                                                                >
+                                                                    Extend
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Info for permanent locks */}
+                                                    {position.isPermanent && (
+                                                        <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                                                            <span>✨</span>
+                                                            <span>Permanent lock - maximum voting power forever!</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Merge - Only show if user has more than 1 veNFT */}
+                                                    {positions.length > 1 && !position.isPermanent && (
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-400 mb-1 block">Merge with another veNFT</label>
+                                                            <div className="flex gap-2 flex-wrap">
+                                                                {positions
+                                                                    .filter(p => p.tokenId !== position.tokenId && !p.isPermanent)
+                                                                    .map(p => (
+                                                                        <button
+                                                                            key={p.tokenId.toString()}
+                                                                            onClick={() => setMergeTarget(mergeTarget === p.tokenId ? null : p.tokenId)}
+                                                                            className={`px-2 py-1 text-[10px] rounded transition ${mergeTarget === p.tokenId
+                                                                                ? 'bg-purple-500 text-white'
+                                                                                : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                                                }`}
+                                                                        >
+                                                                            #{p.tokenId.toString()} ({parseFloat(formatUnits(p.amount, 18)).toLocaleString()} WIND)
+                                                                        </button>
+                                                                    ))}
+                                                            </div>
+                                                            {mergeTarget && (
+                                                                <button
+                                                                    onClick={() => handleMerge(mergeTarget, position.tokenId)}
+                                                                    disabled={isLoading}
+                                                                    className="w-full mt-2 py-2 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition disabled:opacity-50"
+                                                                >
+                                                                    🔀 Merge #{mergeTarget.toString()} → #{position.tokenId.toString()}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+
+
+                                            {/* Withdraw Button for Expired */}
                                             {isExpired && (
                                                 <button
                                                     onClick={() => handleWithdraw(position.tokenId)}
-                                                    className="w-full mt-2 py-1.5 text-[10px] rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
+                                                    className="w-full mt-2 py-2 text-xs rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 font-medium"
                                                 >
-                                                    Withdraw
+                                                    🔓 Withdraw WIND
                                                 </button>
                                             )}
                                         </div>
@@ -502,6 +663,7 @@ export default function VotePage() {
                             </div>
                         </div>
                     )}
+
                 </motion.div>
             )}
 
