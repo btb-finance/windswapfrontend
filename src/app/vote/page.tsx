@@ -2,18 +2,56 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract } from 'wagmi';
 import { formatUnits, Address } from 'viem';
 import Link from 'next/link';
 import { useVeYAKA, LOCK_DURATIONS } from '@/hooks/useVeYAKA';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
 import { WIND } from '@/config/tokens';
+import { V2_CONTRACTS } from '@/config/contracts';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 
+// Minter ABI for epoch info
+const MINTER_ABI = [
+    {
+        inputs: [],
+        name: 'activePeriod',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'epochCount',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Voter ABI for distribute (permissionless!)
+const VOTER_DISTRIBUTE_ABI = [
+    {
+        inputs: [{ name: '_start', type: 'uint256' }, { name: '_finish', type: 'uint256' }],
+        name: 'distribute',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'length',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
 export default function VotePage() {
+
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<'lock' | 'vote' | 'rewards'>('lock');
 
@@ -53,6 +91,56 @@ export default function VotePage() {
     } = useVoter();
 
     const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(WIND);
+
+    // Read epoch info from Minter
+    const { data: activePeriod } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'activePeriod',
+    });
+
+    const { data: epochCount } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'epochCount',
+    });
+
+    // Calculate epoch times
+    const epochStartDate = activePeriod ? new Date(Number(activePeriod) * 1000) : null;
+    const epochEndDate = activePeriod ? new Date((Number(activePeriod) + 7 * 24 * 60 * 60) * 1000) : null;
+    const timeUntilNextEpoch = activePeriod ? Math.max(0, Number(activePeriod) + 7 * 24 * 60 * 60 - Math.floor(Date.now() / 1000)) : 0;
+    const daysRemaining = Math.floor(timeUntilNextEpoch / 86400);
+    const hoursRemaining = Math.floor((timeUntilNextEpoch % 86400) / 3600);
+    const epochHasEnded = timeUntilNextEpoch === 0;
+
+    // Read voter pool count for distribute
+    const { data: voterPoolCount } = useReadContract({
+        address: V2_CONTRACTS.Voter as Address,
+        abi: VOTER_DISTRIBUTE_ABI,
+        functionName: 'length',
+    });
+
+    // Distribute state
+    const [isDistributing, setIsDistributing] = useState(false);
+    const { writeContractAsync } = useWriteContract();
+
+    // Handle distribute rewards (anyone can call this!)
+    const handleDistributeRewards = async () => {
+        if (!voterPoolCount || Number(voterPoolCount) === 0) return;
+        setIsDistributing(true);
+        try {
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.Voter as Address,
+                abi: VOTER_DISTRIBUTE_ABI,
+                functionName: 'distribute',
+                args: [BigInt(0), voterPoolCount],
+            });
+            setTxHash(hash);
+        } catch (err: any) {
+            console.error('Distribute failed:', err);
+        }
+        setIsDistributing(false);
+    };
 
     // Auto-select first veNFT when positions load
     useEffect(() => {
@@ -165,7 +253,73 @@ export default function VotePage() {
                 </div>
             </motion.div>
 
+            {/* Epoch Info Banner */}
+            <motion.div
+                className={`mb-4 p-3 rounded-xl border ${epochHasEnded
+                    ? 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'
+                    : 'bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-500/20'}`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+            >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="text-xl">{epochHasEnded ? '🎉' : '📅'}</div>
+                        <div>
+                            <div className="text-xs text-gray-400">Current Epoch</div>
+                            <div className={`font-bold ${epochHasEnded ? 'text-green-400' : 'text-blue-400'}`}>
+                                Epoch {epochCount !== undefined ? epochCount.toString() : '...'}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                        <div className="text-center hidden sm:block">
+                            <div className="text-gray-400">Started</div>
+                            <div className="font-medium text-white">
+                                {epochStartDate ? epochStartDate.toLocaleDateString() : '...'}
+                            </div>
+                        </div>
+                        <div className="text-center hidden sm:block">
+                            <div className="text-gray-400">Ends</div>
+                            <div className="font-medium text-white">
+                                {epochEndDate ? epochEndDate.toLocaleDateString() : '...'}
+                            </div>
+                        </div>
+                        {epochHasEnded ? (
+                            <button
+                                onClick={handleDistributeRewards}
+                                disabled={isDistributing || !voterPoolCount || Number(voterPoolCount) === 0}
+                                className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isDistributing ? (
+                                    <>
+                                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Distributing...
+                                    </>
+                                ) : (
+                                    <>💰 Distribute Rewards</>
+                                )}
+                            </button>
+                        ) : (
+                            <div className="text-center px-3 py-1 rounded-lg bg-blue-500/20">
+                                <div className="text-gray-400">Time Left</div>
+                                <div className="font-bold text-blue-400">
+                                    {daysRemaining}d {hoursRemaining}h
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {epochHasEnded && (
+                    <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-gray-400">
+                        ✨ Epoch ended! Anyone can trigger reward distribution to send fees to voters.
+                    </div>
+                )}
+            </motion.div>
+
+
             {/* Stats Row - Compact */}
+
             <div className="grid grid-cols-3 gap-2 mb-4">
                 <div className="glass-card p-2 sm:p-3 text-center">
                     <div className="text-[10px] text-gray-400">WIND Balance</div>
