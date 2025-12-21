@@ -8,11 +8,17 @@ import Link from 'next/link';
 import { useVeYAKA, LOCK_DURATIONS } from '@/hooks/useVeYAKA';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
-import { WIND } from '@/config/tokens';
+import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
+
+// Helper to get token logo from global token list
+const getTokenLogo = (addr: string): string | undefined => {
+    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+    return token?.logoURI;
+};
 
 // Minter ABI for epoch info
 const MINTER_ABI = [
@@ -749,12 +755,20 @@ export default function VotePage() {
                                             <div className="flex items-center justify-between gap-2 mb-2">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <div className="relative w-10 h-6 flex-shrink-0">
-                                                        <div className="absolute left-0 w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                            {gauge.symbol0.slice(0, 2)}
-                                                        </div>
-                                                        <div className="absolute left-3 w-6 h-6 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                            {gauge.symbol1.slice(0, 2)}
-                                                        </div>
+                                                        {getTokenLogo(gauge.token0) ? (
+                                                            <img src={getTokenLogo(gauge.token0)} alt={gauge.symbol0} className="absolute left-0 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                        ) : (
+                                                            <div className="absolute left-0 w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                {gauge.symbol0.slice(0, 2)}
+                                                            </div>
+                                                        )}
+                                                        {getTokenLogo(gauge.token1) ? (
+                                                            <img src={getTokenLogo(gauge.token1)} alt={gauge.symbol1} className="absolute left-3 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                        ) : (
+                                                            <div className="absolute left-3 w-6 h-6 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                {gauge.symbol1.slice(0, 2)}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-1">

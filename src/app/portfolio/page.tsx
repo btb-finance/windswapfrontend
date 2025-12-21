@@ -104,6 +104,12 @@ const getTokenInfo = (addr: string) => {
     return { symbol: token?.symbol || addr.slice(0, 10) + '...', decimals: token?.decimals || 18 };
 };
 
+// Get token logo from known token list
+const getTokenLogo = (addr: string): string | undefined => {
+    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+    return token?.logoURI;
+};
+
 export default function PortfolioPage() {
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'staked' | 'locks' | 'rewards'>('overview');
@@ -1192,8 +1198,16 @@ export default function PortfolioPage() {
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="flex items-center gap-2">
                                                         <div className="relative w-12 h-7 flex-shrink-0">
-                                                            <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t0.symbol.slice(0, 2)}</div>
-                                                            <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t1.symbol.slice(0, 2)}</div>
+                                                            {getTokenLogo(pos.token0) ? (
+                                                                <img src={getTokenLogo(pos.token0)} alt={t0.symbol} className="absolute left-0 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                            ) : (
+                                                                <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t0.symbol.slice(0, 2)}</div>
+                                                            )}
+                                                            {getTokenLogo(pos.token1) ? (
+                                                                <img src={getTokenLogo(pos.token1)} alt={t1.symbol} className="absolute left-4 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                            ) : (
+                                                                <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t1.symbol.slice(0, 2)}</div>
+                                                            )}
                                                         </div>
                                                         <div className="min-w-0">
                                                             <div className="font-semibold text-sm truncate">{t0.symbol}/{t1.symbol}</div>
@@ -1319,12 +1333,20 @@ export default function PortfolioPage() {
                                             <div className="flex items-center justify-between mb-3">
                                                 <div className="flex items-center gap-2">
                                                     <div className="relative w-12 h-7 flex-shrink-0">
-                                                        <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                            {pos.token0Symbol.slice(0, 2)}
-                                                        </div>
-                                                        <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                            {pos.token1Symbol.slice(0, 2)}
-                                                        </div>
+                                                        {getTokenLogo(pos.token0) ? (
+                                                            <img src={getTokenLogo(pos.token0)} alt={pos.token0Symbol} className="absolute left-0 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                        ) : (
+                                                            <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                {pos.token0Symbol.slice(0, 2)}
+                                                            </div>
+                                                        )}
+                                                        {getTokenLogo(pos.token1) ? (
+                                                            <img src={getTokenLogo(pos.token1)} alt={pos.token1Symbol} className="absolute left-4 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                        ) : (
+                                                            <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                {pos.token1Symbol.slice(0, 2)}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-sm truncate">{pos.token0Symbol}/{pos.token1Symbol}</div>
@@ -1520,12 +1542,20 @@ export default function PortfolioPage() {
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
                                         <div className="relative w-8 h-5 flex-shrink-0">
-                                            <div className="absolute left-0 w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[8px] font-bold border border-[var(--bg-primary)]">
-                                                {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
-                                            </div>
-                                            <div className="absolute left-3 w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[8px] font-bold border border-[var(--bg-primary)]">
-                                                {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
-                                            </div>
+                                            {getTokenLogo(selectedPosition.token0) ? (
+                                                <img src={getTokenLogo(selectedPosition.token0)} alt={getTokenInfo(selectedPosition.token0).symbol} className="absolute left-0 w-5 h-5 rounded-full border border-[var(--bg-primary)]" />
+                                            ) : (
+                                                <div className="absolute left-0 w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[8px] font-bold border border-[var(--bg-primary)]">
+                                                    {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
+                                                </div>
+                                            )}
+                                            {getTokenLogo(selectedPosition.token1) ? (
+                                                <img src={getTokenLogo(selectedPosition.token1)} alt={getTokenInfo(selectedPosition.token1).symbol} className="absolute left-3 w-5 h-5 rounded-full border border-[var(--bg-primary)]" />
+                                            ) : (
+                                                <div className="absolute left-3 w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[8px] font-bold border border-[var(--bg-primary)]">
+                                                    {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
+                                                </div>
+                                            )}
                                         </div>
                                         <span className="font-semibold text-xs truncate">
                                             {getTokenInfo(selectedPosition.token0).symbol}/{getTokenInfo(selectedPosition.token1).symbol}
@@ -1557,9 +1587,13 @@ export default function PortfolioPage() {
                                             className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
                                         />
                                         <div className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 rounded-lg flex-shrink-0">
-                                            <div className="w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold">
-                                                {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
-                                            </div>
+                                            {getTokenLogo(selectedPosition.token0) ? (
+                                                <img src={getTokenLogo(selectedPosition.token0)} alt={getTokenInfo(selectedPosition.token0).symbol} className="w-5 h-5 rounded-full" />
+                                            ) : (
+                                                <div className="w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold">
+                                                    {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
+                                                </div>
+                                            )}
                                             <span className="font-semibold text-sm">{getTokenInfo(selectedPosition.token0).symbol}</span>
                                         </div>
                                     </div>
@@ -1599,9 +1633,13 @@ export default function PortfolioPage() {
                                             readOnly
                                         />
                                         <div className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 rounded-lg flex-shrink-0">
-                                            <div className="w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
-                                                {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
-                                            </div>
+                                            {getTokenLogo(selectedPosition.token1) ? (
+                                                <img src={getTokenLogo(selectedPosition.token1)} alt={getTokenInfo(selectedPosition.token1).symbol} className="w-5 h-5 rounded-full" />
+                                            ) : (
+                                                <div className="w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
+                                                    {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
+                                                </div>
+                                            )}
                                             <span className="font-semibold text-sm">{getTokenInfo(selectedPosition.token1).symbol}</span>
                                         </div>
                                     </div>
