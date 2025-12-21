@@ -1133,6 +1133,24 @@ export default function PortfolioPage() {
                         </div>
                     )}
 
+                    {/* Staked Positions Preview */}
+                    {stakedPositions.length > 0 && (
+                        <div className="glass-card p-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium">Staked Positions</span>
+                                <button onClick={() => setActiveTab('staked')} className="text-[10px] text-primary">View All →</button>
+                            </div>
+                            <div className="space-y-1.5">
+                                {stakedPositions.slice(0, 3).map((pos, i) => (
+                                    <div key={i} className="flex items-center justify-between p-2 rounded bg-yellow-500/10 text-xs">
+                                        <span className="font-medium">{pos.token0Symbol}/{pos.token1Symbol}</span>
+                                        <span className="text-green-400">{parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Locks Preview */}
                     {veNFTs.length > 0 && (
                         <div className="glass-card p-3">
@@ -1152,6 +1170,7 @@ export default function PortfolioPage() {
                     )}
                 </motion.div>
             )}
+
 
             {/* Positions Tab */}
             {activeTab === 'positions' && (
