@@ -380,21 +380,24 @@ export default function VotePage() {
                 </div>
             </div>
 
-            {/* Tabs - Compact */}
-            <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
+            {/* Tabs - Prominent Buttons */}
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
                 {tabConfig.map((tab) => (
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${activeTab === tab.key
-                            ? 'bg-primary text-white'
-                            : 'text-gray-400 hover:text-white bg-white/5'
+                        className={`flex-1 min-w-0 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2 flex items-center justify-center gap-2 ${activeTab === tab.key
+                            ? 'bg-gradient-to-r from-primary to-secondary text-white border-primary shadow-lg shadow-primary/30'
+                            : 'bg-white/5 text-gray-300 border-white/10 hover:border-primary/50 hover:bg-white/10 hover:text-white'
                             }`}
                     >
-                        {tab.label}
+                        <span className="text-base">{tab.icon}</span>
+                        <span className="hidden sm:inline">{tab.label}</span>
+                        <span className="sm:hidden">{tab.key === 'lock' ? 'Lock' : tab.key === 'vote' ? 'Vote' : 'Earn'}</span>
                     </button>
                 ))}
             </div>
+
 
             {/* Error Display */}
             {error && (
@@ -457,14 +460,14 @@ export default function VotePage() {
                         {/* Duration Selection */}
                         <div className="mb-3">
                             <label className="text-xs text-gray-400 mb-2 block">Lock Duration</label>
-                            <div className="grid grid-cols-4 gap-1">
+                            <div className="grid grid-cols-4 gap-2">
                                 {(['1M', '6M', '1Y', '4Y'] as const).map((duration) => (
                                     <button
                                         key={duration}
                                         onClick={() => setLockDuration(duration)}
-                                        className={`py-2 rounded-lg text-xs font-medium transition ${lockDuration === duration
-                                            ? 'bg-primary text-white'
-                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                        className={`py-3 px-2 rounded-xl text-sm font-bold transition-all duration-200 border-2 ${lockDuration === duration
+                                            ? 'bg-gradient-to-r from-primary to-secondary text-white border-primary shadow-lg shadow-primary/30 scale-105'
+                                            : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10 hover:border-primary/50 hover:text-white'
                                             }`}
                                     >
                                         {duration}
@@ -472,6 +475,7 @@ export default function VotePage() {
                                 ))}
                             </div>
                         </div>
+
 
 
                         {/* Preview - Inline */}
