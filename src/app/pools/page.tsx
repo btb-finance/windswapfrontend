@@ -10,7 +10,7 @@ import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
 
 type PoolType = 'all' | 'v2' | 'cl';
-type SortBy = 'tvl' | 'apr';
+type SortBy = 'default' | 'tvl' | 'apr';
 
 // Fee tier mapping for CL pools (from CLFactory contract)
 const FEE_TIERS: Record<number, string> = {
@@ -41,7 +41,7 @@ const findTokenByAddress = (addr: string): Token | undefined => {
 
 export default function PoolsPage() {
     const [poolType, setPoolType] = useState<PoolType>('all');
-    const [sortBy, setSortBy] = useState<SortBy>('tvl');
+    const [sortBy, setSortBy] = useState<SortBy>('default');
     const [search, setSearch] = useState('');
 
     // Modal state
@@ -105,6 +105,7 @@ export default function PoolsPage() {
     // Sort pools
     const sortedPools = [...filteredPools].sort((a, b) => {
         if (sortBy === 'tvl') return parseFloat(b.tvl) - parseFloat(a.tvl);
+        // Default: preserve order from gauges.ts (already sorted by category)
         return 0;
     });
 
@@ -187,6 +188,7 @@ export default function PoolsPage() {
                         onChange={(e) => setSortBy(e.target.value as SortBy)}
                         className="hidden sm:block px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-primary cursor-pointer"
                     >
+                        <option value="default">Default Order</option>
                         <option value="tvl">Sort by TVL</option>
                     </select>
                 </div>
