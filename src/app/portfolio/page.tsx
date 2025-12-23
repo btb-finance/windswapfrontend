@@ -10,6 +10,7 @@ import { DEFAULT_TOKEN_LIST, WSEI, USDC, Token } from '@/config/tokens';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 // VotingEscrow ABI for veNFT data
 const VOTING_ESCROW_ABI = [
@@ -275,7 +276,7 @@ export default function PortfolioPage() {
                             ? pos.tickSpacing.toString(16).padStart(64, '0')
                             : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(pos.tickSpacing) + BigInt(1)).toString(16);
 
-                        const poolRes = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                        const poolRes = await fetch(getPrimaryRpc(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -291,7 +292,7 @@ export default function PortfolioPage() {
 
                             // Get slot0 for current tick
                             const slot0Selector = '0x3850c7bd';
-                            const slot0Res = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                            const slot0Res = await fetch(getPrimaryRpc(), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -352,7 +353,7 @@ export default function PortfolioPage() {
                 console.log('Fetching for position tokens:', selectedPosition.token0, selectedPosition.token1);
 
                 const [bal0Response, bal1Response, slot0Response] = await Promise.all([
-                    fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -362,7 +363,7 @@ export default function PortfolioPage() {
                             id: 1,
                         }),
                     }).then(r => r.json()),
-                    fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -385,7 +386,7 @@ export default function PortfolioPage() {
                         const token1Padded = token1.slice(2).padStart(64, '0');
                         const tickPadded = tickSpacing.toString(16).padStart(64, '0');
 
-                        const poolRes = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                        const poolRes = await fetch(getPrimaryRpc(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -398,7 +399,7 @@ export default function PortfolioPage() {
 
                         if (poolRes.result && poolRes.result !== '0x' + '0'.repeat(64)) {
                             const poolAddress = '0x' + poolRes.result.slice(-40);
-                            const slot0Res = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                            const slot0Res = await fetch(getPrimaryRpc(), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -424,7 +425,7 @@ export default function PortfolioPage() {
 
                 // For WSEI, fetch native SEI balance instead
                 if (isToken0WSEI) {
-                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    const nativeBal = await fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -444,7 +445,7 @@ export default function PortfolioPage() {
                 }
 
                 if (isToken1WSEI) {
-                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    const nativeBal = await fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -651,7 +652,7 @@ export default function PortfolioPage() {
                 ? position.tickSpacing.toString(16).padStart(64, '0')
                 : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(position.tickSpacing) + BigInt(1)).toString(16);
 
-            const poolResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const poolResult = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -670,7 +671,7 @@ export default function PortfolioPage() {
             const poolAddress = '0x' + poolResult.result.slice(-40);
 
             // Get gauge address from Voter
-            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const gaugeResult = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -820,7 +821,7 @@ export default function PortfolioPage() {
 
             // Helper to check allowance
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
-                const result = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const result = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
