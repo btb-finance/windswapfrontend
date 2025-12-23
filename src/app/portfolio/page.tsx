@@ -1087,6 +1087,21 @@ export default function PortfolioPage() {
                                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">CL</span>
                                                 </div>
 
+                                                {/* Stake to Earn Banner - for unstaked positions */}
+                                                <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 mb-2">
+                                                    <span className="text-lg">💰</span>
+                                                    <div className="flex-1">
+                                                        <div className="text-xs font-medium text-yellow-400">Not earning rewards</div>
+                                                        <div className="text-[10px] text-gray-400">Stake this position to earn WIND emissions</div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleStakePosition(pos)}
+                                                        disabled={actionLoading}
+                                                        className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-yellow-500 text-black hover:bg-yellow-400 transition disabled:opacity-50"
+                                                    >
+                                                        Stake Now
+                                                    </button>
+                                                </div>
                                                 {/* Token Balances */}
                                                 {(() => {
                                                     const currentPoolTick = positionTicks[pos.tokenId.toString()];
