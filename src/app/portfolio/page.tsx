@@ -77,9 +77,11 @@ const CL_GAUGE_ABI = [
 
 interface VeNFT {
     tokenId: bigint;
-    lockedAmount: bigint;
-    lockEnd: bigint;
+    amount: bigint;          // locked amount
+    end: bigint;             // lock end timestamp
+    isPermanent: boolean;    // permanent lock flag
     votingPower: bigint;
+    claimable: bigint;       // claimable rebases
 }
 
 interface StakedPosition {
@@ -392,7 +394,7 @@ export default function PortfolioPage() {
     // Use refetchStaked from usePoolData to refresh staked positions if needed.
 
     // Calculate totals
-    const totalLockedYaka = veNFTs.reduce((sum, nft) => sum + nft.lockedAmount, BigInt(0));
+    const totalLockedYaka = veNFTs.reduce((sum, nft) => sum + nft.amount, BigInt(0));
     const totalVotingPower = veNFTs.reduce((sum, nft) => sum + nft.votingPower, BigInt(0));
     const totalPendingRewards = stakedPositions.reduce((sum, pos) => sum + pos.pendingRewards, BigInt(0));
     const totalUncollectedFees = clPositions.reduce((sum, pos) => sum + pos.tokensOwed0 + pos.tokensOwed1, BigInt(0));
@@ -1115,28 +1117,32 @@ export default function PortfolioPage() {
                         ) : (
                             <div className="space-y-2">
                                 {veNFTs.map((nft, i) => {
-                                    const lockEndDate = new Date(Number(nft.lockEnd) * 1000);
-                                    const isPermanent = Number(nft.lockEnd) === 0 || Number(nft.lockEnd) > Date.now() / 1000 + 3600 * 24 * 365 * 3;
+                                    const lockEndDate = new Date(Number(nft.end) * 1000);
+                                    const isExpired = !nft.isPermanent && Number(nft.end) < Date.now() / 1000;
                                     return (
                                         <div key={i} className="p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="font-semibold text-sm">veNFT #{nft.tokenId.toString()}</div>
-                                                {isPermanent && (
+                                                {nft.isPermanent && (
                                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">Permanent</span>
                                                 )}
                                             </div>
                                             <div className="flex items-center justify-between text-xs">
                                                 <div>
                                                     <span className="text-gray-400">Locked: </span>
-                                                    <span className="font-medium">{parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} WIND</span>
+                                                    <span className="font-medium">{parseFloat(formatUnits(nft.amount, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} WIND</span>
                                                 </div>
                                                 <div className="text-primary font-medium">
                                                     {parseFloat(formatUnits(nft.votingPower, 18)).toFixed(0)} veWIND
                                                 </div>
                                             </div>
-                                            {!isPermanent && (
+                                            {!nft.isPermanent && (
                                                 <div className="text-[10px] text-gray-400 mt-1">
-                                                    Unlocks {lockEndDate.toLocaleDateString()}
+                                                    {isExpired ? (
+                                                        <span className="text-yellow-400">🔓 Unlocked - go to Vote page to withdraw</span>
+                                                    ) : (
+                                                        <>Unlocks {lockEndDate.toLocaleDateString()}</>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

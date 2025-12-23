@@ -72,9 +72,11 @@ export interface StakedPosition {
 
 export interface VeNFT {
     tokenId: bigint;
-    lockedAmount: bigint;
-    lockEnd: bigint;
+    amount: bigint;          // locked amount (renamed from lockedAmount for consistency)
+    end: bigint;             // lock end timestamp
+    isPermanent: boolean;    // permanent lock flag
     votingPower: bigint;
+    claimable: bigint;       // claimable rebases
 }
 
 interface PoolDataContextType {
@@ -977,13 +979,29 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     })
                 }).then(r => r.json());
 
+                // Get claimable rebases - claimable(uint256) selector 0xd1d58b25
+                const claimableResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: V2_CONTRACTS.RewardsDistributor,
+                            data: `0xd1d58b25${tokenId.toString(16).padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
                 if (lockedResult.result) {
                     const data = lockedResult.result.slice(2);
-                    const lockedAmount = BigInt('0x' + data.slice(0, 64));
-                    const lockEnd = BigInt('0x' + data.slice(64, 128));
+                    const amount = BigInt('0x' + data.slice(0, 64));
+                    const end = BigInt('0x' + data.slice(64, 128));
+                    const isPermanent = (data.slice(128, 192) || '0') !== '0'.repeat(64);
                     const votingPower = vpResult.result ? BigInt(vpResult.result) : BigInt(0);
+                    const claimable = claimableResult.result ? BigInt(claimableResult.result) : BigInt(0);
 
-                    nfts.push({ tokenId, lockedAmount, lockEnd, votingPower });
+                    nfts.push({ tokenId, amount, end, isPermanent, votingPower, claimable });
                 }
             }
         } catch (err) {
