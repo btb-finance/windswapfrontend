@@ -63,12 +63,15 @@ export function useCLPositions() {
             }
 
             const results = await Promise.all(positionPromises);
-            const validPositions = results.filter((p): p is CLPosition => p !== null);
+            // Filter out null positions AND positions with 0 liquidity (dead/empty positions)
+            const validPositions = results.filter((p): p is CLPosition =>
+                p !== null && p.liquidity > BigInt(0)
+            );
             setPositions(validPositions);
 
             // If we didn't get all positions, retry missing ones after a delay
             if (validPositions.length < count) {
-                console.log(`[usePositions] Got ${validPositions.length}/${count} positions, retrying missing...`);
+                console.log(`[usePositions] Got ${validPositions.length}/${count} positions (some may have 0 liquidity), retrying missing...`);
                 const fetchedIds = new Set(validPositions.map(p => p.tokenId.toString()));
 
                 // Retry after 3 seconds
@@ -78,8 +81,9 @@ export function useCLPositions() {
                         retryPromises.push(fetchPositionByIndex(address, i));
                     }
                     const retryResults = await Promise.all(retryPromises);
+                    // Also filter for liquidity > 0 on retry
                     const newPositions = retryResults.filter((p): p is CLPosition =>
-                        p !== null && !fetchedIds.has(p.tokenId.toString())
+                        p !== null && p.liquidity > BigInt(0) && !fetchedIds.has(p.tokenId.toString())
                     );
                     if (newPositions.length > 0) {
                         console.log(`[usePositions] ✅ Recovered ${newPositions.length} more positions`);
@@ -187,6 +191,15 @@ async function fetchPositionByIndex(owner: string, index: number, retries = 3): 
             }
 
             const decoded = decodePositionResult(positionResult.result);
+
+            // Skip collect() simulation for positions with 0 liquidity (dead positions)
+            // These won't have any fees and we'll filter them out anyway
+            if (decoded.liquidity === BigInt(0)) {
+                return {
+                    tokenId,
+                    ...decoded,
+                };
+            }
 
             // 3. Simulate collect() to get REAL uncollected fees
             // The positions() call only returns tokensOwed that were credited at last interaction,
