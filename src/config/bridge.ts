@@ -21,7 +21,7 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
         symbol: 'cbBTC',
         name: 'Coinbase Wrapped BTC',
         decimals: 8,
-        logoURI: 'https://assets.coingecko.com/coins/images/40143/standard/cbBTC.jpg',
+        logoURI: '/logo/cbbtc.png',
         base: {
             collateral: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
             warpRoute: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
@@ -35,7 +35,7 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
         symbol: 'cbADA',
         name: 'Coinbase Wrapped ADA',
         decimals: 6,
-        logoURI: 'https://assets.coingecko.com/coins/images/975/standard/cardano.png',
+        logoURI: '/logo/cbada_32.png',
         base: {
             collateral: '0xcbADA732173e39521CDBE8bf59a6Dc85A9fc7b8c',
             warpRoute: '0x7fFccBA2804Eaa808B0CC6aDd250b17505154114',
@@ -49,7 +49,7 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
         symbol: 'SOL',
         name: 'Solana',
         decimals: 9,
-        logoURI: 'https://assets.coingecko.com/coins/images/4128/standard/solana.png',
+        logoURI: '/logo/solana_64.png',
         base: {
             collateral: '0x311935Cd80B76769bF2ecC9D8Ab7635b2139cf82',
             warpRoute: '0x6EE42B185fD26f673Ca5A10d88AdC4a584e2F008',
@@ -63,7 +63,7 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
         symbol: 'cbXRP',
         name: 'Coinbase Wrapped XRP',
         decimals: 6,
-        logoURI: 'https://assets.coingecko.com/coins/images/44/standard/xrp-symbol-white-128.png',
+        logoURI: '/logo/cbxrp_32.png',
         base: {
             collateral: '0xcb585250f852C6c6bf90434AB21A00f02833a4af',
             warpRoute: '0xda78C9FB120cbDcB9B00b39e3eA904466966D243',
@@ -77,7 +77,7 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
         symbol: 'uSUI',
         name: 'Sui (Universal)',
         decimals: 18,
-        logoURI: 'https://assets.coingecko.com/coins/images/26375/standard/sui_asset.jpeg',
+        logoURI: '/logo/usui_32.png',
         base: {
             collateral: '0xb0505e5a99abd03d94a1169e638B78EDfEd26ea4',
             warpRoute: '0x94176F99F6E46fE36687dBd072B7aFAf8465bDa6',
@@ -91,7 +91,7 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
         symbol: 'LINK',
         name: 'ChainLink Token',
         decimals: 18,
-        logoURI: 'https://assets.coingecko.com/coins/images/877/standard/chainlink-new-logo.png',
+        logoURI: '/logo/chainlink_ofc_32.svg',
         base: {
             collateral: '0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196',
             warpRoute: '0x5a8e5d7CC5C4685c948a88356e4dEF833e495E3D',
@@ -110,7 +110,7 @@ export const BRIDGE_CHAINS = {
         rpcUrl: 'https://mainnet.base.org',
         hyperlaneMailbox: '0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D',
         explorer: 'https://basescan.org',
-        logoURI: '/logo/base.png',
+        logoURI: '/logo/base.svg',
         nativeCurrency: 'ETH',
     },
     sei: {

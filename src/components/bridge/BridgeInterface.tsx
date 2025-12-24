@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { useBridge } from '@/hooks/useBridge';
 
@@ -58,230 +59,212 @@ export function BridgeInterface() {
     const canBridge = isConnected && amount && parseFloat(amount) > 0 && !isInsufficientBalance;
 
     return (
-        <div className="max-w-md mx-auto">
-            {/* Header */}
-            <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold gradient-text mb-2">Bridge</h1>
-                <p className="text-sm text-[var(--text-secondary)]">
-                    Transfer tokens between Base and Sei via Hyperlane
-                </p>
+        <div className="swap-card max-w-md mx-auto">
+            {/* Header - Compact like Swap */}
+            <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base sm:text-lg font-bold">Bridge</h2>
+                <span className="px-1.5 py-0.5 text-[10px] rounded bg-primary/20 text-primary">
+                    via Hyperlane
+                </span>
             </div>
 
-            {/* Bridge Card */}
-            <div className="swap-card">
-                {/* Source Chain */}
-                <div className="token-input-row mb-2">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs text-[var(--text-muted)]">From</span>
-                        <div className="flex items-center gap-2">
-                            <img
-                                src={sourceChain.logoURI}
-                                alt={sourceChain.name}
-                                className="w-5 h-5 rounded-full"
-                            />
-                            <span className="text-sm font-medium">{sourceChain.name}</span>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <input
-                            type="text"
-                            value={amount}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                if (/^\d*\.?\d*$/.test(val)) {
-                                    setAmount(val);
-                                }
-                            }}
-                            placeholder="0.0"
-                            className="flex-1 bg-transparent text-xl font-medium outline-none"
-                        />
-                        <button
-                            onClick={handleMax}
-                            className="text-xs text-[var(--primary)] hover:text-[var(--primary-hover)] font-medium"
-                        >
-                            MAX
-                        </button>
-                        {/* Token Selector */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowTokenSelect(!showTokenSelect)}
-                                className="token-select"
-                            >
-                                <img
-                                    src={selectedToken.logoURI}
-                                    alt={selectedToken.symbol}
-                                    className="w-6 h-6 rounded-full"
-                                />
-                                <span>{selectedToken.symbol}</span>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                            {showTokenSelect && (
-                                <div className="absolute right-0 top-full mt-2 bg-[var(--bg-tertiary)] border border-[var(--glass-border)] rounded-xl p-2 min-w-[180px] z-50">
-                                    {availableTokens.map((token) => (
-                                        <button
-                                            key={token.symbol}
-                                            onClick={() => {
-                                                setSelectedToken(token);
-                                                setShowTokenSelect(false);
-                                                setAmount('');
-                                            }}
-                                            className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--glass-hover)] transition ${token.symbol === selectedToken.symbol ? 'bg-[var(--glass-bg)]' : ''
-                                                }`}
-                                        >
-                                            <img
-                                                src={token.logoURI}
-                                                alt={token.symbol}
-                                                className="w-8 h-8 rounded-full"
-                                            />
-                                            <div className="text-left">
-                                                <div className="font-medium">{token.symbol}</div>
-                                                <div className="text-xs text-[var(--text-muted)]">{token.name}</div>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-2 text-xs text-[var(--text-muted)]">
-                        <span>Balance: {parseFloat(balance).toFixed(selectedToken.decimals > 6 ? 8 : 6)} {selectedToken.symbol}</span>
-                        {isInsufficientBalance && (
-                            <span className="text-[var(--error)]">Insufficient balance</span>
-                        )}
-                    </div>
+            {/* Error Display - Compact */}
+            {error && (
+                <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                    {error.includes('User rejected') || error.includes('user rejected')
+                        ? 'Transaction cancelled'
+                        : error.length > 50
+                            ? error.slice(0, 50) + '...'
+                            : error}
                 </div>
+            )}
 
-                {/* Switch Button */}
-                <div className="flex justify-center -my-3 z-10 relative">
-                    <button
-                        onClick={handleDirectionSwitch}
-                        className="swap-arrow-btn"
+            {/* Success Display */}
+            {showSuccess && txHash && (
+                <div className="mb-3 p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-xs">
+                    <div className="font-medium mb-1">✓ Bridge submitted!</div>
+                    <a
+                        href={`https://explorer.hyperlane.xyz/?search=${txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
                     >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                        </svg>
-                    </button>
+                        Track on Hyperlane →
+                    </a>
                 </div>
+            )}
 
-                {/* Destination Chain */}
-                <div className="token-input-row mt-2">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs text-[var(--text-muted)]">To</span>
-                        <div className="flex items-center gap-2">
-                            <img
-                                src={destChain.logoURI}
-                                alt={destChain.name}
-                                className="w-5 h-5 rounded-full"
-                            />
-                            <span className="text-sm font-medium">{destChain.name}</span>
-                        </div>
+            {/* Source Chain - Token Input */}
+            <div className="token-input-row">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-400">You pay</span>
+                    <div className="flex items-center gap-2">
+                        <img
+                            src={sourceChain.logoURI}
+                            alt={sourceChain.name}
+                            className="w-4 h-4 rounded-full"
+                        />
+                        <span className="text-sm text-gray-400">{sourceChain.name}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <span className="flex-1 text-xl font-medium text-[var(--text-secondary)]">
-                            {amount || '0.0'}
-                        </span>
-                        <div className="token-select opacity-60">
+                </div>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        value={amount}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            if (/^\d*\.?\d*$/.test(val)) {
+                                setAmount(val);
+                            }
+                        }}
+                        placeholder="0.0"
+                        className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600"
+                    />
+                    <motion.button
+                        onClick={() => setShowTokenSelect(!showTokenSelect)}
+                        className="token-select"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                    >
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center">
                             <img
                                 src={selectedToken.logoURI}
                                 alt={selectedToken.symbol}
-                                className="w-6 h-6 rounded-full"
+                                className="w-5 h-5 rounded-full"
                             />
-                            <span>{selectedToken.symbol}</span>
                         </div>
-                    </div>
-                    <div className="mt-2 text-xs text-[var(--text-muted)]">
-                        You will receive: {amount || '0'} {selectedToken.symbol}
-                    </div>
+                        <span>{selectedToken.symbol}</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </motion.button>
                 </div>
-
-                {/* Gas Info */}
-                <div className="mt-4 p-3 bg-[var(--bg-secondary)] rounded-xl">
-                    <div className="flex justify-between items-center text-sm">
-                        <span className="text-[var(--text-muted)]">Interchain Gas Fee</span>
-                        <span className="font-medium">
-                            ~{parseFloat(gasQuote).toFixed(6)} {sourceChain.nativeCurrency}
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm mt-1">
-                        <span className="text-[var(--text-muted)]">Estimated Time</span>
-                        <span className="font-medium">~1-5 minutes</span>
-                    </div>
-                </div>
-
-                {/* Error Display */}
-                {error && (
-                    <div className="mt-4 p-3 bg-[var(--error)]/10 border border-[var(--error)]/20 rounded-xl text-sm text-[var(--error)]">
-                        {error}
-                    </div>
-                )}
-
-                {/* Success Display */}
-                {showSuccess && txHash && (
-                    <div className="mt-4 p-3 bg-[var(--success)]/10 border border-[var(--success)]/20 rounded-xl">
-                        <div className="text-sm text-[var(--success)] font-medium mb-2">
-                            ✓ Bridge transaction submitted!
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <a
-                                href={`https://explorer.hyperlane.xyz/?search=${txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1"
-                            >
-                                <span>🔗</span> Track on Hyperlane Explorer →
-                            </a>
-                            <a
-                                href={`${sourceChain.explorer}/tx/${txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-[var(--text-muted)] hover:underline"
-                            >
-                                View on {sourceChain.name} Explorer →
-                            </a>
-                        </div>
-                    </div>
-                )}
-
-                {/* Bridge Button */}
-                <button
-                    onClick={handleBridge}
-                    disabled={!canBridge || isApproving || isBridging || isLoading}
-                    className="btn-primary w-full mt-4 py-4 text-lg font-semibold"
-                >
-                    {!isConnected
-                        ? 'Connect Wallet'
-                        : isLoading
-                            ? 'Loading...'
-                            : isApproving
-                                ? 'Approving...'
-                                : isBridging
-                                    ? 'Bridging...'
-                                    : isInsufficientBalance
-                                        ? 'Insufficient Balance'
-                                        : needsApproval
-                                            ? `Approve ${selectedToken.symbol}`
-                                            : `Bridge to ${destChain.name}`}
-                </button>
-
-                {/* Powered By */}
-                <div className="mt-4 text-center text-xs text-[var(--text-muted)]">
-                    Powered by <a href="https://hyperlane.xyz" target="_blank" rel="noopener noreferrer" className="text-[var(--primary)] hover:underline">Hyperlane</a>
+                <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm text-gray-400">
+                        Balance: {parseFloat(balance).toFixed(selectedToken.decimals > 6 ? 8 : 6)}
+                        <button
+                            onClick={handleMax}
+                            className="ml-2 text-primary hover:text-primary/80 font-medium"
+                        >
+                            MAX
+                        </button>
+                    </span>
+                    {isInsufficientBalance && (
+                        <span className="text-xs text-red-400">Insufficient balance</span>
+                    )}
                 </div>
             </div>
 
-            {/* Info Box */}
-            <div className="mt-6 info-card">
-                <div className="flex items-start gap-3">
-                    <span className="text-xl">🔐</span>
-                    <div>
-                        <div className="font-medium text-sm mb-1">Trustless Bridge</div>
-                        <div className="text-xs text-[var(--text-secondary)]">
-                            This bridge uses Hyperlane&apos;s permissionless messaging. Ownership has been renounced - no one can modify the bridge.
-                        </div>
+            {/* Token Dropdown */}
+            {showTokenSelect && (
+                <div className="mt-2 bg-[var(--bg-tertiary)] border border-[var(--glass-border)] rounded-xl p-2 z-50">
+                    {availableTokens.map((token) => (
+                        <button
+                            key={token.symbol}
+                            onClick={() => {
+                                setSelectedToken(token);
+                                setShowTokenSelect(false);
+                                setAmount('');
+                            }}
+                            className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--glass-hover)] transition ${token.symbol === selectedToken.symbol ? 'bg-[var(--glass-bg)]' : ''
+                                }`}
+                        >
+                            <img
+                                src={token.logoURI}
+                                alt={token.symbol}
+                                className="w-8 h-8 rounded-full"
+                            />
+                            <div className="text-left">
+                                <div className="font-medium">{token.symbol}</div>
+                                <div className="text-xs text-gray-500">{token.name}</div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Swap Direction Button */}
+            <div className="relative h-0 flex items-center justify-center z-10">
+                <motion.button
+                    onClick={handleDirectionSwitch}
+                    className="swap-arrow-btn"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                    </svg>
+                </motion.button>
+            </div>
+
+            {/* Destination Chain - Token Output */}
+            <div className="token-input-row">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-400">You receive</span>
+                    <div className="flex items-center gap-2">
+                        <img
+                            src={destChain.logoURI}
+                            alt={destChain.name}
+                            className="w-4 h-4 rounded-full"
+                        />
+                        <span className="text-sm text-gray-400">{destChain.name}</span>
                     </div>
                 </div>
+                <div className="flex items-center gap-2">
+                    <span className="flex-1 text-xl md:text-2xl font-medium text-gray-500">
+                        {amount || '0.0'}
+                    </span>
+                    <div className="token-select opacity-60">
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center">
+                            <img
+                                src={selectedToken.logoURI}
+                                alt={selectedToken.symbol}
+                                className="w-5 h-5 rounded-full"
+                            />
+                        </div>
+                        <span>{selectedToken.symbol}</span>
+                    </div>
+                </div>
+                <div className="mt-2 text-sm text-gray-500">
+                    1:1 bridge rate (no slippage)
+                </div>
+            </div>
+
+            {/* Rate Info - Compact */}
+            <div className="mt-3 p-2 rounded-lg bg-white/5 text-xs space-y-1">
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Interchain Gas</span>
+                    <span>~{parseFloat(gasQuote).toFixed(6)} {sourceChain.nativeCurrency}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Est. Time</span>
+                    <span>~1-5 minutes</span>
+                </div>
+            </div>
+
+            {/* Bridge Button */}
+            <button
+                onClick={handleBridge}
+                disabled={!canBridge || isApproving || isBridging || isLoading}
+                className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
+            >
+                {!isConnected
+                    ? 'Connect Wallet'
+                    : isLoading
+                        ? 'Loading...'
+                        : isApproving
+                            ? 'Approving...'
+                            : isBridging
+                                ? 'Bridging...'
+                                : isInsufficientBalance
+                                    ? 'Insufficient Balance'
+                                    : needsApproval
+                                        ? `Approve ${selectedToken.symbol}`
+                                        : `Bridge to ${destChain.name}`}
+            </button>
+
+            <div className="mt-3 text-center text-[10px] text-gray-500">
+                Powered by <a href="https://hyperlane.xyz" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Hyperlane</a>
             </div>
         </div>
     );
