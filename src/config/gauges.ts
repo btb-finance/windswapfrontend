@@ -114,6 +114,17 @@ export const GAUGE_LIST: GaugeConfig[] = [
         tickSpacing: 200,
         isAlive: true,
     },
+    {
+        pool: '0xAF96Ad614322c6fc93295a639431ff5fe28d0582',
+        gauge: '', // No gauge created yet
+        token0: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+        token1: '0x0555E30da8f98308EdB960aa94C0Db47230d2B9c',
+        symbol0: 'cbBTC',
+        symbol1: 'WBTC',
+        type: 'CL',
+        tickSpacing: 50, // 0.02% fee
+        isAlive: true,
+    },
 
     // ============================================
     // ETH PAIRS
