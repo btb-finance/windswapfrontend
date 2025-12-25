@@ -2,17 +2,18 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useReadContract, useWriteContract } from 'wagmi';
-import { parseUnits, formatUnits, Address, maxUint256 } from 'viem';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { parseUnits, formatUnits, Address, maxUint256, encodeFunctionData } from 'viem';
 import { Token, SEI, USDC, WSEI } from '@/config/tokens';
-import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
-import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
+import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';
+import { ROUTER_ABI, ERC20_ABI, SWAP_ROUTER_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
 import { SwapSettings } from './SwapSettings';
 import { useSwap } from '@/hooks/useSwap';
 import { useSwapV3 } from '@/hooks/useSwapV3';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useMixedRouteQuoter } from '@/hooks/useMixedRouteQuoter';
+import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 
 interface Route {
     from: Address;
@@ -52,16 +53,18 @@ export function SwapInterface() {
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
     const [isApproving, setIsApproving] = useState(false);
+    const [routeLocked, setRouteLocked] = useState(false); // Lock route during approval/swap
 
     // Hooks
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
     const { getQuoteV3, executeSwapV3, executeMultiHopSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
     const { findBestRoute: findMultiHopRoute, getIntermediateToken } = useMixedRouteQuoter();
-    const { formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
+    const { raw: rawBalanceIn, formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
     const { writeContractAsync } = useWriteContract();
+    const { executeBatch, encodeApproveCall, encodeContractCall, isLoading: isBatching } = useBatchTransactions();
 
-    const isLoading = isLoadingV2 || isLoadingV3;
+    const isLoading = isLoadingV2 || isLoadingV3 || isBatching;
     const error = errorV2 || errorV3;
 
     // Get actual token addresses (use WSEI for native SEI)
@@ -108,33 +111,150 @@ export function SwapInterface() {
         bestRoute !== null && // Only check approval when we have a route
         (currentAllowance === undefined || (currentAllowance as bigint) < amountInWei);
 
-    // Handle approve and then swap
-    const handleApprove = async () => {
-        if (!actualTokenIn || !address || !bestRoute) return;
+    // Track pending approval transaction hash
+    const [pendingApprovalHash, setPendingApprovalHash] = useState<`0x${string}` | undefined>(undefined);
 
+    // Track if we should auto-swap after approval
+    const [autoSwapAfterApproval, setAutoSwapAfterApproval] = useState(false);
+
+    // Wait for approval transaction receipt
+    const { isSuccess: approvalConfirmed } = useWaitForTransactionReceipt({
+        hash: pendingApprovalHash,
+    });
+
+    // When approval is confirmed, refetch allowances and auto-trigger swap
+    useEffect(() => {
+        if (approvalConfirmed && pendingApprovalHash) {
+            // Refetch both allowances to be safe
+            refetchAllowanceV2();
+            refetchAllowanceV3();
+            setPendingApprovalHash(undefined);
+            setIsApproving(false);
+
+            // Auto-trigger swap if flag is set
+            if (autoSwapAfterApproval) {
+                setAutoSwapAfterApproval(false);
+                // Small delay to ensure allowance is updated
+                setTimeout(() => {
+                    // Trigger swap - the handleSwap will be called via the swapTrigger state
+                    setSwapTrigger(prev => prev + 1);
+                }, 100);
+            }
+        }
+    }, [approvalConfirmed, pendingApprovalHash, refetchAllowanceV2, refetchAllowanceV3, autoSwapAfterApproval]);
+
+    // Swap trigger state - increment to trigger swap
+    const [swapTrigger, setSwapTrigger] = useState(0);
+
+    // Handle approve and then auto-swap (tries EIP-5792 batch first)
+    const handleApproveAndSwap = async () => {
+        if (!actualTokenIn || !actualTokenOut || !address || !bestRoute) return;
+
+        setRouteLocked(true);
         setIsApproving(true);
+
+        // Calculate amounts for swap
+        const amountOutMinWei = actualTokenOut
+            ? parseUnits((parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6), actualTokenOut.decimals)
+            : BigInt(0);
+        const deadlineTimestamp = BigInt(Math.floor(Date.now() / 1000) + deadline * 60);
+
         try {
-            await writeContractAsync({
+            // Build the swap call based on route type
+            let swapCall;
+
+            if (bestRoute.type === 'v2') {
+                // V2 swap
+                const route = [{
+                    from: (tokenIn?.isNative ? COMMON.WSEI : actualTokenIn.address) as Address,
+                    to: (tokenOut?.isNative ? COMMON.WSEI : actualTokenOut.address) as Address,
+                    stable: bestRoute.stable || false,
+                    factory: V2_CONTRACTS.PoolFactory as Address,
+                }];
+
+                if (tokenIn?.isNative) {
+                    // Native SEI to token - no approval needed, can't batch
+                    setIsApproving(false);
+                    setAutoSwapAfterApproval(false);
+                    await handleSwap();
+                    return;
+                }
+
+                swapCall = encodeContractCall(
+                    V2_CONTRACTS.Router as Address,
+                    ROUTER_ABI,
+                    tokenOut?.isNative ? 'swapExactTokensForETH' : 'swapExactTokensForTokens',
+                    [amountInWei, amountOutMinWei, route, address, deadlineTimestamp],
+                );
+
+            } else if (bestRoute.type === 'v3' && bestRoute.tickSpacing) {
+                // V3 swap
+                swapCall = encodeContractCall(
+                    CL_CONTRACTS.SwapRouter as Address,
+                    SWAP_ROUTER_ABI,
+                    'exactInputSingle',
+                    [{
+                        tokenIn: actualTokenIn.address as Address,
+                        tokenOut: actualTokenOut.address as Address,
+                        tickSpacing: bestRoute.tickSpacing,
+                        recipient: address,
+                        deadline: deadlineTimestamp,
+                        amountIn: amountInWei,
+                        amountOutMinimum: amountOutMinWei,
+                        sqrtPriceLimitX96: BigInt(0),
+                    }],
+                    tokenIn?.isNative ? amountInWei : undefined,
+                );
+            } else {
+                // Multi-hop or unsupported - fall back to sequential
+                setAutoSwapAfterApproval(true);
+                const hash = await writeContractAsync({
+                    address: actualTokenIn.address as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [routerToApprove as Address, amountInWei],
+                });
+                setPendingApprovalHash(hash);
+                return;
+            }
+
+            // Try EIP-5792 batch (approve + swap in one popup)
+            const approveCall = encodeApproveCall(
+                actualTokenIn.address as Address,
+                routerToApprove as Address,
+                amountInWei
+            );
+
+            const batchResult = await executeBatch([approveCall, swapCall]);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                // Single popup worked!
+                setTxHash(batchResult.hash || null);
+                setAmountIn('');
+                setAmountOut('');
+                setBestRoute(null);
+                setIsApproving(false);
+                setRouteLocked(false);
+                return;
+            }
+
+            // Batch not supported - fall back to sequential approach
+            console.log('Batch not available, using sequential approve + swap');
+            setAutoSwapAfterApproval(true);
+            const hash = await writeContractAsync({
                 address: actualTokenIn.address as Address,
                 abi: ERC20_ABI,
                 functionName: 'approve',
-                args: [routerToApprove as Address, maxUint256],
+                args: [routerToApprove as Address, amountInWei],
             });
-
-            // Wait a bit for the chain to process, then refetch the correct allowance
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Refetch the appropriate allowance based on route type
-            if (bestRoute.type === 'v2') {
-                await refetchAllowanceV2();
-            } else {
-                await refetchAllowanceV3();
-            }
+            setPendingApprovalHash(hash);
 
         } catch (err) {
-            console.error('Approve error:', err);
+            console.error('Approve/swap error:', err);
+            setIsApproving(false);
+            setRouteLocked(false);
+            setAutoSwapAfterApproval(false);
         }
-        setIsApproving(false);
     };
 
     // ===== V2 Volatile Quote (using wagmi hook) =====
@@ -180,6 +300,9 @@ export function SwapInterface() {
     // ===== Find Best Route (V2 + V3) =====
     useEffect(() => {
         const findBestRoute = async () => {
+            // Don't update route while user is approving/swapping
+            if (routeLocked) return;
+
             if (!tokenIn || !tokenOut || !amountIn || parseFloat(amountIn) <= 0 || !actualTokenOut) {
                 setBestRoute(null);
                 setAmountOut('');
@@ -265,7 +388,7 @@ export function SwapInterface() {
 
         const debounce = setTimeout(findBestRoute, 300);
         return () => clearTimeout(debounce);
-    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute]);
+    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute, routeLocked]);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
@@ -297,6 +420,8 @@ export function SwapInterface() {
 
     const handleSwap = async () => {
         if (!canSwap || !tokenIn || !tokenOut || !bestRoute) return;
+
+        setRouteLocked(true); // Lock route during swap
 
         let result;
         if (bestRoute.type === 'v2') {
@@ -340,7 +465,16 @@ export function SwapInterface() {
             setAmountOut('');
             setBestRoute(null);
         }
+        setRouteLocked(false); // Unlock after swap completes or fails
     };
+
+    // Auto-trigger swap when swapTrigger increments (after approval)
+    useEffect(() => {
+        if (swapTrigger > 0) {
+            handleSwap();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [swapTrigger]);
 
     return (
         <div className="swap-card max-w-md mx-auto">
@@ -397,6 +531,7 @@ export function SwapInterface() {
                 token={tokenIn}
                 amount={amountIn}
                 balance={formattedBalanceIn}
+                rawBalance={rawBalanceIn}
                 onAmountChange={setAmountIn}
                 onTokenSelect={setTokenIn}
                 showMaxButton
@@ -444,11 +579,11 @@ export function SwapInterface() {
             {/* Approve/Swap Button */}
             {needsApproval && canSwap ? (
                 <button
-                    onClick={handleApprove}
-                    disabled={isApproving}
+                    onClick={handleApproveAndSwap}
+                    disabled={isApproving || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
                 >
-                    {isApproving ? 'Approving...' : `Approve ${tokenIn?.symbol}`}
+                    {isApproving ? 'Approving...' : isLoading ? 'Swapping...' : `Approve & Swap`}
                 </button>
             ) : (
                 <button
