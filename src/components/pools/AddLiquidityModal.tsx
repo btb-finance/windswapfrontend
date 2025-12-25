@@ -924,8 +924,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {(() => {
                                                         const lower = parseFloat(priceLower || '0');
                                                         const upper = parseFloat(priceUpper || String(currentPrice * 2));
-                                                        const minRange = currentPrice * 0.1;
-                                                        const maxRange = currentPrice * 3;
+                                                        const minRange = currentPrice * 0.5;
+                                                        const maxRange = currentPrice * 2;
                                                         const leftPercent = Math.max(0, Math.min(100, ((lower - minRange) / (maxRange - minRange)) * 100));
                                                         const rightPercent = Math.max(0, Math.min(100, ((upper - minRange) / (maxRange - minRange)) * 100));
                                                         return (
@@ -938,8 +938,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                                                     {/* Current price marker */}
                                                     {(() => {
-                                                        const minRange = currentPrice * 0.1;
-                                                        const maxRange = currentPrice * 3;
+                                                        const minRange = currentPrice * 0.5;
+                                                        const maxRange = currentPrice * 2;
                                                         const currentPercent = Math.max(0, Math.min(100, ((currentPrice - minRange) / (maxRange - minRange)) * 100));
                                                         return (
                                                             <div
@@ -956,8 +956,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {/* Lower bound thumb (draggable) */}
                                                     <input
                                                         type="range"
-                                                        min={currentPrice * 0.1}
-                                                        max={currentPrice * 3}
+                                                        min={currentPrice * 0.5}
+                                                        max={currentPrice * 2}
                                                         step={currentPrice * 0.01}
                                                         value={parseFloat(priceLower || String(currentPrice * 0.5))}
                                                         onChange={(e) => setPriceLower(parseFloat(e.target.value).toFixed(6))}
@@ -967,8 +967,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {/* Upper bound thumb (draggable) */}
                                                     <input
                                                         type="range"
-                                                        min={currentPrice * 0.1}
-                                                        max={currentPrice * 3}
+                                                        min={currentPrice * 0.5}
+                                                        max={currentPrice * 2}
                                                         step={currentPrice * 0.01}
                                                         value={parseFloat(priceUpper || String(currentPrice * 1.5))}
                                                         onChange={(e) => setPriceUpper(parseFloat(e.target.value).toFixed(6))}
@@ -1004,11 +1004,15 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     <div className="text-center">
                                                         <div className="flex items-center justify-center gap-2 mb-1">
                                                             <span className="text-xs text-green-400">Max Price</span>
-                                                            {priceUpper && currentPrice && (
-                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
-                                                                    +{(((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100).toFixed(1)}%
-                                                                </span>
-                                                            )}
+                                                            {priceUpper && currentPrice && (() => {
+                                                                const pct = ((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100;
+                                                                const isPositive = pct >= 0;
+                                                                return (
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isPositive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                                        {isPositive ? '+' : ''}{pct.toFixed(1)}%
+                                                                    </span>
+                                                                );
+                                                            })()}
                                                         </div>
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
