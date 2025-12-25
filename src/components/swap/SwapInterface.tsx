@@ -112,12 +112,15 @@ export function SwapInterface() {
     // Track pending approval transaction hash
     const [pendingApprovalHash, setPendingApprovalHash] = useState<`0x${string}` | undefined>(undefined);
 
+    // Track if we should auto-swap after approval
+    const [autoSwapAfterApproval, setAutoSwapAfterApproval] = useState(false);
+
     // Wait for approval transaction receipt
     const { isSuccess: approvalConfirmed } = useWaitForTransactionReceipt({
         hash: pendingApprovalHash,
     });
 
-    // When approval is confirmed, refetch allowances and clear pending hash
+    // When approval is confirmed, refetch allowances and auto-trigger swap
     useEffect(() => {
         if (approvalConfirmed && pendingApprovalHash) {
             // Refetch both allowances to be safe
@@ -125,16 +128,30 @@ export function SwapInterface() {
             refetchAllowanceV3();
             setPendingApprovalHash(undefined);
             setIsApproving(false);
-            // Keep route locked - user will click swap next, no need to re-fetch route
-        }
-    }, [approvalConfirmed, pendingApprovalHash, refetchAllowanceV2, refetchAllowanceV3]);
 
-    // Handle approve and then swap
-    const handleApprove = async () => {
+            // Auto-trigger swap if flag is set
+            if (autoSwapAfterApproval) {
+                setAutoSwapAfterApproval(false);
+                // Small delay to ensure allowance is updated
+                setTimeout(() => {
+                    // Trigger swap - the handleSwap will be called via the swapTrigger state
+                    setSwapTrigger(prev => prev + 1);
+                }, 100);
+            }
+        }
+    }, [approvalConfirmed, pendingApprovalHash, refetchAllowanceV2, refetchAllowanceV3, autoSwapAfterApproval]);
+
+    // Swap trigger state - increment to trigger swap
+    const [swapTrigger, setSwapTrigger] = useState(0);
+
+    // Handle approve and then auto-swap
+    const handleApproveAndSwap = async () => {
         if (!actualTokenIn || !address || !bestRoute) return;
 
         setRouteLocked(true); // Lock route to prevent changes
         setIsApproving(true);
+        setAutoSwapAfterApproval(true); // Will auto-trigger swap after approval
+
         try {
             const hash = await writeContractAsync({
                 address: actualTokenIn.address as Address,
@@ -150,6 +167,7 @@ export function SwapInterface() {
             console.error('Approve error:', err);
             setIsApproving(false);
             setRouteLocked(false); // Unlock on error
+            setAutoSwapAfterApproval(false);
         }
     };
 
@@ -364,6 +382,14 @@ export function SwapInterface() {
         setRouteLocked(false); // Unlock after swap completes or fails
     };
 
+    // Auto-trigger swap when swapTrigger increments (after approval)
+    useEffect(() => {
+        if (swapTrigger > 0) {
+            handleSwap();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [swapTrigger]);
+
     return (
         <div className="swap-card max-w-md mx-auto">
             {/* Header - Compact */}
@@ -467,11 +493,11 @@ export function SwapInterface() {
             {/* Approve/Swap Button */}
             {needsApproval && canSwap ? (
                 <button
-                    onClick={handleApprove}
-                    disabled={isApproving}
+                    onClick={handleApproveAndSwap}
+                    disabled={isApproving || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
                 >
-                    {isApproving ? 'Approving...' : `Approve ${tokenIn?.symbol}`}
+                    {isApproving ? 'Approving...' : isLoading ? 'Swapping...' : `Approve & Swap`}
                 </button>
             ) : (
                 <button
