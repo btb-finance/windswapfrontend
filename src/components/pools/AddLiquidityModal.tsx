@@ -845,26 +845,31 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 const aboveToken = isAToken0 ? tokenA : tokenB; // token0
                                                 const belowToken = isAToken0 ? tokenB : tokenA; // token1
 
+                                                // Determine range based on tick spacing
+                                                // Stable pairs (tick 1, 50) = tight range (0.5%)
+                                                // Standard pairs (tick 100, 200) = medium range (2%)
+                                                // Exotic pairs (tick 2000) = wide range (10%)
+                                                const rangePercent = tickSpacing <= 50 ? 0.005 : tickSpacing <= 200 ? 0.02 : 0.10;
+                                                const rangeLabel = tickSpacing <= 50 ? '±0.5%' : tickSpacing <= 200 ? '±2%' : '±10%';
+
                                                 return (
                                                     <div className="mt-3">
                                                         <div className="text-[10px] text-gray-500 mb-1.5 flex items-center gap-1">
-                                                            <span>🎯</span> One-Sided LP (Advanced)
+                                                            <span>🎯</span> One-Sided LP ({rangeLabel} range)
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <button
                                                                 onClick={() => {
                                                                     // Set range above current price - only deposit token0
-                                                                    const lower = currentPrice * 1.0045; // +0.45% from current
-                                                                    const upper = currentPrice * 1.10;  // +10% from current
+                                                                    const lower = currentPrice * (1 + rangePercent * 0.1); // Just above current
+                                                                    const upper = currentPrice * (1 + rangePercent);      // Range based on tick
                                                                     setPriceLower(lower.toFixed(6));
                                                                     setPriceUpper(upper.toFixed(6));
                                                                     // Clear amounts - Above means deposit token0 (aboveToken)
                                                                     if (isAToken0) {
-                                                                        // A is token0, deposit A
                                                                         setAmountA('');
                                                                         setAmountB('0');
                                                                     } else {
-                                                                        // B is token0, deposit B
                                                                         setAmountA('0');
                                                                         setAmountB('');
                                                                     }
@@ -877,17 +882,15 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             <button
                                                                 onClick={() => {
                                                                     // Set range below current price - only deposit token1
-                                                                    const lower = currentPrice * 0.90;  // -10% from current
-                                                                    const upper = currentPrice * 0.9955; // -0.45% from current
+                                                                    const lower = currentPrice * (1 - rangePercent);      // Range based on tick
+                                                                    const upper = currentPrice * (1 - rangePercent * 0.1); // Just below current
                                                                     setPriceLower(lower.toFixed(6));
                                                                     setPriceUpper(upper.toFixed(6));
                                                                     // Clear amounts - Below means deposit token1 (belowToken)
                                                                     if (isAToken0) {
-                                                                        // A is token0, B is token1, deposit B
                                                                         setAmountA('0');
                                                                         setAmountB('');
                                                                     } else {
-                                                                        // B is token0, A is token1, deposit A
                                                                         setAmountA('');
                                                                         setAmountB('0');
                                                                     }
