@@ -283,6 +283,33 @@ export default function PoolsPage() {
                 </div>
             </motion.div>
 
+            {/* WIND Rewards Mining Live Banner */}
+            <motion.div
+                className="mb-4 p-3 sm:p-4 rounded-xl bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-purple-500/20 border border-cyan-500/30"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.18 }}
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <span className="text-xl sm:text-2xl">🌀</span>
+                        <div>
+                            <div className="text-sm sm:text-base font-bold text-white">
+                                WIND/WSEI Rewards Mining is Live!
+                            </div>
+                            <div className="text-[10px] sm:text-xs text-gray-300">
+                                Provide liquidity to earn WIND rewards • Higher APR than other DEXs
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                        <span className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-full bg-green-500/30 text-green-400 text-[10px] sm:text-xs font-bold animate-pulse">
+                            ● LIVE
+                        </span>
+                    </div>
+                </div>
+            </motion.div>
+
             {/* Pools Table */}
             <motion.div
                 className="glass-card overflow-hidden"
@@ -349,8 +376,19 @@ export default function PoolsPage() {
                                     )}
                                 </div>
                                 <div className="ml-4 md:ml-4 flex-1 min-w-0">
-                                    <div className="font-semibold text-sm md:text-lg truncate">
-                                        {pool.token0.symbol}/{pool.token1.symbol}
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-sm md:text-lg truncate">
+                                            {pool.token0.symbol}/{pool.token1.symbol}
+                                        </span>
+                                        {/* Mobile APR inline with pool name */}
+                                        {(() => {
+                                            const apr = getPoolAPR(pool);
+                                            if (apr !== null && apr > 0) {
+                                                const aprText = apr >= 1000 ? `${(apr / 1000).toFixed(0)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : apr >= 1 ? `${apr.toFixed(1)}%` : `${apr.toFixed(2)}%`;
+                                                return <span className="md:hidden text-xs font-bold px-2 py-1 rounded-lg bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40 shadow-[0_0_8px_rgba(34,197,94,0.3)]">🔥 APR {aprText}</span>;
+                                            }
+                                            return null;
+                                        })()}
                                     </div>
                                     <div className="flex items-center gap-1 text-[10px] md:text-xs">
                                         {pool.poolType === 'CL' && pool.tickSpacing && (
@@ -410,15 +448,8 @@ export default function PoolsPage() {
                                         <div className="text-gray-400 truncate">{pool.reserve1} {pool.token1.symbol}</div>
                                     </div>
                                 </div>
-                                {/* APR & Vol badges */}
+                                {/* Vol badge */}
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                    {(() => {
-                                        const apr = getPoolAPR(pool);
-                                        const aprText = apr !== null && apr > 0
-                                            ? apr >= 1000 ? `${(apr / 1000).toFixed(0)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : `${apr.toFixed(0)}%`
-                                            : '—';
-                                        return <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">APR {aprText}</span>;
-                                    })()}
                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Vol —</span>
                                 </div>
                                 <button
