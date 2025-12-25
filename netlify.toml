@@ -5,3 +5,18 @@
 [build.environment]
   NPM_FLAGS = "--legacy-peer-deps"
   NODE_VERSION = "20"
+
+# CORS headers for Safe Apps iframe support
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, OPTIONS"
+    Access-Control-Allow-Headers = "X-Requested-With, content-type, Authorization"
+
+# Specific headers for manifest.json
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Content-Type = "application/json"
