@@ -635,12 +635,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-green-400 font-medium">Liquidity Added!</p>
                                                 <a
-                                                    href={`https://seitrace.com/tx/${txHash}`}
+                                                    href={`https://seiscan.io/tx/${txHash}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="text-sm text-green-400/70 underline truncate block"
                                                 >
-                                                    View on SeiTrace →
+                                                    View on SeiScan →
                                                 </a>
                                             </div>
                                         </div>

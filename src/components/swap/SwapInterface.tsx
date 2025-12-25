@@ -521,7 +521,7 @@ export function SwapInterface() {
             {/* Success Display */}
             {txHash && (
                 <div className="mb-3 p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-xs">
-                    Success! <a href={`https://seitrace.com/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">View →</a>
+                    Success! <a href={`https://seiscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">View →</a>
                 </div>
             )}
 
