@@ -428,8 +428,8 @@ export default function VotePage() {
                         </svg>
                         Transaction submitted!
                     </div>
-                    <a href={`https://seitrace.com/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline text-sm">
-                        View on SeiTrace →
+                    <a href={`https://seiscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline text-sm">
+                        View on SeiScan →
                     </a>
                 </motion.div>
             )}
