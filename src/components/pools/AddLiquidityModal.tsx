@@ -362,11 +362,17 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 if (tickLower > tickUpper) {
                     [tickLower, tickUpper] = [tickUpper, tickLower];
                 }
+                // Ensure ticks are at least one tick spacing apart
+                if (tickUpper - tickLower < tickSpacing) {
+                    tickUpper = tickLower + tickSpacing;
+                }
             } else {
                 const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
                 tickLower = -maxTick;
                 tickUpper = maxTick;
             }
+
+            console.log('Tick calculation:', { tickLower, tickUpper, tickSpacing, priceLower, priceUpper });
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
@@ -846,11 +852,11 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 const belowToken = isAToken0 ? tokenB : tokenA; // token1
 
                                                 // Determine range based on tick spacing
-                                                // Stable pairs (tick 1, 50) = tight range (0.5%)
-                                                // Standard pairs (tick 100, 200) = medium range (2%)
-                                                // Exotic pairs (tick 2000) = wide range (10%)
-                                                const rangePercent = tickSpacing <= 50 ? 0.005 : tickSpacing <= 200 ? 0.02 : 0.10;
-                                                const rangeLabel = tickSpacing <= 50 ? '±0.5%' : tickSpacing <= 200 ? '±2%' : '±10%';
+                                                // Stable pairs (tick 1, 50) = tight range (0.5%) - very little movement
+                                                // Standard pairs (tick 100, 200) = medium range (5%) - some movement  
+                                                // Exotic pairs (tick 2000) = wide range (10%) - high volatility
+                                                const rangePercent = tickSpacing <= 50 ? 0.005 : tickSpacing <= 200 ? 0.05 : 0.10;
+                                                const rangeLabel = tickSpacing <= 50 ? '±0.5%' : tickSpacing <= 200 ? '±5%' : '±10%';
 
                                                 return (
                                                     <div className="mt-3">
@@ -860,9 +866,11 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <button
                                                                 onClick={() => {
-                                                                    // Set range above current price - only deposit token0
-                                                                    const lower = currentPrice * (1 + rangePercent * 0.1); // Just above current
-                                                                    const upper = currentPrice * (1 + rangePercent);      // Range based on tick
+                                                                    // Set range ABOVE current price - only deposit token0
+                                                                    // Use larger buffer (1% minimum) to ensure tick is truly above current
+                                                                    const minBuffer = Math.max(rangePercent * 0.2, 0.01); // At least 1% buffer
+                                                                    const lower = currentPrice * (1 + minBuffer);
+                                                                    const upper = currentPrice * (1 + rangePercent + minBuffer);
                                                                     setPriceLower(lower.toFixed(6));
                                                                     setPriceUpper(upper.toFixed(6));
                                                                     // Clear amounts - Above means deposit token0 (aboveToken)
@@ -881,9 +889,11 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             </button>
                                                             <button
                                                                 onClick={() => {
-                                                                    // Set range below current price - only deposit token1
-                                                                    const lower = currentPrice * (1 - rangePercent);      // Range based on tick
-                                                                    const upper = currentPrice * (1 - rangePercent * 0.1); // Just below current
+                                                                    // Set range BELOW current price - only deposit token1
+                                                                    // Use larger buffer (1% minimum) to ensure tick is truly below current
+                                                                    const minBuffer = Math.max(rangePercent * 0.2, 0.01); // At least 1% buffer
+                                                                    const lower = currentPrice * (1 - rangePercent - minBuffer);
+                                                                    const upper = currentPrice * (1 - minBuffer);
                                                                     setPriceLower(lower.toFixed(6));
                                                                     setPriceUpper(upper.toFixed(6));
                                                                     // Clear amounts - Below means deposit token1 (belowToken)
