@@ -6,6 +6,20 @@ const nextConfig: NextConfig = {
   // Empty turbopack config to silence warning (we're using webpack)
   turbopack: {},
 
+  // CORS headers for Safe Apps iframe support
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-Requested-With, content-type, Authorization' },
+        ],
+      },
+    ];
+  },
+
   // Use webpack instead of turbopack for build
   webpack: (config, { isServer }) => {
     // Fix for pino and related modules

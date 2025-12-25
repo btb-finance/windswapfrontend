@@ -24,6 +24,7 @@ import { sei } from '@/config/chains';
 import { base } from 'viem/chains';
 import { PoolDataProvider } from '@/providers/PoolDataProvider';
 import { UserBalanceProvider } from '@/providers/UserBalanceProvider';
+import { SafeAutoConnect } from '@/components/SafeAutoConnect';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const projectId = 'ecd20f8c23408a4397afc0f5466eb6b6';
@@ -82,7 +83,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 >
                     <PoolDataProvider>
                         <UserBalanceProvider>
-                            {children}
+                            <SafeAutoConnect>
+                                {children}
+                            </SafeAutoConnect>
                         </UserBalanceProvider>
                     </PoolDataProvider>
                 </RainbowKitProvider>
