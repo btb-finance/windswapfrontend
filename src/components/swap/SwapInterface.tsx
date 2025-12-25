@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useReadContract, useWriteContract } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, formatUnits, Address, maxUint256 } from 'viem';
 import { Token, SEI, USDC, WSEI } from '@/config/tokens';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
@@ -108,33 +108,45 @@ export function SwapInterface() {
         bestRoute !== null && // Only check approval when we have a route
         (currentAllowance === undefined || (currentAllowance as bigint) < amountInWei);
 
+    // Track pending approval transaction hash
+    const [pendingApprovalHash, setPendingApprovalHash] = useState<`0x${string}` | undefined>(undefined);
+
+    // Wait for approval transaction receipt
+    const { isSuccess: approvalConfirmed } = useWaitForTransactionReceipt({
+        hash: pendingApprovalHash,
+    });
+
+    // When approval is confirmed, refetch allowances and clear pending hash
+    useEffect(() => {
+        if (approvalConfirmed && pendingApprovalHash) {
+            // Refetch both allowances to be safe
+            refetchAllowanceV2();
+            refetchAllowanceV3();
+            setPendingApprovalHash(undefined);
+            setIsApproving(false);
+        }
+    }, [approvalConfirmed, pendingApprovalHash, refetchAllowanceV2, refetchAllowanceV3]);
+
     // Handle approve and then swap
     const handleApprove = async () => {
         if (!actualTokenIn || !address || !bestRoute) return;
 
         setIsApproving(true);
         try {
-            await writeContractAsync({
+            const hash = await writeContractAsync({
                 address: actualTokenIn.address as Address,
                 abi: ERC20_ABI,
                 functionName: 'approve',
                 args: [routerToApprove as Address, maxUint256],
             });
 
-            // Wait a bit for the chain to process, then refetch the correct allowance
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Refetch the appropriate allowance based on route type
-            if (bestRoute.type === 'v2') {
-                await refetchAllowanceV2();
-            } else {
-                await refetchAllowanceV3();
-            }
+            // Set pending hash - the useEffect will handle the rest when confirmed
+            setPendingApprovalHash(hash);
 
         } catch (err) {
             console.error('Approve error:', err);
+            setIsApproving(false);
         }
-        setIsApproving(false);
     };
 
     // ===== V2 Volatile Quote (using wagmi hook) =====
