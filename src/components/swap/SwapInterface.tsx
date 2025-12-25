@@ -137,7 +137,7 @@ export function SwapInterface() {
                 address: actualTokenIn.address as Address,
                 abi: ERC20_ABI,
                 functionName: 'approve',
-                args: [routerToApprove as Address, maxUint256],
+                args: [routerToApprove as Address, amountInWei],
             });
 
             // Set pending hash - the useEffect will handle the rest when confirmed
