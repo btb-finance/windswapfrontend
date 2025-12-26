@@ -12,9 +12,50 @@ const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01
 
 // DexScreener API for accurate 24h volume data
 const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex/pairs/seiv2';
+const DEXSCREENER_CACHE_KEY = 'windswap_dexscreener_volumes';
+const DEXSCREENER_CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
 
-// Fetch 24h volume from DexScreener for multiple pools
+// Load cached DexScreener volumes
+function loadCachedDexScreenerVolumes(): Map<string, number> | null {
+    try {
+        const cached = localStorage.getItem(DEXSCREENER_CACHE_KEY);
+        if (!cached) return null;
+
+        const { timestamp, data } = JSON.parse(cached);
+        if (Date.now() - timestamp > DEXSCREENER_CACHE_TTL) {
+            console.log('[DexScreener] Cache expired, will fetch fresh data');
+            return null;
+        }
+
+        console.log(`[DexScreener] 📦 Loaded cached volume data (${Object.keys(data).length} pools)`);
+        return new Map(Object.entries(data));
+    } catch {
+        return null;
+    }
+}
+
+// Save DexScreener volumes to cache
+function saveDexScreenerVolumes(volumeMap: Map<string, number>): void {
+    try {
+        const data: Record<string, number> = {};
+        volumeMap.forEach((vol, addr) => { data[addr] = vol; });
+        localStorage.setItem(DEXSCREENER_CACHE_KEY, JSON.stringify({
+            timestamp: Date.now(),
+            data
+        }));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+// Fetch 24h volume from DexScreener for multiple pools (with caching)
 async function fetchDexScreenerVolumes(poolAddresses: string[]): Promise<Map<string, number>> {
+    // Try cache first
+    const cached = loadCachedDexScreenerVolumes();
+    if (cached && cached.size > 0) {
+        return cached;
+    }
+
     const volumeMap = new Map<string, number>();
     if (poolAddresses.length === 0) return volumeMap;
 
@@ -33,6 +74,12 @@ async function fetchDexScreenerVolumes(poolAddresses: string[]): Promise<Map<str
                 }
             }
         }
+
+        // Save to cache
+        if (volumeMap.size > 0) {
+            saveDexScreenerVolumes(volumeMap);
+        }
+
         console.log(`[DexScreener] ✅ Got 24h volume for ${volumeMap.size} pools`);
     } catch (err) {
         console.warn('[DexScreener] Failed to fetch volumes:', err);
