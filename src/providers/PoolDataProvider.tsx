@@ -582,7 +582,14 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         };
                     });
 
-                    setClPools(updatedPools);
+                    // Update pools while preserving volume24h from DexScreener
+                    setClPools(prev => {
+                        const volumeMap = new Map(prev.map(p => [p.address.toLowerCase(), p.volume24h]));
+                        return updatedPools.map(pool => ({
+                            ...pool,
+                            volume24h: volumeMap.get(pool.address.toLowerCase()) || pool.volume24h
+                        }));
+                    });
                     saveCachePools(updatedPools, []);
                     console.log(`[PoolDataProvider] ✅ Updated ${updatedPools.length} pools with live balances`);
                 } catch (balanceErr) {
@@ -626,9 +633,15 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             };
                         });
 
-                        // Set pools immediately for fast display
+                        // Set pools immediately for fast display (preserve volume24h)
                         if (quickClPools.length > 0) {
-                            setClPools(quickClPools.filter(p => p.poolType === 'CL'));
+                            setClPools(prev => {
+                                const volumeMap = new Map(prev.map(p => [p.address.toLowerCase(), p.volume24h]));
+                                return quickClPools.filter(p => p.poolType === 'CL').map(pool => ({
+                                    ...pool,
+                                    volume24h: volumeMap.get(pool.address.toLowerCase()) || pool.volume24h
+                                }));
+                            });
                             setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
                             setIsLoading(false); // Show pools immediately!
                         }
