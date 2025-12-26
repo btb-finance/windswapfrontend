@@ -436,9 +436,15 @@ export default function PoolsPage() {
                                     })()}
                                 </div>
 
-                                {/* Desktop: 24h Volume */}
+                                {/* Desktop: 24h Volume (from DexScreener) */}
                                 <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                    <span className="text-sm font-medium text-gray-500">—</span>
+                                    {pool.volume24h && parseFloat(pool.volume24h) > 0.01 ? (
+                                        <span className="text-sm font-medium">
+                                            ${parseFloat(pool.volume24h).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                        </span>
+                                    ) : (
+                                        <span className="text-sm font-medium text-gray-500">—</span>
+                                    )}
                                 </div>
 
                                 {/* Desktop: TVL (Token Amounts) */}

@@ -10,6 +10,38 @@ import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc } from '@/utils/rpc';
 // Goldsky Subgraph URL for pool data (v2.0.0 with user data)
 const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
 
+// DexScreener API for accurate 24h volume data
+const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex/pairs/seiv2';
+
+// Fetch 24h volume from DexScreener for multiple pools
+async function fetchDexScreenerVolumes(poolAddresses: string[]): Promise<Map<string, number>> {
+    const volumeMap = new Map<string, number>();
+    if (poolAddresses.length === 0) return volumeMap;
+
+    try {
+        // DexScreener allows multiple addresses comma-separated (max 30)
+        const addresses = poolAddresses.slice(0, 30).join(',');
+        const response = await fetch(`${DEXSCREENER_API}/${addresses}`);
+        const data = await response.json();
+
+        if (data.pairs && Array.isArray(data.pairs)) {
+            for (const pair of data.pairs) {
+                const addr = pair.pairAddress?.toLowerCase();
+                const vol24h = pair.volume?.h24 || 0;
+                if (addr) {
+                    volumeMap.set(addr, vol24h);
+                }
+            }
+        }
+        console.log(`[DexScreener] ✅ Got 24h volume for ${volumeMap.size} pools`);
+    } catch (err) {
+        console.warn('[DexScreener] Failed to fetch volumes:', err);
+    }
+
+    return volumeMap;
+}
+
+
 // Fetch pools from subgraph
 async function fetchPoolsFromSubgraph(): Promise<{
     pools: Array<{
@@ -70,6 +102,7 @@ interface PoolData {
     reserve0: string;
     reserve1: string;
     tvl: string;
+    volume24h?: string; // 24h volume from DexScreener
     rewardRate?: bigint;
 }
 
@@ -365,6 +398,18 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setClPools(subgraphPools);
                 setIsLoading(false);
                 console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
+
+                // Fetch accurate 24h volume from DexScreener (non-blocking)
+                const poolAddresses = subgraphPools.map(p => p.address);
+                fetchDexScreenerVolumes(poolAddresses).then(volumeMap => {
+                    if (volumeMap.size > 0) {
+                        setClPools(prev => prev.map(pool => ({
+                            ...pool,
+                            volume24h: (volumeMap.get(pool.address.toLowerCase()) || 0).toFixed(2)
+                        })));
+                        console.log(`[PoolDataProvider] 📈 Updated ${volumeMap.size} pools with DexScreener volume`);
+                    }
+                });
 
                 // Build token map from subgraph data
                 const newTokenMap = new Map<string, TokenInfo>();
