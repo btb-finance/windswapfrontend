@@ -167,7 +167,7 @@ export default function PoolsPage() {
         return true;
     });
 
-    // Sort pools - WIND/WSEI always first!
+    // Sort pools - WIND/WSEI always first, then by volume by default!
     const sortedPools = [...filteredPools].sort((a, b) => {
         // Helper to check if pool is WIND/WSEI
         const isWindWsei = (pool: typeof allPools[0]) =>
@@ -179,8 +179,11 @@ export default function PoolsPage() {
         if (!isWindWsei(a) && isWindWsei(b)) return 1;
 
         if (sortBy === 'tvl') return parseFloat(b.tvl) - parseFloat(a.tvl);
-        // Default: preserve order from gauges.ts (already sorted by category)
-        return 0;
+
+        // Default: sort by 24h volume (highest first)
+        const volA = parseFloat(a.volume24h || '0');
+        const volB = parseFloat(b.volume24h || '0');
+        return volB - volA;
     });
 
     // Get fee tier string for CL pools
