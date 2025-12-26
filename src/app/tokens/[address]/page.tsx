@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -40,7 +40,14 @@ export default function TokenPage() {
     const router = useRouter();
     const address = params.address as string;
 
-    const { token, isKnownToken, isLoading, error, pools, isValidAddress } = useTokenPage(address);
+    // SSR guard - prevent wagmi hooks from running during server-side rendering
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
+    // Only call hooks after mounting to avoid indexedDB errors
+    const { token, isKnownToken, isLoading, error, pools, isValidAddress } = useTokenPage(isMounted ? address : undefined);
 
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
@@ -112,8 +119,8 @@ export default function TokenPage() {
         return 'New';
     };
 
-    // Loading state
-    if (isLoading) {
+    // SSR guard - show loading until mounted in browser
+    if (!isMounted || isLoading) {
         return (
             <div className="container mx-auto px-3 sm:px-6 py-8">
                 <div className="glass-card p-8 text-center max-w-lg mx-auto">
