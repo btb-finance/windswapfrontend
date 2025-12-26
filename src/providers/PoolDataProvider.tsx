@@ -10,6 +10,105 @@ import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc } from '@/utils/rpc';
 // Goldsky Subgraph URL for pool data (v2.0.0 with user data)
 const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
 
+// DexScreener API for accurate 24h volume data
+const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex/pairs/seiv2';
+const DEXSCREENER_CACHE_KEY = 'windswap_dexscreener_volumes';
+const DEXSCREENER_CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
+
+// Load cached DexScreener volumes
+function loadCachedDexScreenerVolumes(): Map<string, number> | null {
+    try {
+        const cached = localStorage.getItem(DEXSCREENER_CACHE_KEY);
+        if (!cached) return null;
+
+        const { timestamp, data } = JSON.parse(cached);
+        if (Date.now() - timestamp > DEXSCREENER_CACHE_TTL) {
+            console.log('[DexScreener] Cache expired, will fetch fresh data');
+            return null;
+        }
+
+        console.log(`[DexScreener] 📦 Loaded cached volume data (${Object.keys(data).length} pools)`);
+        return new Map(Object.entries(data));
+    } catch {
+        return null;
+    }
+}
+
+// Save DexScreener volumes to cache
+function saveDexScreenerVolumes(volumeMap: Map<string, number>): void {
+    try {
+        const data: Record<string, number> = {};
+        volumeMap.forEach((vol, addr) => { data[addr] = vol; });
+        localStorage.setItem(DEXSCREENER_CACHE_KEY, JSON.stringify({
+            timestamp: Date.now(),
+            data
+        }));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+// DexScreener pool data interface
+interface DexScreenerPoolData {
+    volume24h: number;
+    tvlUsd: number;
+    reserve0: number; // base token
+    reserve1: number; // quote token
+}
+
+// Fetch pool data from DexScreener for multiple pools (with caching)
+async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string, DexScreenerPoolData>> {
+    // Try cache first
+    const cached = loadCachedDexScreenerVolumes();
+    if (cached && cached.size > 0) {
+        // Convert old volume-only cache format to new format (for backwards compatibility)
+        const result = new Map<string, DexScreenerPoolData>();
+        cached.forEach((vol, addr) => {
+            result.set(addr, { volume24h: vol, tvlUsd: 0, reserve0: 0, reserve1: 0 });
+        });
+        // Still need to fetch full data if we only have volume cached
+        // Fall through to fetch fresh data
+    }
+
+    const dataMap = new Map<string, DexScreenerPoolData>();
+    if (poolAddresses.length === 0) return dataMap;
+
+    try {
+        // DexScreener allows multiple addresses comma-separated (max 30)
+        const addresses = poolAddresses.slice(0, 30).join(',');
+        const response = await fetch(`${DEXSCREENER_API}/${addresses}`);
+        const data = await response.json();
+
+        if (data.pairs && Array.isArray(data.pairs)) {
+            for (const pair of data.pairs) {
+                const addr = pair.pairAddress?.toLowerCase();
+                if (addr) {
+                    dataMap.set(addr, {
+                        volume24h: pair.volume?.h24 || 0,
+                        tvlUsd: pair.liquidity?.usd || 0,
+                        reserve0: pair.liquidity?.base || 0,
+                        reserve1: pair.liquidity?.quote || 0,
+                    });
+                }
+            }
+        }
+
+        // Save volume to cache (for backwards compatibility)
+        if (dataMap.size > 0) {
+            const volumeMap = new Map<string, number>();
+            dataMap.forEach((d, addr) => volumeMap.set(addr, d.volume24h));
+            saveDexScreenerVolumes(volumeMap);
+        }
+
+        console.log(`[DexScreener] ✅ Got data for ${dataMap.size} pools (volume + TVL + reserves)`);
+    } catch (err) {
+        console.warn('[DexScreener] Failed to fetch data:', err);
+    }
+
+    return dataMap;
+}
+
+
 // Fetch pools from subgraph
 async function fetchPoolsFromSubgraph(): Promise<{
     pools: Array<{
@@ -70,6 +169,7 @@ interface PoolData {
     reserve0: string;
     reserve1: string;
     tvl: string;
+    volume24h?: string; // 24h volume from DexScreener
     rewardRate?: bigint;
 }
 
@@ -366,6 +466,25 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setIsLoading(false);
                 console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
 
+                // Fetch volume + TVL from DexScreener (non-blocking) - replaces RPC balance fetching!
+                const poolAddresses = subgraphPools.map(p => p.address);
+                fetchDexScreenerData(poolAddresses).then((dataMap: Map<string, DexScreenerPoolData>) => {
+                    if (dataMap.size > 0) {
+                        setClPools(prev => prev.map(pool => {
+                            const dexData = dataMap.get(pool.address.toLowerCase());
+                            if (!dexData) return pool;
+                            return {
+                                ...pool,
+                                volume24h: dexData.volume24h.toFixed(2),
+                                tvl: dexData.tvlUsd > 0 ? dexData.tvlUsd.toFixed(2) : pool.tvl,
+                                reserve0: dexData.reserve0 > 0 ? dexData.reserve0.toString() : pool.reserve0,
+                                reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
+                            };
+                        }));
+                        console.log(`[PoolDataProvider] 📈 Updated ${dataMap.size} pools with DexScreener data (volume + TVL)`);
+                    }
+                });
+
                 // Build token map from subgraph data
                 const newTokenMap = new Map<string, TokenInfo>();
                 subgraphPools.forEach(p => {
@@ -443,60 +562,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // Fetch gauge data for voting (in parallel with priority fetch)
                 await fetchGaugeData(newTokenMap);
 
-                // NOW fetch live balances via RPC for accurate TVL
-                console.log('[PoolDataProvider] 💰 Fetching live pool balances...');
-                const balanceCalls: { to: string; data: string }[] = [];
-                for (const pool of subgraphPools) {
-                    // Get pool liquidity (for CL pools)
-                    balanceCalls.push({ to: pool.address, data: '0x1a686502' }); // liquidity()
-                    // Also get token balances
-                    balanceCalls.push({
-                        to: pool.token0.address,
-                        data: `0x70a08231000000000000000000000000${pool.address.slice(2).toLowerCase()}` // balanceOf(pool)
-                    });
-                    balanceCalls.push({
-                        to: pool.token1.address,
-                        data: `0x70a08231000000000000000000000000${pool.address.slice(2).toLowerCase()}` // balanceOf(pool)
-                    });
-                }
-
-                try {
-                    const balanceResults = await batchRpcCall(balanceCalls);
-
-                    // Update pools with live balances
-                    const updatedPools = subgraphPools.map((pool, idx) => {
-                        const base = idx * 3;
-                        const liquidityHex = balanceResults[base] || '0x0';
-                        const balance0Hex = balanceResults[base + 1] || '0x0';
-                        const balance1Hex = balanceResults[base + 2] || '0x0';
-
-                        const balance0 = BigInt(balance0Hex || '0x0');
-                        const balance1 = BigInt(balance1Hex || '0x0');
-
-                        // Format to string with decimals
-                        const reserve0 = formatUnits(balance0, pool.token0.decimals);
-                        const reserve1 = formatUnits(balance1, pool.token1.decimals);
-
-                        // Calculate TVL (simple: assume both tokens at $1 for now, accurate pricing would need oracle)
-                        const tvl0 = parseFloat(reserve0);
-                        const tvl1 = parseFloat(reserve1);
-                        const tvl = (tvl0 + tvl1).toFixed(2);
-
-                        return {
-                            ...pool,
-                            reserve0,
-                            reserve1,
-                            tvl: parseFloat(tvl) > 0 ? tvl : pool.tvl, // Use RPC TVL if > 0, else keep subgraph
-                        };
-                    });
-
-                    setClPools(updatedPools);
-                    saveCachePools(updatedPools, []);
-                    console.log(`[PoolDataProvider] ✅ Updated ${updatedPools.length} pools with live balances`);
-                } catch (balanceErr) {
-                    console.warn('[PoolDataProvider] ⚠️ Could not fetch live balances, using subgraph TVL', balanceErr);
-                    saveCachePools(subgraphPools, []);
-                }
+                // TVL and reserves are now fetched from DexScreener (above), no RPC needed!
+                saveCachePools(subgraphPools, []);
 
                 return; // Done!
             } else {
@@ -534,11 +601,36 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             };
                         });
 
-                        // Set pools immediately for fast display
+                        // Set pools immediately for fast display (preserve volume24h)
                         if (quickClPools.length > 0) {
-                            setClPools(quickClPools.filter(p => p.poolType === 'CL'));
+                            setClPools(prev => {
+                                const volumeMap = new Map(prev.map(p => [p.address.toLowerCase(), p.volume24h]));
+                                return quickClPools.filter(p => p.poolType === 'CL').map(pool => ({
+                                    ...pool,
+                                    volume24h: volumeMap.get(pool.address.toLowerCase()) || pool.volume24h
+                                }));
+                            });
                             setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
                             setIsLoading(false); // Show pools immediately!
+
+                            // Fetch volume + TVL from DexScreener for GAUGE_LIST pools
+                            const clPoolAddresses = quickClPools.filter(p => p.poolType === 'CL').map(p => p.address);
+                            fetchDexScreenerData(clPoolAddresses).then((dataMap: Map<string, DexScreenerPoolData>) => {
+                                if (dataMap.size > 0) {
+                                    setClPools(prev => prev.map(pool => {
+                                        const dexData = dataMap.get(pool.address.toLowerCase());
+                                        if (!dexData) return pool;
+                                        return {
+                                            ...pool,
+                                            volume24h: dexData.volume24h.toFixed(2),
+                                            tvl: dexData.tvlUsd > 0 ? dexData.tvlUsd.toFixed(2) : pool.tvl,
+                                            reserve0: dexData.reserve0 > 0 ? dexData.reserve0.toString() : pool.reserve0,
+                                            reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
+                                        };
+                                    }));
+                                    console.log(`[PoolDataProvider] 📈 Updated GAUGE_LIST pools with DexScreener data`);
+                                }
+                            });
                         }
                     } catch (e) {
                         console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
