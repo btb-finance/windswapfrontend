@@ -68,8 +68,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
-    const { balance: balanceA } = useTokenBalance(tokenA);
-    const { balance: balanceB } = useTokenBalance(tokenB);
+    const { raw: rawBalanceA, formatted: balanceA } = useTokenBalance(tokenA);
+    const { raw: rawBalanceB, formatted: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
     const { poolRewards, windPrice, seiPrice } = usePoolData();
 
@@ -1137,12 +1137,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             </button>
                                         </div>
                                         {/* Quick percentage buttons - only show when it's the deposit token */}
-                                        {balanceA && parseFloat(balanceA) > 0 && !depositTokenBForOneSided && (
+                                        {rawBalanceA && parseFloat(rawBalanceA) > 0 && !depositTokenBForOneSided && (
                                             <div className="flex gap-1 mt-2">
                                                 {[25, 50, 75, 100].map(pct => (
                                                     <button
                                                         key={pct}
-                                                        onClick={() => setAmountA((parseFloat(balanceA) * pct / 100).toFixed(6))}
+                                                        onClick={() => setAmountA((parseFloat(rawBalanceA) * pct / 100).toString())}
                                                         className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
                                                     >
                                                         {pct === 100 ? 'MAX' : `${pct}%`}
@@ -1165,10 +1165,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 ) : 'You Deposit'}
                                             </label>
                                             <button
-                                                onClick={() => balanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(balanceB)}
+                                                onClick={() => rawBalanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(rawBalanceB)}
                                                 className="text-[10px] text-gray-400 hover:text-primary transition-colors"
                                             >
-                                                Bal: {balanceB ? parseFloat(balanceB).toFixed(4) : '--'}
+                                                Bal: {balanceB || '--'}
                                             </button>
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -1192,12 +1192,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             </button>
                                         </div>
                                         {/* Quick percentage buttons - only show when it's the deposit token */}
-                                        {balanceB && parseFloat(balanceB) > 0 && depositTokenBForOneSided && (
+                                        {rawBalanceB && parseFloat(rawBalanceB) > 0 && depositTokenBForOneSided && (
                                             <div className="flex gap-1 mt-2">
                                                 {[25, 50, 75, 100].map(pct => (
                                                     <button
                                                         key={pct}
-                                                        onClick={() => setAmountB((parseFloat(balanceB) * pct / 100).toFixed(6))}
+                                                        onClick={() => setAmountB((parseFloat(rawBalanceB) * pct / 100).toString())}
                                                         className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
                                                     >
                                                         {pct === 100 ? 'MAX' : `${pct}%`}
