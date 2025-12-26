@@ -128,26 +128,36 @@ export function useTokenPage(address: string | undefined): UseTokenPageResult {
     const pools = useMemo<TokenPool[]>(() => {
         if (!checksumAddr) return [];
         const lowerAddr = checksumAddr.toLowerCase();
+        // Also check WSEI if searching for SEI
+        const wseiAddr = WSEI.address.toLowerCase();
+        const searchAddrs = lowerAddr === SEI.address.toLowerCase()
+            ? [lowerAddr, wseiAddr]
+            : [lowerAddr];
 
-        // Find pools from GAUGE_LIST that contain this token
         const matchingPools: TokenPool[] = [];
+        const seenPoolAddrs = new Set<string>();
 
+        // Helper to find token by address
+        const findToken = (addr: string, symbol?: string): Token => {
+            const found = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+            return found || { address: addr, symbol: symbol || '???', name: symbol || 'Unknown', decimals: 18 };
+        };
+
+        // First, search GAUGE_LIST (pools with configured gauges)
         for (const gauge of GAUGE_LIST) {
-            const isToken0 = gauge.token0.toLowerCase() === lowerAddr;
-            const isToken1 = gauge.token1.toLowerCase() === lowerAddr;
+            const isToken0 = searchAddrs.includes(gauge.token0.toLowerCase());
+            const isToken1 = searchAddrs.includes(gauge.token1.toLowerCase());
 
             if (isToken0 || isToken1) {
-                // Find tokens for display
-                const findToken = (addr: string, symbol: string): Token => {
-                    const found = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-                    return found || { address: addr, symbol, name: symbol, decimals: 18 };
-                };
+                const poolAddr = gauge.pool.toLowerCase();
+                if (seenPoolAddrs.has(poolAddr)) continue;
+                seenPoolAddrs.add(poolAddr);
 
                 const token0 = findToken(gauge.token0, gauge.symbol0);
                 const token1 = findToken(gauge.token1, gauge.symbol1);
 
                 // Find TVL from pool data
-                const poolData = allPools.find(p => p.address.toLowerCase() === gauge.pool.toLowerCase());
+                const poolData = allPools.find(p => p.address.toLowerCase() === poolAddr);
                 const tvl = poolData?.tvl || '0';
 
                 matchingPools.push({
@@ -159,6 +169,36 @@ export function useTokenPage(address: string | undefined): UseTokenPageResult {
                     tvl,
                     hasGauge: !!gauge.gauge,
                     gaugeAddress: gauge.gauge || undefined,
+                });
+            }
+        }
+
+        // Second, search allPools from PoolDataProvider (includes non-gauge pools)
+        for (const pool of allPools) {
+            const poolAddr = pool.address.toLowerCase();
+            if (seenPoolAddrs.has(poolAddr)) continue;
+
+            const t0Addr = pool.token0?.address?.toLowerCase() || '';
+            const t1Addr = pool.token1?.address?.toLowerCase() || '';
+
+            const isToken0 = searchAddrs.includes(t0Addr);
+            const isToken1 = searchAddrs.includes(t1Addr);
+
+            if (isToken0 || isToken1) {
+                seenPoolAddrs.add(poolAddr);
+
+                const token0 = findToken(pool.token0?.address || '', pool.token0?.symbol);
+                const token1 = findToken(pool.token1?.address || '', pool.token1?.symbol);
+
+                matchingPools.push({
+                    address: pool.address,
+                    token0,
+                    token1,
+                    poolType: pool.poolType === 'CL' ? 'CL' : 'V2',
+                    tickSpacing: pool.tickSpacing,
+                    tvl: pool.tvl || '0',
+                    hasGauge: false,
+                    gaugeAddress: undefined,
                 });
             }
         }
