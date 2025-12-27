@@ -2,11 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useTokenPage, TokenPool } from '@/hooks/useTokenPage';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
-import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
+
+// Lazy load modal for faster initial page load
+const AddLiquidityModal = dynamic(
+    () => import('@/components/pools/AddLiquidityModal').then(mod => mod.AddLiquidityModal),
+    { ssr: false }
+);
 
 // Pool config for modal (same as pools page)
 interface PoolConfig {

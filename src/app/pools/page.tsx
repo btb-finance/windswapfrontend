@@ -1,12 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { formatUnits, Address } from 'viem';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
-import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
+
+// Lazy load AddLiquidityModal - only loads when user opens it
+const AddLiquidityModal = dynamic(
+    () => import('@/components/pools/AddLiquidityModal').then(mod => mod.AddLiquidityModal),
+    { ssr: false }
+);
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
 import { calculatePoolAPR } from '@/hooks/useWindPrice';
 
