@@ -235,5 +235,137 @@ export function usePoolDayData(poolId: string) {
     return { dayData, isLoading };
 }
 
+// ============================================
+// USER DATA TYPES (from subgraph schema)
+// ============================================
+
+export interface SubgraphPosition {
+    id: string;
+    tokenId: string;
+    owner: { id: string };
+    pool: SubgraphPool;
+    tickLower: number;
+    tickUpper: number;
+    liquidity: string;
+    depositedToken0: string;
+    depositedToken1: string;
+    staked: boolean;
+    stakedGauge: string | null;
+    createdAtTimestamp: string;
+}
+
+export interface SubgraphVeNFT {
+    id: string;
+    tokenId: string;
+    owner: { id: string };
+    lockedAmount: string;
+    lockEnd: string;
+    votingPower: string;
+    isPermanent: boolean;
+    createdAtTimestamp: string;
+}
+
+export interface SubgraphUser {
+    id: string;
+    positions: SubgraphPosition[];
+    veNFTs: SubgraphVeNFT[];
+    totalPositions: string;
+    totalVeNFTs: string;
+}
+
+// User positions query
+const USER_POSITIONS_QUERY = `
+    query GetUserPositions($userId: ID!) {
+        user(id: $userId) {
+            id
+            totalPositions
+            totalVeNFTs
+            positions(first: 100) {
+                id
+                tokenId
+                pool {
+                    id
+                    token0 { id symbol name decimals }
+                    token1 { id symbol name decimals }
+                    tickSpacing
+                    liquidity
+                }
+                tickLower
+                tickUpper
+                liquidity
+                depositedToken0
+                depositedToken1
+                staked
+                stakedGauge
+                createdAtTimestamp
+            }
+            veNFTs(first: 50) {
+                id
+                tokenId
+                lockedAmount
+                lockEnd
+                votingPower
+                isPermanent
+                createdAtTimestamp
+            }
+        }
+    }
+`;
+
+/**
+ * Hook to fetch user positions and veNFTs from subgraph
+ * Replaces multiple RPC calls with a single GraphQL query
+ */
+export function useUserPositions(userAddress: string | undefined) {
+    const [positions, setPositions] = useState<SubgraphPosition[]>([]);
+    const [veNFTs, setVeNFTs] = useState<SubgraphVeNFT[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchUserData = useCallback(async () => {
+        if (!userAddress) {
+            setPositions([]);
+            setVeNFTs([]);
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const data = await fetchGraphQL<{ user: SubgraphUser | null }>(
+                USER_POSITIONS_QUERY,
+                { userId: userAddress.toLowerCase() }
+            );
+
+            if (data.user) {
+                setPositions(data.user.positions || []);
+                setVeNFTs(data.user.veNFTs || []);
+                console.log(`[useUserPositions] Found ${data.user.positions?.length || 0} positions, ${data.user.veNFTs?.length || 0} veNFTs`);
+            } else {
+                setPositions([]);
+                setVeNFTs([]);
+            }
+        } catch (err) {
+            console.error('[useUserPositions] Error:', err);
+            setError(err instanceof Error ? err.message : 'Failed to fetch user data');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [userAddress]);
+
+    useEffect(() => {
+        fetchUserData();
+    }, [fetchUserData]);
+
+    return {
+        positions,
+        veNFTs,
+        isLoading,
+        error,
+        refetch: fetchUserData,
+    };
+}
+
 // Export the subgraph URL for direct use
 export { SUBGRAPH_URL };
