@@ -163,7 +163,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 : [actualTokenB, actualTokenA];
 
             try {
-                // Step 1: Get pool address
+                // Step 1: Get pool address first (needed for slot0 call)
                 const getPoolSelector = '28af8d0b';
                 const token0Padded = token0.address.slice(2).toLowerCase().padStart(64, '0');
                 const token1Padded = token1.address.slice(2).toLowerCase().padStart(64, '0');
@@ -191,7 +191,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 const pool = '0x' + poolResult.result.slice(-40);
                 setClPoolAddress(pool);
 
-                // Step 2: Fetch slot0 for price - now immediately after getting pool address
+                // Step 2: Fetch slot0 for price
                 const slot0Selector = '3850c7bd';
                 const slot0Response = await fetch(getPrimaryRpc(), {
                     method: 'POST',
