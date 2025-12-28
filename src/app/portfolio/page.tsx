@@ -1588,6 +1588,33 @@ export default function PortfolioPage() {
                                                 </span>
                                             </div>
 
+                                            {/* Staked Liquidity & Range */}
+                                            <div className="text-xs mb-2 px-1 space-y-1">
+                                                {pos.liquidity > BigInt(0) && (
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-gray-400">Liquidity:</span>
+                                                        <span className="font-medium text-white">
+                                                            {(Number(pos.liquidity) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {(pos.tickLower !== 0 || pos.tickUpper !== 0) && (
+                                                    <div className="flex justify-between items-center group relative">
+                                                        <span className="text-gray-400">Range:</span>
+                                                        <span className="font-medium text-cyan-400 cursor-help">
+                                                            {isFullRangePosition(pos.tickLower, pos.tickUpper)
+                                                                ? 'Full Range'
+                                                                : `${formatPrice(tickToPrice(pos.tickLower, pos.token0Decimals, pos.token1Decimals))} - ${formatPrice(tickToPrice(pos.tickUpper, pos.token0Decimals, pos.token1Decimals))}`
+                                                            }
+                                                        </span>
+                                                        {/* Hover tooltip for tick range */}
+                                                        <div className="absolute right-0 top-full mt-1 px-2 py-1 bg-black/90 rounded text-[9px] text-gray-300 opacity-0 group-hover:opacity-100 transition z-10 whitespace-nowrap pointer-events-none">
+                                                            Ticks: {pos.tickLower} → {pos.tickUpper}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
                                             {/* Pending rewards */}
                                             <div className="text-xs mb-2 px-1">
                                                 <span className="text-green-400 font-medium">
