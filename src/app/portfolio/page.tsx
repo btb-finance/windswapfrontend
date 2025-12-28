@@ -1588,32 +1588,54 @@ export default function PortfolioPage() {
                                                 </span>
                                             </div>
 
-                                            {/* Staked Liquidity & Range */}
-                                            <div className="text-xs mb-2 px-1 space-y-1">
-                                                {pos.liquidity > BigInt(0) && (
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-400">Liquidity:</span>
-                                                        <span className="font-medium text-white">
-                                                            {(Number(pos.liquidity) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                {(pos.tickLower !== 0 || pos.tickUpper !== 0) && (
-                                                    <div className="flex justify-between items-center group relative">
-                                                        <span className="text-gray-400">Range:</span>
-                                                        <span className="font-medium text-cyan-400 cursor-help">
-                                                            {isFullRangePosition(pos.tickLower, pos.tickUpper)
-                                                                ? 'Full Range'
-                                                                : `${formatPrice(tickToPrice(pos.tickLower, pos.token0Decimals, pos.token1Decimals))} - ${formatPrice(tickToPrice(pos.tickUpper, pos.token0Decimals, pos.token1Decimals))}`
-                                                            }
-                                                        </span>
-                                                        {/* Hover tooltip for tick range */}
-                                                        <div className="absolute right-0 top-full mt-1 px-2 py-1 bg-black/90 rounded text-[9px] text-gray-300 opacity-0 group-hover:opacity-100 transition z-10 whitespace-nowrap pointer-events-none">
-                                                            Ticks: {pos.tickLower} → {pos.tickUpper}
+                                            {/* Token Amounts */}
+                                            {(() => {
+                                                const amounts = calculateTokenAmounts(
+                                                    pos.liquidity,
+                                                    pos.tickLower,
+                                                    pos.tickUpper,
+                                                    pos.currentTick,
+                                                    pos.token0Decimals,
+                                                    pos.token1Decimals
+                                                );
+                                                const inRange = pos.currentTick >= pos.tickLower && pos.currentTick < pos.tickUpper;
+
+                                                return (
+                                                    <div className="text-xs mb-2 px-1 space-y-1">
+                                                        {/* Token balances */}
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div className="p-1.5 rounded bg-white/5">
+                                                                <div className="text-[9px] text-gray-400">{pos.token0Symbol}</div>
+                                                                <div className="font-medium text-sm">
+                                                                    {amounts.amount0.toFixed(amounts.amount0 < 0.01 ? 6 : 2)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-1.5 rounded bg-white/5">
+                                                                <div className="text-[9px] text-gray-400">{pos.token1Symbol}</div>
+                                                                <div className="font-medium text-sm">
+                                                                    {amounts.amount1.toFixed(amounts.amount1 < 0.01 ? 6 : 2)}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {/* Range status */}
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-gray-400">Range:</span>
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isFullRangePosition(pos.tickLower, pos.tickUpper)
+                                                                    ? 'bg-purple-500/20 text-purple-400'
+                                                                    : inRange
+                                                                        ? 'bg-green-500/20 text-green-400'
+                                                                        : 'bg-yellow-500/20 text-yellow-400'
+                                                                }`}>
+                                                                {isFullRangePosition(pos.tickLower, pos.tickUpper)
+                                                                    ? '∞ Full Range'
+                                                                    : inRange
+                                                                        ? '✓ In Range'
+                                                                        : '⚠ Out of Range'}
+                                                            </span>
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
+                                                );
+                                            })()}
 
                                             {/* Pending rewards */}
                                             <div className="text-xs mb-2 px-1">

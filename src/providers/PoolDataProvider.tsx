@@ -208,6 +208,7 @@ export interface StakedPosition {
     tickSpacing: number;
     tickLower: number;
     tickUpper: number;
+    currentTick: number;
     liquidity: bigint;
     pendingRewards: bigint;
     rewardRate: bigint;
@@ -1046,7 +1047,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const tokenId = BigInt('0x' + tokenIdHex);
 
                     // Fetch position details and pending rewards in parallel
-                    const [positionResult, rewardsResult] = await Promise.all([
+                    const [positionResult, rewardsResult, slot0Result] = await Promise.all([
                         // positions(tokenId) on NonfungiblePositionManager
                         fetch(getPrimaryRpc(), {
                             method: 'POST',
@@ -1070,6 +1071,19 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 params: [{
                                     to: g.gauge,
                                     data: `0x3e491d47${address.slice(2).toLowerCase().padStart(64, '0')}${tokenId.toString(16).padStart(64, '0')}`
+                                }, 'latest']
+                            })
+                        }).then(r => r.json()),
+                        // slot0() on pool to get current tick
+                        fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', id: 1,
+                                method: 'eth_call',
+                                params: [{
+                                    to: g.pool,
+                                    data: '0x3850c7bd' // slot0()
                                 }, 'latest']
                             })
                         }).then(r => r.json()),
@@ -1099,6 +1113,16 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         liquidity = BigInt('0x' + liquidityHex);
                     }
 
+                    // Parse current tick from slot0
+                    // slot0 returns: sqrtPriceX96 (32 bytes), tick (32 bytes), ...
+                    let currentTick = 0;
+                    if (slot0Result.result && slot0Result.result.length >= 130) {
+                        const tickSlot = slot0Result.result.slice(66, 130);
+                        const tickHex = tickSlot.slice(-6);
+                        const tickVal = parseInt(tickHex, 16);
+                        currentTick = tickVal > 0x7fffff ? tickVal - 0x1000000 : tickVal;
+                    }
+
                     const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
                     const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
 
@@ -1115,6 +1139,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         tickSpacing: g.tickSpacing || 0,
                         tickLower,
                         tickUpper,
+                        currentTick,
                         liquidity,
                         pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
                         rewardRate: BigInt(0),
