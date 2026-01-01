@@ -19,6 +19,7 @@ import {
     phantomWallet,
     braveWallet,
     safeWallet,
+    compassWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 import { sei } from '@/config/chains';
 import { base } from 'viem/chains';
@@ -44,8 +45,9 @@ const config = getDefaultConfig({
         {
             groupName: 'Popular',
             wallets: [
-                rabbyWallet,         // Rabby first - explicit selection
-                metaMaskWallet,      // MetaMask explicit
+                compassWallet,       // Compass first - Sei's native wallet
+                rabbyWallet,
+                metaMaskWallet,
                 coinbaseWallet,
                 trustWallet,
                 phantomWallet,
