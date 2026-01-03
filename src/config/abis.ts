@@ -771,3 +771,72 @@ export const SUGAR_HELPER_ABI = [
     },
 ] as const;
 
+// Extended Voter ABI for reading vote data
+export const VOTER_EXTENDED_ABI = [
+    {
+        inputs: [
+            { name: '_tokenId', type: 'uint256' },
+            { name: '_pool', type: 'address' },
+        ],
+        name: 'votes',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'lastVoted',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_gauge', type: 'address' }],
+        name: 'gaugeToBribe',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_pool', type: 'address' }],
+        name: 'gauges',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_token', type: 'address' }],
+        name: 'isWhitelistedToken',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Bribe Voting Reward ABI for adding incentives
+export const BRIBE_VOTING_REWARD_ABI = [
+    {
+        inputs: [
+            { name: 'token', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+        ],
+        name: 'notifyRewardAmount',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'rewardsListLength',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'index', type: 'uint256' }],
+        name: 'rewards',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;

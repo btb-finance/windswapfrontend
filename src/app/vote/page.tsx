@@ -77,6 +77,12 @@ export default function VotePage() {
     const [extendDuration, setExtendDuration] = useState<keyof typeof LOCK_DURATIONS>('4Y');
     const [mergeTarget, setMergeTarget] = useState<bigint | null>(null);
 
+    // Incentive modal state
+    const [incentivePool, setIncentivePool] = useState<{ pool: string; symbol0: string; symbol1: string } | null>(null);
+    const [incentiveToken, setIncentiveToken] = useState<typeof DEFAULT_TOKEN_LIST[0] | null>(null);
+    const [incentiveAmount, setIncentiveAmount] = useState('');
+    const [isAddingIncentive, setIsAddingIncentive] = useState(false);
+
     // Hooks
     const {
         positions,
@@ -102,6 +108,9 @@ export default function VotePage() {
         vote: castVote,
         resetVotes,
         refetch: refetchGauges,
+        existingVotes,
+        fetchExistingVotes,
+        addIncentive,
     } = useVoter();
 
     const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(WIND);
@@ -162,6 +171,13 @@ export default function VotePage() {
             setSelectedVeNFT(positions[0].tokenId);
         }
     }, [positions, selectedVeNFT]);
+
+    // Fetch existing votes when veNFT is selected
+    useEffect(() => {
+        if (selectedVeNFT && gauges.length > 0) {
+            fetchExistingVotes(selectedVeNFT);
+        }
+    }, [selectedVeNFT, gauges.length, fetchExistingVotes]);
 
     // Calculate estimated voting power
     const estimatedVotingPower = lockAmount && parseFloat(lockAmount) > 0
@@ -266,6 +282,48 @@ export default function VotePage() {
             ...prev,
             [pool]: Math.max(0, weight),
         }));
+    };
+
+    // Vote for all pools evenly
+    const handleVoteForAll = () => {
+        const activeGauges = gauges.filter(g => g.gauge && g.isAlive);
+        if (activeGauges.length === 0) return;
+
+        const weightPerPool = Math.floor(100 / activeGauges.length);
+        const newWeights: Record<string, number> = {};
+
+        activeGauges.forEach((gauge, index) => {
+            // Give any remainder to the first pool
+            if (index === 0) {
+                newWeights[gauge.pool] = weightPerPool + (100 % activeGauges.length);
+            } else {
+                newWeights[gauge.pool] = weightPerPool;
+            }
+        });
+
+        setVoteWeights(newWeights);
+    };
+
+    const handleAddIncentive = async () => {
+        if (!incentivePool || !incentiveToken || !incentiveAmount || parseFloat(incentiveAmount) <= 0) return;
+        setIsAddingIncentive(true);
+        try {
+            const result = await addIncentive(
+                incentivePool.pool,
+                incentiveToken.address,
+                incentiveAmount,
+                incentiveToken.decimals
+            );
+            if (result) {
+                setTxHash(result.hash);
+                setIncentivePool(null);
+                setIncentiveToken(null);
+                setIncentiveAmount('');
+            }
+        } catch (err: any) {
+            console.error('Add incentive failed:', err);
+        }
+        setIsAddingIncentive(false);
     };
 
     const tabConfig = [
@@ -815,6 +873,13 @@ export default function VotePage() {
 
                                             {/* Row 2: Vote controls or status */}
                                             <div className="flex items-center justify-between gap-2">
+                                                {/* Already voted indicator */}
+                                                {existingVotes[gauge.pool.toLowerCase()] && existingVotes[gauge.pool.toLowerCase()] > BigInt(0) && (
+                                                    <span className="text-[10px] px-2 py-1 rounded bg-green-500/20 text-green-400 flex items-center gap-1">
+                                                        ✓ Voted ({parseFloat(formatUnits(existingVotes[gauge.pool.toLowerCase()], 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                    </span>
+                                                )}
+
                                                 {!gauge.gauge ? (
                                                     /* No gauge exists yet - show Coming Soon */
                                                     <span className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 flex items-center gap-1">
@@ -852,6 +917,21 @@ export default function VotePage() {
                                                         {gauge.isAlive ? '✓ Active' : '✗ Inactive'}
                                                     </span>
                                                 )}
+
+                                                {/* Add Incentive button */}
+                                                {gauge.gauge && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            console.log('Opening incentive modal for pool:', gauge.pool, gauge.symbol0, gauge.symbol1);
+                                                            setIncentivePool({ pool: gauge.pool, symbol0: gauge.symbol0, symbol1: gauge.symbol1 });
+                                                        }}
+                                                        className="px-2 py-1 text-[10px] rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition flex items-center gap-1"
+                                                    >
+                                                        💎 Add Incentive
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -868,6 +948,13 @@ export default function VotePage() {
                                             {totalVoteWeight > 100 && <span className="text-[10px] text-yellow-400 ml-1">⚠️</span>}
                                         </div>
                                         <div className="flex gap-2">
+                                            <button
+                                                onClick={handleVoteForAll}
+                                                disabled={!selectedVeNFT}
+                                                className="px-3 py-1.5 text-[10px] rounded bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 hover:from-blue-500/30 hover:to-cyan-500/30 transition disabled:opacity-50"
+                                            >
+                                                ⚡ Vote All
+                                            </button>
                                             {selectedVeNFT && (
                                                 <button
                                                     onClick={handleResetVotes}
@@ -933,6 +1020,100 @@ export default function VotePage() {
                         </div>
                     )}
                 </motion.div>
+            )}
+
+            {/* Incentive Modal */}
+            {incentivePool && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <motion.div
+                        className="glass-card p-4 sm:p-6 max-w-md w-full"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold">Add Incentive</h3>
+                            <button
+                                onClick={() => {
+                                    setIncentivePool(null);
+                                    setIncentiveToken(null);
+                                    setIncentiveAmount('');
+                                }}
+                                className="text-gray-400 hover:text-white"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
+                            <div className="text-xs text-gray-400 mb-1">Pool</div>
+                            <div className="font-semibold">{incentivePool.symbol0}/{incentivePool.symbol1}</div>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="text-xs text-gray-400 mb-2 block">Select Token</label>
+                            <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                                {DEFAULT_TOKEN_LIST.slice(0, 12).map((token) => (
+                                    <button
+                                        key={token.address}
+                                        onClick={() => setIncentiveToken(token)}
+                                        className={`p-2 rounded-lg flex flex-col items-center gap-1 transition ${incentiveToken?.address === token.address
+                                            ? 'bg-purple-500/30 border-purple-500 border'
+                                            : 'bg-white/5 hover:bg-white/10 border border-transparent'
+                                            }`}
+                                    >
+                                        {token.logoURI ? (
+                                            <img src={token.logoURI} alt={token.symbol} className="w-6 h-6 rounded-full" />
+                                        ) : (
+                                            <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
+                                                {token.symbol.slice(0, 2)}
+                                            </div>
+                                        )}
+                                        <span className="text-[10px] font-medium">{token.symbol}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {incentiveToken && (
+                            <div className="mb-4">
+                                <label className="text-xs text-gray-400 mb-2 block">Amount</label>
+                                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={incentiveAmount}
+                                            onChange={(e) => setIncentiveAmount(e.target.value)}
+                                            placeholder="0.0"
+                                            className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
+                                        />
+                                        <span className="text-sm text-gray-400">{incentiveToken.symbol}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                            <div className="text-xs text-purple-300">
+                                💡 Incentives reward voters who vote for this pool. They are distributed proportionally based on vote weight.
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleAddIncentive}
+                            disabled={!incentiveToken || !incentiveAmount || parseFloat(incentiveAmount) <= 0 || isAddingIncentive}
+                            className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-50"
+                        >
+                            {isAddingIncentive ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    Adding Incentive...
+                                </span>
+                            ) : (
+                                '🎁 Add Incentive'
+                            )}
+                        </button>
+                    </motion.div>
+                </div>
             )}
         </div>
     );
