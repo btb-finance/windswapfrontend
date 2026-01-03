@@ -190,8 +190,18 @@ export default function VotePage() {
     // Calculate total claimable
     const totalClaimable = positions.reduce((acc, p) => acc + p.claimable, BigInt(0));
 
-    // Calculate total vote weight
+    // Calculate total vote weight (relative)
     const totalVoteWeight = Object.values(voteWeights).reduce((acc, w) => acc + w, 0);
+
+    // Get selected veNFT's voting power
+    const selectedPosition = positions.find(p => p.tokenId === selectedVeNFT);
+    const selectedVotingPower = selectedPosition ? parseFloat(formatUnits(selectedPosition.votingPower, 18)) : 0;
+
+    // Calculate actual voting power per pool based on weights
+    const getActualVotePower = (poolWeight: number) => {
+        if (totalVoteWeight === 0 || poolWeight === 0) return 0;
+        return (selectedVotingPower * poolWeight / totalVoteWeight);
+    };
 
     // Determine current step for step indicator
     const getCurrentStep = () => {
@@ -906,6 +916,11 @@ export default function VotePage() {
                                                             disabled={!selectedVeNFT || !gauge.isAlive}
                                                             className="w-14 py-1 px-2 rounded bg-white/5 text-center text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
                                                         />
+                                                        {voteWeights[gauge.pool] > 0 && (
+                                                            <span className="text-[10px] text-cyan-400 min-w-[60px] text-right">
+                                                                ≈{getActualVotePower(voteWeights[gauge.pool]).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                                            </span>
+                                                        )}
                                                     </>
                                                 ) : (
                                                     <span className={`text-[10px] px-2 py-1 rounded ${gauge.isAlive ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
@@ -938,9 +953,11 @@ export default function VotePage() {
                                 <div className="p-3 bg-primary/5 border-t border-primary/20">
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="text-xs">
-                                            <span className="text-gray-400">Allocated: </span>
-                                            <span className={`font-bold ${totalVoteWeight > 100 ? 'text-yellow-400' : 'text-white'}`}>{totalVoteWeight}%</span>
-                                            {totalVoteWeight > 100 && <span className="text-[10px] text-yellow-400 ml-1">⚠️</span>}
+                                            <span className="text-gray-400">Pools: </span>
+                                            <span className="font-bold text-white">{Object.values(voteWeights).filter(w => w > 0).length}</span>
+                                            <span className="text-gray-400 mx-2">|</span>
+                                            <span className="text-gray-400">Power: </span>
+                                            <span className="font-bold text-primary">{selectedVotingPower.toLocaleString(undefined, { maximumFractionDigits: 2 })} veWIND</span>
                                         </div>
                                         <div className="flex gap-2">
                                             <button
