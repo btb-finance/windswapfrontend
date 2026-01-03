@@ -14,6 +14,12 @@ import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { calculatePoolAPR, calculateRangeAdjustedAPR } from '@/hooks/useWindPrice';
 import { GAUGE_LIST } from '@/config/gauges';
+import {
+    calculateOptimalAmounts,
+    getRequiredTokens,
+    priceToTick,
+    MAX_TICK,
+} from '@/utils/liquidityMath';
 
 
 type PoolType = 'v2' | 'cl';
@@ -267,49 +273,148 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const depositTokenAForOneSided = (isRangeAboveCurrent && isAToken0) || (isRangeBelowCurrent && !isAToken0);
     const depositTokenBForOneSided = (isRangeAboveCurrent && !isAToken0) || (isRangeBelowCurrent && isAToken0);
 
-    // Auto-calculate Token B amount for CL (when user enters Token A)
+    // Auto-calculate Token B amount for CL using ON-CHAIN SugarHelper contract
+    // This ensures calculations match exactly what the contract will use
     useEffect(() => {
         if (poolType !== 'cl' || !currentPrice || !amountA || parseFloat(amountA) <= 0) {
             return;
         }
 
-        // If this is an "Above Current" single-sided position where we should deposit B
-        // then A should be auto-set to 0, not the other way around
-        if (isRangeAboveCurrent) {
-            // Don't auto-calc B from A when A should be 0
-            // Instead, if user entered A, clear it and let them know to use B
-            return;
-        }
-
-        if (pLower <= 0 && pUpper === Infinity) {
-            const amtA = parseFloat(amountA);
-            const amtB = amtA * currentPrice;
-            setAmountB(amtB.toFixed(6));
-            return;
-        }
-
-        if (pLower <= 0 || pUpper <= 0 || pLower >= pUpper) {
-            return;
-        }
-
-        const sqrtPriceLower = Math.sqrt(pLower);
-        const sqrtPriceUpper = Math.sqrt(pUpper);
-        const sqrtPriceCurrent = Math.sqrt(currentPrice);
-        const amtA = parseFloat(amountA);
-
-        if (isRangeBelowCurrent) {
-            // Range is below current - only deposit token0 (A if A is token0, B if A is token1)
-            // If A is token0, B should be 0
-            if (isAToken0) {
-                setAmountB('0');
+        if (!clPoolAddress || pLower <= 0 || pUpper <= 0 || pLower >= pUpper) {
+            // Invalid range or no pool - use simple ratio for default case
+            if (pLower <= 0 && pUpper === Infinity) {
+                const amtA = parseFloat(amountA);
+                const amtB = amtA * currentPrice;
+                setAmountB(amtB.toFixed(6));
             }
-        } else {
-            // Normal range (contains current price)
-            const L = amtA * (sqrtPriceCurrent * sqrtPriceUpper) / (sqrtPriceUpper - sqrtPriceCurrent);
-            const amtB = L * (sqrtPriceCurrent - sqrtPriceLower);
-            setAmountB(amtB.toFixed(6));
+            return;
         }
-    }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper, isAToken0, isRangeAboveCurrent, isRangeBelowCurrent]);
+
+        // Check which tokens are needed for this range (in UI terms)
+        const required = getRequiredTokens(currentPrice, pLower, pUpper);
+
+        // If A is token0 and only token1 is needed (range above current), A should be 0
+        if (isAToken0 && !required.needsToken0) {
+            return; // User should enter B instead
+        }
+        // If A is token1 and only token0 is needed (range below current), A should be 0
+        if (!isAToken0 && !required.needsToken1) {
+            return; // User should enter B instead
+        }
+
+        // Call on-chain SugarHelper for accurate calculation
+        const calculateOnChain = async () => {
+            try {
+                const token0Decimals = isAToken0 ? (actualTokenA?.decimals || 18) : (actualTokenB?.decimals || 18);
+                const token1Decimals = isAToken0 ? (actualTokenB?.decimals || 18) : (actualTokenA?.decimals || 18);
+
+                // Parse amount to wei
+                const inputDecimals = actualTokenA?.decimals || 18;
+                const inputAmountWei = parseUnits(amountA, inputDecimals);
+
+                // Calculate ticks from prices (in pool order)
+                const priceToTickLocal = (price: number): number => {
+                    const poolPrice = isAToken0 ? price : 1 / price;
+                    const adjustedPrice = poolPrice * Math.pow(10, token1Decimals - token0Decimals);
+                    const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
+                    return Math.round(rawTick / tickSpacing) * tickSpacing;
+                };
+                let tickLower = priceToTickLocal(pLower);
+                let tickUpper = priceToTickLocal(pUpper);
+                if (tickLower > tickUpper) [tickLower, tickUpper] = [tickUpper, tickLower];
+
+
+
+                // Use viem's encodeFunctionData for proper ABI encoding
+                const { encodeFunctionData } = await import('viem');
+                const { SUGAR_HELPER_ABI } = await import('@/config/abis');
+
+                // Call SugarHelper - pass pool address to auto-fetch sqrtRatioX96
+                const calldata = encodeFunctionData({
+                    abi: SUGAR_HELPER_ABI,
+                    functionName: isAToken0 ? 'estimateAmount1' : 'estimateAmount0',
+                    args: isAToken0
+                        ? [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper]
+                        : [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
+                });
+
+                const response = await fetch(getPrimaryRpc(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{
+                            to: CL_CONTRACTS.SugarHelper,
+                            data: calldata,
+                        }, 'latest'],
+                        id: 1,
+                    }),
+                });
+                const result = await response.json();
+
+
+
+                if (result.result && result.result !== '0x' && result.result.length > 2) {
+                    const outputAmountWei = BigInt(result.result);
+                    const outputDecimals = actualTokenB?.decimals || 18;
+                    const outputAmount = formatUnits(outputAmountWei, outputDecimals);
+
+
+
+                    // Format with reasonable precision
+                    const parsedOutput = parseFloat(outputAmount);
+                    if (parsedOutput > 0 && isFinite(parsedOutput)) {
+                        setAmountB(parsedOutput.toFixed(6).replace(/\.?0+$/, ''));
+                    } else {
+                        setAmountB('0');
+                    }
+                } else {
+
+                    // Fallback to frontend calculation if on-chain call fails
+                    const position = {
+                        currentPrice,
+                        priceLower: pLower,
+                        priceUpper: pUpper,
+                        token0Decimals: actualTokenA?.decimals || 18,
+                        token1Decimals: actualTokenB?.decimals || 18,
+                        tickSpacing,
+                        isToken0Base: isAToken0,
+                    };
+                    const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
+                    const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
+                    if (outputAmount > 0 && isFinite(outputAmount)) {
+                        setAmountB(outputAmount.toFixed(6).replace(/\.?0+$/, ''));
+                    } else {
+                        setAmountB('0');
+                    }
+                }
+            } catch (error) {
+                console.error('Error calling SugarHelper:', error);
+                // Fallback to frontend calculation
+                const position = {
+                    currentPrice,
+                    priceLower: pLower,
+                    priceUpper: pUpper,
+                    token0Decimals: actualTokenA?.decimals || 18,
+                    token1Decimals: actualTokenB?.decimals || 18,
+                    tickSpacing,
+                    isToken0Base: isAToken0,
+                };
+                const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
+                const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
+                if (outputAmount > 0 && isFinite(outputAmount)) {
+                    setAmountB(outputAmount.toFixed(6).replace(/\.?0+$/, ''));
+                } else {
+                    setAmountB('0');
+                }
+            }
+        };
+
+        // Debounce the on-chain call
+        const timeoutId = setTimeout(calculateOnChain, 300);
+        return () => clearTimeout(timeoutId);
+    }, [poolType, clPoolPrice, clPoolAddress, initialPrice, amountA, priceLower, priceUpper, isAToken0, actualTokenA, actualTokenB, tickSpacing]);
 
     // Handle V2 liquidity add
     const handleAddLiquidity = async () => {
@@ -370,27 +475,25 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             const amount0Wei = amount0 && parseFloat(amount0) > 0 ? parseUnits(amount0, token0.decimals) : BigInt(0);
             const amount1Wei = amount1 && parseFloat(amount1) > 0 ? parseUnits(amount1, token1.decimals) : BigInt(0);
 
-            const priceToTick = (userPrice: number, spacing: number): number => {
-                if (userPrice <= 0) return 0;
-
-                let rawPrice: number;
-
-                if (isAFirst) {
-                    rawPrice = userPrice * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
-                } else {
-                    rawPrice = (1 / userPrice) * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
-                }
-
-                const tick = Math.floor(Math.log(rawPrice) / Math.log(1.0001));
-                return Math.round(tick / spacing) * spacing;
-            };
-
+            // Use imported priceToTick for consistent tick calculations
             let tickLower: number;
             let tickUpper: number;
 
             if (priceLower && priceUpper && parseFloat(priceLower) > 0 && parseFloat(priceUpper) > 0) {
-                tickLower = priceToTick(parseFloat(priceLower), tickSpacing);
-                tickUpper = priceToTick(parseFloat(priceUpper), tickSpacing);
+                tickLower = priceToTick(
+                    parseFloat(priceLower),
+                    token0.decimals,
+                    token1.decimals,
+                    tickSpacing,
+                    isAFirst // isToken0Base
+                );
+                tickUpper = priceToTick(
+                    parseFloat(priceUpper),
+                    token0.decimals,
+                    token1.decimals,
+                    tickSpacing,
+                    isAFirst
+                );
                 if (tickLower > tickUpper) {
                     [tickLower, tickUpper] = [tickUpper, tickLower];
                 }
@@ -399,7 +502,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     tickUpper = tickLower + tickSpacing;
                 }
             } else {
-                const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
+                const maxTick = Math.floor(MAX_TICK / tickSpacing) * tickSpacing;
                 tickLower = -maxTick;
                 tickUpper = maxTick;
             }
