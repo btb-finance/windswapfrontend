@@ -2,10 +2,9 @@
  * Uniswap V3 Concentrated Liquidity Math
  * 
  * Simplified implementation using floating-point math for UI calculations.
- * This avoids the complexity of Q96 fixed-point math for the UI layer
- * while maintaining accuracy for user-facing amounts.
  * 
- * For the actual on-chain operations, the contract handles the precise math.
+ * IMPORTANT: Prices in this module are in "UI order" (tokenB per tokenA as shown in UI).
+ * The formulas internally convert to pool order (token1/token0) when needed.
  */
 
 // Tick bounds from TickMath.sol
@@ -73,8 +72,7 @@ export function tickToPrice(
 }
 
 // ============================================================================
-// SIMPLE LIQUIDITY AMOUNT CALCULATIONS FOR UI
-// These use floating-point math which is sufficient for UI display
+// LIQUIDITY AMOUNT CALCULATIONS FOR UI
 // ============================================================================
 
 export interface RangePosition {
@@ -84,15 +82,12 @@ export interface RangePosition {
     token0Decimals: number;
     token1Decimals: number;
     tickSpacing: number;
+    isToken0Base: boolean;  // Whether tokenA (UI first token) is token0 (lower address)
 }
 
 /**
  * Determine which tokens are required for a position given the price range
- * 
- * @param currentPrice - Current pool price
- * @param priceLower - Lower bound of range
- * @param priceUpper - Upper bound of range
- * @returns Object indicating which tokens are needed
+ * Works with UI prices (tokenB per tokenA)
  */
 export function getRequiredTokens(
     currentPrice: number,
@@ -117,104 +112,87 @@ export function getRequiredTokens(
 }
 
 /**
- * Calculate the amount of token1 needed given an amount of token0
- * Uses the standard Uniswap V3 math with floating-point for simplicity
+ * Calculate the amount of the OTHER token needed given one token amount
+ * Uses Uniswap V3 concentrated liquidity formulas
  * 
- * Formula: For a position within the range,
- * L = amount0 * sqrt(P) * sqrt(Pb) / (sqrt(Pb) - sqrt(P))
- * amount1 = L * (sqrt(P) - sqrt(Pa))
+ * The formulas (in pool terms where P = token1/token0):
+ * - Given amount0: L = amount0 * sqrt(P) * sqrt(Pb) / (sqrt(Pb) - sqrt(P))
+ *                  amount1 = L * (sqrt(P) - sqrt(Pa))
  * 
- * @param amount0 - Amount of token0 (human readable)
- * @param position - Position details
- * @returns Amount of token1 needed (human readable)
+ * - Given amount1: L = amount1 / (sqrt(P) - sqrt(Pa))
+ *                  amount0 = L * (sqrt(Pb) - sqrt(P)) / (sqrt(P) * sqrt(Pb))
+ * 
+ * @param inputAmount - The amount user entered (human readable)
+ * @param inputIsToken0 - Whether the input is token0 (in pool terms)
+ * @param position - Position details including prices
+ * @returns The required amount of the other token (human readable)
  */
-export function calculateAmount1FromAmount0(
-    amount0: number,
+export function calculateOtherAmount(
+    inputAmount: number,
+    inputIsToken0: boolean,
     position: RangePosition
 ): number {
-    if (amount0 <= 0) return 0;
+    if (inputAmount <= 0) return 0;
 
-    const { currentPrice, priceLower, priceUpper } = position;
+    const { currentPrice, priceLower, priceUpper, isToken0Base } = position;
 
-    // Ensure lower < upper
-    const [lower, upper] = priceLower < priceUpper
-        ? [priceLower, priceUpper]
-        : [priceUpper, priceLower];
+    // Convert UI prices to pool prices (token1/token0)
+    // If isToken0Base: UI price is already token1/token0 ✓
+    // If !isToken0Base: UI price is token0/token1, need to invert
+    let poolPriceCurrent: number;
+    let poolPriceLower: number;
+    let poolPriceUpper: number;
 
-    // Check if single-sided
-    if (currentPrice <= lower) {
-        // Only token0 needed, token1 = 0
-        return 0;
-    }
-    if (currentPrice >= upper) {
-        // Only token1 needed, token0 should be 0 so this case shouldn't happen
-        return 0;
-    }
-
-    // Current price is within range
-    const sqrtPriceCurrent = Math.sqrt(currentPrice);
-    const sqrtPriceLower = Math.sqrt(lower);
-    const sqrtPriceUpper = Math.sqrt(upper);
-
-    // Calculate liquidity from amount0
-    // L = amount0 * sqrt(P) * sqrt(Pb) / (sqrt(Pb) - sqrt(P))
-    const liquidity = amount0 * (sqrtPriceCurrent * sqrtPriceUpper) / (sqrtPriceUpper - sqrtPriceCurrent);
-
-    // Calculate amount1 from liquidity
-    // amount1 = L * (sqrt(P) - sqrt(Pa))
-    const amount1 = liquidity * (sqrtPriceCurrent - sqrtPriceLower);
-
-    return amount1;
-}
-
-/**
- * Calculate the amount of token0 needed given an amount of token1
- * 
- * Formula: For a position within the range,
- * L = amount1 / (sqrt(P) - sqrt(Pa))
- * amount0 = L * (sqrt(Pb) - sqrt(P)) / (sqrt(P) * sqrt(Pb))
- * 
- * @param amount1 - Amount of token1 (human readable)
- * @param position - Position details
- * @returns Amount of token0 needed (human readable)
- */
-export function calculateAmount0FromAmount1(
-    amount1: number,
-    position: RangePosition
-): number {
-    if (amount1 <= 0) return 0;
-
-    const { currentPrice, priceLower, priceUpper } = position;
-
-    // Ensure lower < upper
-    const [lower, upper] = priceLower < priceUpper
-        ? [priceLower, priceUpper]
-        : [priceUpper, priceLower];
-
-    // Check if single-sided
-    if (currentPrice >= upper) {
-        // Only token1 needed, token0 = 0
-        return 0;
-    }
-    if (currentPrice <= lower) {
-        // Only token0 needed, token1 should be 0 so this case shouldn't happen
-        return 0;
+    if (isToken0Base) {
+        // UI shows tokenA=token0, tokenB=token1
+        // UI price = tokenB/tokenA = token1/token0 = pool price ✓
+        poolPriceCurrent = currentPrice;
+        poolPriceLower = priceLower;
+        poolPriceUpper = priceUpper;
+    } else {
+        // UI shows tokenA=token1, tokenB=token0
+        // UI price = tokenB/tokenA = token0/token1 = 1/pool_price
+        // Need to invert to get pool price
+        poolPriceCurrent = 1 / currentPrice;
+        poolPriceLower = 1 / priceUpper;  // Note: inverts the bounds too!
+        poolPriceUpper = 1 / priceLower;
     }
 
-    // Current price is within range
-    const sqrtPriceCurrent = Math.sqrt(currentPrice);
-    const sqrtPriceLower = Math.sqrt(lower);
-    const sqrtPriceUpper = Math.sqrt(upper);
+    // Ensure lower < upper in pool terms
+    const [lower, upper] = poolPriceLower < poolPriceUpper
+        ? [poolPriceLower, poolPriceUpper]
+        : [poolPriceUpper, poolPriceLower];
 
-    // Calculate liquidity from amount1
-    // L = amount1 / (sqrt(P) - sqrt(Pa))
-    const liquidity = amount1 / (sqrtPriceCurrent - sqrtPriceLower);
+    // Check single-sided cases
+    if (poolPriceCurrent <= lower) {
+        // Only token0 needed
+        return inputIsToken0 ? 0 : 0; // If providing token1 when only token0 needed, return 0
+    }
+    if (poolPriceCurrent >= upper) {
+        // Only token1 needed
+        return inputIsToken0 ? 0 : 0; // If providing token0 when only token1 needed, return 0
+    }
 
-    // Calculate amount0 from liquidity
-    // amount0 = L * (sqrt(Pb) - sqrt(P)) / (sqrt(P) * sqrt(Pb))
-    const amount0 = liquidity * (sqrtPriceUpper - sqrtPriceCurrent) / (sqrtPriceCurrent * sqrtPriceUpper);
+    // Both tokens needed - current price is within range
+    const sqrtP = Math.sqrt(poolPriceCurrent);
+    const sqrtPa = Math.sqrt(lower);
+    const sqrtPb = Math.sqrt(upper);
 
-    return amount0;
+    if (inputIsToken0) {
+        // User provides token0, calculate required token1
+        // L = amount0 * sqrt(P) * sqrt(Pb) / (sqrt(Pb) - sqrt(P))
+        const liquidity = inputAmount * (sqrtP * sqrtPb) / (sqrtPb - sqrtP);
+        // amount1 = L * (sqrt(P) - sqrt(Pa))
+        const amount1 = liquidity * (sqrtP - sqrtPa);
+        return amount1;
+    } else {
+        // User provides token1, calculate required token0
+        // L = amount1 / (sqrt(P) - sqrt(Pa))
+        const liquidity = inputAmount / (sqrtP - sqrtPa);
+        // amount0 = L * (sqrt(Pb) - sqrt(P)) / (sqrt(P) * sqrt(Pb))
+        const amount0 = liquidity * (sqrtPb - sqrtP) / (sqrtP * sqrtPb);
+        return amount0;
+    }
 }
 
 export interface PositionAmounts {
@@ -227,7 +205,7 @@ export interface PositionAmounts {
  * This is the main function to use from the UI
  * 
  * @param inputAmount - The amount user entered (human readable)
- * @param inputIsToken0 - Whether the input is token0 or token1
+ * @param inputIsToken0 - Whether the input is token0 or token1 IN POOL TERMS
  * @param position - Position details
  * @returns Calculated amounts for both tokens (human readable)
  */
@@ -236,37 +214,59 @@ export function calculateOptimalAmounts(
     inputIsToken0: boolean,
     position: RangePosition
 ): PositionAmounts {
-    const { currentPrice, priceLower, priceUpper } = position;
+    const { currentPrice, priceLower, priceUpper, isToken0Base } = position;
 
-    const required = getRequiredTokens(currentPrice, priceLower, priceUpper);
+    // Convert prices to pool order for range checking
+    let poolPriceCurrent: number;
+    let poolPriceLower: number;
+    let poolPriceUpper: number;
+
+    if (isToken0Base) {
+        poolPriceCurrent = currentPrice;
+        poolPriceLower = priceLower;
+        poolPriceUpper = priceUpper;
+    } else {
+        poolPriceCurrent = 1 / currentPrice;
+        poolPriceLower = 1 / priceUpper;
+        poolPriceUpper = 1 / priceLower;
+    }
+
+    // Ensure lower < upper
+    const [lower, upper] = poolPriceLower < poolPriceUpper
+        ? [poolPriceLower, poolPriceUpper]
+        : [poolPriceUpper, poolPriceLower];
+
+    // Check single-sided cases in pool terms
+    const priceBelow = poolPriceCurrent <= lower;
+    const priceAbove = poolPriceCurrent >= upper;
 
     if (inputIsToken0) {
-        if (!required.needsToken0) {
-            // Token0 not needed for this range (price above range)
+        if (priceAbove) {
+            // Only token1 needed, but user is providing token0
             return { amount0: 0, amount1: 0 };
         }
 
-        if (required.isSingleSided && required.needsToken0) {
-            // Only token0 needed (price below range)
+        if (priceBelow) {
+            // Only token0 needed
             return { amount0: inputAmount, amount1: 0 };
         }
 
-        // Both tokens needed - calculate amount1 from amount0
-        const amount1 = calculateAmount1FromAmount0(inputAmount, position);
+        // Both tokens needed
+        const amount1 = calculateOtherAmount(inputAmount, true, position);
         return { amount0: inputAmount, amount1 };
     } else {
-        if (!required.needsToken1) {
-            // Token1 not needed for this range (price below range)
+        if (priceBelow) {
+            // Only token0 needed, but user is providing token1
             return { amount0: 0, amount1: 0 };
         }
 
-        if (required.isSingleSided && required.needsToken1) {
-            // Only token1 needed (price above range)
+        if (priceAbove) {
+            // Only token1 needed
             return { amount0: 0, amount1: inputAmount };
         }
 
-        // Both tokens needed - calculate amount0 from amount1
-        const amount0 = calculateAmount0FromAmount1(inputAmount, position);
+        // Both tokens needed
+        const amount0 = calculateOtherAmount(inputAmount, false, position);
         return { amount0, amount1: inputAmount };
     }
 }
@@ -274,18 +274,11 @@ export function calculateOptimalAmounts(
 /**
  * Format a number to a specified number of decimal places
  * Removes trailing zeros
- * 
- * @param value - The number to format
- * @param displayDecimals - Number of decimals to show (default 6)
- * @returns Formatted string
  */
 export function formatAmount(value: number, displayDecimals: number = 6): string {
     if (!isFinite(value) || isNaN(value)) return '0';
 
-    // Use toFixed for consistent rounding
     const fixed = value.toFixed(displayDecimals);
-
-    // Remove trailing zeros after decimal point
     const trimmed = fixed.replace(/\.?0+$/, '');
 
     return trimmed || '0';
@@ -293,32 +286,19 @@ export function formatAmount(value: number, displayDecimals: number = 6): string
 
 // ============================================================================
 // LEGACY EXPORTS FOR COMPATIBILITY
-// These maintain the old interface but use the simpler calculations
 // ============================================================================
 
-/**
- * Parse a human-readable amount to wei
- * 
- * @param amount - Human readable amount
- * @param decimals - Token decimals
- * @returns Amount in wei as BigInt
- */
 export function parseToWei(amount: string | number, decimals: number): bigint {
     const amountStr = typeof amount === 'number' ? amount.toString() : amount;
 
     if (!amountStr || amountStr === '') return BigInt(0);
 
-    // Handle scientific notation
     const numValue = parseFloat(amountStr);
     if (!isFinite(numValue) || isNaN(numValue)) return BigInt(0);
 
-    // Convert to fixed notation to avoid issues with very small numbers
     const fixedStr = numValue.toFixed(decimals);
-
     const [integerPart = '0', fractionalPart = ''] = fixedStr.split('.');
     const paddedFractional = (fractionalPart + '0'.repeat(decimals)).slice(0, decimals);
-
-    // Handle potential negative zero
     const cleanInteger = integerPart === '-0' ? '0' : integerPart;
 
     try {
@@ -328,14 +308,6 @@ export function parseToWei(amount: string | number, decimals: number): bigint {
     }
 }
 
-/**
- * Format a BigInt wei value to a human-readable string
- * 
- * @param wei - Amount in wei
- * @param decimals - Token decimals
- * @param displayDecimals - Number of decimals to show (default 6)
- * @returns Formatted string
- */
 export function formatFromWei(wei: bigint, decimals: number, displayDecimals: number = 6): string {
     if (wei === BigInt(0)) return '0';
 
@@ -343,16 +315,12 @@ export function formatFromWei(wei: bigint, decimals: number, displayDecimals: nu
     const integerPart = wei / divisor;
     const fractionalPart = wei % divisor;
 
-    // Handle negative numbers
     const isNegative = wei < BigInt(0);
     const absIntegerPart = isNegative ? -integerPart : integerPart;
     const absFractionalPart = isNegative ? -fractionalPart : fractionalPart;
 
-    // Pad fractional part to full decimals
     let fractionalStr = absFractionalPart.toString().padStart(decimals, '0');
-    // Trim to displayDecimals
     fractionalStr = fractionalStr.slice(0, displayDecimals);
-    // Remove trailing zeros
     fractionalStr = fractionalStr.replace(/0+$/, '');
 
     const sign = isNegative ? '-' : '';
@@ -365,31 +333,20 @@ export function formatFromWei(wei: bigint, decimals: number, displayDecimals: nu
 }
 
 // ============================================================================
-// ADVANCED TICK MATH (Q96 Fixed Point)
-// These are kept for potential future use but UI should use simpler versions
+// ADVANCED TICK MATH (Q96 Fixed Point) - For reference
 // ============================================================================
 
-// Q96 = 2^96 - the fixed-point scaling factor for sqrtPriceX96
 const Q96 = BigInt(2) ** BigInt(96);
 
-// Min/max sqrt ratios from TickMath.sol
 export const MIN_SQRT_RATIO = BigInt('4295128739');
 export const MAX_SQRT_RATIO = BigInt('1461446703485210103287273052203988822378723970342');
 
-/**
- * Calculates sqrt(1.0001^tick) * 2^96
- * Equivalent to TickMath.getSqrtRatioAtTick()
- * 
- * @param tick - The tick value
- * @returns sqrtPriceX96 as BigInt
- */
 export function getSqrtRatioAtTick(tick: number): bigint {
     const absTick = Math.abs(tick);
     if (absTick > MAX_TICK) {
         throw new Error(`Tick ${tick} out of bounds`);
     }
 
-    // Use the same bit manipulation as Solidity for precision
     let ratio = (absTick & 0x1) !== 0
         ? BigInt('0xfffcb933bd6fad37aa2d162d1a594001')
         : BigInt('0x100000000000000000000000000000000');
@@ -419,7 +376,6 @@ export function getSqrtRatioAtTick(tick: number): bigint {
         ratio = maxUint256 / ratio;
     }
 
-    // Convert from Q128.128 to Q64.96, rounding up
     const remainder = ratio % (BigInt(1) << BigInt(32));
     const sqrtPriceX96 = (ratio >> BigInt(32)) + (remainder === BigInt(0) ? BigInt(0) : BigInt(1));
 

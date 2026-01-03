@@ -289,7 +289,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             return;
         }
 
-        // Check which tokens are needed for this range
+        // Check which tokens are needed for this range (in UI terms)
         const required = getRequiredTokens(currentPrice, pLower, pUpper);
 
         // If A is token0 and only token1 is needed (range above current), A should be 0
@@ -301,10 +301,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             return; // User should enter B instead
         }
 
-        // Parse amount as simple float (no wei conversion needed for UI calculation)
+        // Parse amount as float
         const inputAmount = parseFloat(amountA);
 
-        // Calculate optimal amounts using proper V3 math with floating-point
+        // Build position with isToken0Base so prices are correctly converted
         const position = {
             currentPrice,
             priceLower: pLower,
@@ -312,11 +312,15 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             token0Decimals: actualTokenA?.decimals || 18,
             token1Decimals: actualTokenB?.decimals || 18,
             tickSpacing,
+            isToken0Base: isAToken0,  // Important: tells math if UI tokenA is pool token0
         };
 
+        // Calculate: user enters amountA (which is token0 if isAToken0, else token1 in pool terms)
         const result = calculateOptimalAmounts(inputAmount, isAToken0, position);
 
-        // Set the calculated amount for token B
+        // Output is the OTHER token (B)
+        // If A is token0, B is token1 -> output is amount1
+        // If A is token1, B is token0 -> output is amount0
         const outputAmount = isAToken0 ? result.amount1 : result.amount0;
 
         // Format with reasonable precision
