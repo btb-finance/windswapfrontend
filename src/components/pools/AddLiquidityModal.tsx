@@ -313,20 +313,38 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 const inputAmountWei = parseUnits(amountA, inputDecimals);
 
                 // Calculate ticks from prices (in pool order)
-                const [tickLower, tickUpper] = (() => {
-                    const priceToTickLocal = (price: number): number => {
-                        const poolPrice = isAToken0 ? price : 1 / price;
-                        const adjustedPrice = poolPrice * Math.pow(10, token1Decimals - token0Decimals);
-                        const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
-                        return Math.round(rawTick / tickSpacing) * tickSpacing;
-                    };
-                    let tL = priceToTickLocal(pLower);
-                    let tU = priceToTickLocal(pUpper);
-                    if (tL > tU) [tL, tU] = [tU, tL];
-                    return [tL, tU];
-                })();
+                const priceToTickLocal = (price: number): number => {
+                    const poolPrice = isAToken0 ? price : 1 / price;
+                    const adjustedPrice = poolPrice * Math.pow(10, token1Decimals - token0Decimals);
+                    const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
+                    return Math.round(rawTick / tickSpacing) * tickSpacing;
+                };
+                let tickLower = priceToTickLocal(pLower);
+                let tickUpper = priceToTickLocal(pUpper);
+                if (tickLower > tickUpper) [tickLower, tickUpper] = [tickUpper, tickLower];
 
-                // Call SugarHelper on-chain
+                console.log('SugarHelper call:', {
+                    inputAmount: amountA,
+                    inputAmountWei: inputAmountWei.toString(),
+                    pool: clPoolAddress,
+                    tickLower,
+                    tickUpper,
+                    isAToken0,
+                });
+
+                // Use viem's encodeFunctionData for proper ABI encoding
+                const { encodeFunctionData } = await import('viem');
+                const { SUGAR_HELPER_ABI } = await import('@/config/abis');
+
+                // Call SugarHelper - pass pool address to auto-fetch sqrtRatioX96
+                const calldata = encodeFunctionData({
+                    abi: SUGAR_HELPER_ABI,
+                    functionName: isAToken0 ? 'estimateAmount1' : 'estimateAmount0',
+                    args: isAToken0
+                        ? [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper]
+                        : [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
+                });
+
                 const response = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -335,21 +353,21 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                         method: 'eth_call',
                         params: [{
                             to: CL_CONTRACTS.SugarHelper,
-                            data: isAToken0
-                                // estimateAmount1(amount0, pool, sqrtRatioX96, tickLow, tickHigh)
-                                ? `0x7d83beb5${inputAmountWei.toString(16).padStart(64, '0')}${clPoolAddress.slice(2).padStart(64, '0')}${'0'.repeat(64)}${(tickLower < 0 ? (BigInt(2) ** BigInt(24) + BigInt(tickLower)).toString(16) : tickLower.toString(16)).padStart(64, '0')}${(tickUpper < 0 ? (BigInt(2) ** BigInt(24) + BigInt(tickUpper)).toString(16) : tickUpper.toString(16)).padStart(64, '0')}`
-                                // estimateAmount0(amount1, pool, sqrtRatioX96, tickLow, tickHigh)
-                                : `0x78f5f8db${inputAmountWei.toString(16).padStart(64, '0')}${clPoolAddress.slice(2).padStart(64, '0')}${'0'.repeat(64)}${(tickLower < 0 ? (BigInt(2) ** BigInt(24) + BigInt(tickLower)).toString(16) : tickLower.toString(16)).padStart(64, '0')}${(tickUpper < 0 ? (BigInt(2) ** BigInt(24) + BigInt(tickUpper)).toString(16) : tickUpper.toString(16)).padStart(64, '0')}`
+                            data: calldata,
                         }, 'latest'],
                         id: 1,
                     }),
                 });
                 const result = await response.json();
 
-                if (result.result && result.result !== '0x') {
+                console.log('SugarHelper result:', result);
+
+                if (result.result && result.result !== '0x' && result.result.length > 2) {
                     const outputAmountWei = BigInt(result.result);
                     const outputDecimals = actualTokenB?.decimals || 18;
                     const outputAmount = formatUnits(outputAmountWei, outputDecimals);
+
+                    console.log('Calculated output:', outputAmount);
 
                     // Format with reasonable precision
                     const parsedOutput = parseFloat(outputAmount);
@@ -359,6 +377,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                         setAmountB('0');
                     }
                 } else {
+                    console.warn('SugarHelper returned empty, using fallback');
                     // Fallback to frontend calculation if on-chain call fails
                     const position = {
                         currentPrice,
