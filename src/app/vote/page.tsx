@@ -284,23 +284,18 @@ export default function VotePage() {
         }));
     };
 
-    // Vote for all pools evenly
+    // Vote for all pools evenly - uses equal weights (contract normalizes them)
     const handleVoteForAll = () => {
         const activeGauges = gauges.filter(g => g.gauge && g.isAlive);
         if (activeGauges.length === 0) return;
 
-        const weightPerPool = Math.floor(100 / activeGauges.length);
+        // Use equal weight (1) for each pool - contract will normalize to equal percentage
         const newWeights: Record<string, number> = {};
-
-        activeGauges.forEach((gauge, index) => {
-            // Give any remainder to the first pool
-            if (index === 0) {
-                newWeights[gauge.pool] = weightPerPool + (100 % activeGauges.length);
-            } else {
-                newWeights[gauge.pool] = weightPerPool;
-            }
+        activeGauges.forEach((gauge) => {
+            newWeights[gauge.pool] = 1; // Equal weight = equal share
         });
 
+        console.log('Vote All - distributing to', activeGauges.length, 'pools with equal weight');
         setVoteWeights(newWeights);
     };
 
