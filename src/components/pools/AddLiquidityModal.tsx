@@ -14,6 +14,16 @@ import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { calculatePoolAPR, calculateRangeAdjustedAPR } from '@/hooks/useWindPrice';
 import { GAUGE_LIST } from '@/config/gauges';
+import {
+    calculateOptimalAmounts,
+    getRequiredTokens,
+    priceToTick,
+    parseToWei,
+    formatFromWei,
+    getSqrtRatioAtTick,
+    MAX_TICK,
+    MIN_TICK,
+} from '@/utils/liquidityMath';
 
 
 type PoolType = 'v2' | 'cl';
@@ -267,49 +277,60 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const depositTokenAForOneSided = (isRangeAboveCurrent && isAToken0) || (isRangeBelowCurrent && !isAToken0);
     const depositTokenBForOneSided = (isRangeAboveCurrent && !isAToken0) || (isRangeBelowCurrent && isAToken0);
 
-    // Auto-calculate Token B amount for CL (when user enters Token A)
+    // Auto-calculate Token B amount for CL using proper Uniswap V3 math
     useEffect(() => {
         if (poolType !== 'cl' || !currentPrice || !amountA || parseFloat(amountA) <= 0) {
             return;
         }
 
-        // If this is an "Above Current" single-sided position where we should deposit B
-        // then A should be auto-set to 0, not the other way around
-        if (isRangeAboveCurrent) {
-            // Don't auto-calc B from A when A should be 0
-            // Instead, if user entered A, clear it and let them know to use B
-            return;
-        }
-
-        if (pLower <= 0 && pUpper === Infinity) {
-            const amtA = parseFloat(amountA);
-            const amtB = amtA * currentPrice;
-            setAmountB(amtB.toFixed(6));
-            return;
-        }
-
         if (pLower <= 0 || pUpper <= 0 || pLower >= pUpper) {
+            // Invalid range - use simple ratio for default case
+            if (pLower <= 0 && pUpper === Infinity) {
+                const amtA = parseFloat(amountA);
+                const amtB = amtA * currentPrice;
+                setAmountB(amtB.toFixed(6));
+            }
             return;
         }
 
-        const sqrtPriceLower = Math.sqrt(pLower);
-        const sqrtPriceUpper = Math.sqrt(pUpper);
-        const sqrtPriceCurrent = Math.sqrt(currentPrice);
-        const amtA = parseFloat(amountA);
+        // Get token decimals
+        const token0Decimals = isAToken0 ? (actualTokenA?.decimals || 18) : (actualTokenB?.decimals || 18);
+        const token1Decimals = isAToken0 ? (actualTokenB?.decimals || 18) : (actualTokenA?.decimals || 18);
 
-        if (isRangeBelowCurrent) {
-            // Range is below current - only deposit token0 (A if A is token0, B if A is token1)
-            // If A is token0, B should be 0
-            if (isAToken0) {
-                setAmountB('0');
-            }
-        } else {
-            // Normal range (contains current price)
-            const L = amtA * (sqrtPriceCurrent * sqrtPriceUpper) / (sqrtPriceUpper - sqrtPriceCurrent);
-            const amtB = L * (sqrtPriceCurrent - sqrtPriceLower);
-            setAmountB(amtB.toFixed(6));
+        // Check which tokens are needed for this range
+        const required = getRequiredTokens(currentPrice, pLower, pUpper);
+
+        // If A is token0 and only token1 is needed (range above current), A should be 0
+        if (isAToken0 && !required.needsToken0) {
+            return; // User should enter B instead
         }
-    }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper, isAToken0, isRangeAboveCurrent, isRangeBelowCurrent]);
+        // If A is token1 and only token0 is needed (range below current), A should be 0
+        if (!isAToken0 && !required.needsToken1) {
+            return; // User should enter B instead
+        }
+
+        // Parse amount to wei
+        const inputDecimals = actualTokenA?.decimals || 18;
+        const inputAmountWei = parseToWei(amountA, inputDecimals);
+
+        // Calculate optimal amounts using proper V3 math
+        const position = {
+            currentPrice,
+            priceLower: pLower,
+            priceUpper: pUpper,
+            token0Decimals,
+            token1Decimals,
+            tickSpacing,
+        };
+
+        const result = calculateOptimalAmounts(inputAmountWei, isAToken0, position);
+
+        // Set the calculated amount for token B
+        const outputDecimals = actualTokenB?.decimals || 18;
+        const outputAmount = isAToken0 ? result.amount1 : result.amount0;
+        const formattedOutput = formatFromWei(outputAmount, outputDecimals, 6);
+        setAmountB(formattedOutput === '0' ? '0' : formattedOutput);
+    }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper, isAToken0, actualTokenA, actualTokenB, tickSpacing]);
 
     // Handle V2 liquidity add
     const handleAddLiquidity = async () => {
@@ -370,27 +391,25 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             const amount0Wei = amount0 && parseFloat(amount0) > 0 ? parseUnits(amount0, token0.decimals) : BigInt(0);
             const amount1Wei = amount1 && parseFloat(amount1) > 0 ? parseUnits(amount1, token1.decimals) : BigInt(0);
 
-            const priceToTick = (userPrice: number, spacing: number): number => {
-                if (userPrice <= 0) return 0;
-
-                let rawPrice: number;
-
-                if (isAFirst) {
-                    rawPrice = userPrice * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
-                } else {
-                    rawPrice = (1 / userPrice) * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
-                }
-
-                const tick = Math.floor(Math.log(rawPrice) / Math.log(1.0001));
-                return Math.round(tick / spacing) * spacing;
-            };
-
+            // Use imported priceToTick for consistent tick calculations
             let tickLower: number;
             let tickUpper: number;
 
             if (priceLower && priceUpper && parseFloat(priceLower) > 0 && parseFloat(priceUpper) > 0) {
-                tickLower = priceToTick(parseFloat(priceLower), tickSpacing);
-                tickUpper = priceToTick(parseFloat(priceUpper), tickSpacing);
+                tickLower = priceToTick(
+                    parseFloat(priceLower),
+                    token0.decimals,
+                    token1.decimals,
+                    tickSpacing,
+                    isAFirst // isToken0Base
+                );
+                tickUpper = priceToTick(
+                    parseFloat(priceUpper),
+                    token0.decimals,
+                    token1.decimals,
+                    tickSpacing,
+                    isAFirst
+                );
                 if (tickLower > tickUpper) {
                     [tickLower, tickUpper] = [tickUpper, tickLower];
                 }
@@ -399,7 +418,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     tickUpper = tickLower + tickSpacing;
                 }
             } else {
-                const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
+                const maxTick = Math.floor(MAX_TICK / tickSpacing) * tickSpacing;
                 tickLower = -maxTick;
                 tickUpper = maxTick;
             }
