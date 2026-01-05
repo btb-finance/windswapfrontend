@@ -485,9 +485,26 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             const token1 = isAFirst ? actualTokenB : actualTokenA;
             const amount0 = isAFirst ? amountA : amountB;
             const amount1 = isAFirst ? amountB : amountA;
-            // Handle 0 amounts gracefully
-            const amount0Wei = amount0 && parseFloat(amount0) > 0 ? parseUnits(amount0, token0.decimals) : BigInt(0);
-            const amount1Wei = amount1 && parseFloat(amount1) > 0 ? parseUnits(amount1, token1.decimals) : BigInt(0);
+
+            // Safe parseUnits that truncates extra decimals to prevent errors
+            const safeParseUnits = (value: string, decimals: number): bigint => {
+                if (!value || parseFloat(value) <= 0) return BigInt(0);
+                // Truncate to max decimals the token supports
+                const parts = value.split('.');
+                if (parts.length === 2 && parts[1].length > decimals) {
+                    value = parts[0] + '.' + parts[1].slice(0, decimals);
+                }
+                try {
+                    return parseUnits(value, decimals);
+                } catch (e) {
+                    console.error('parseUnits error:', e, { value, decimals });
+                    return BigInt(0);
+                }
+            };
+
+            // Handle 0 amounts gracefully with safe parsing
+            const amount0Wei = safeParseUnits(amount0 || '0', token0.decimals);
+            const amount1Wei = safeParseUnits(amount1 || '0', token1.decimals);
 
             // Use imported priceToTick for consistent tick calculations
             let tickLower: number;

@@ -27,11 +27,15 @@ export function useTokenBalance(token: Token | undefined) {
         },
     });
 
-    const balance = token?.isNative
-        ? nativeBalance ? formatUnits(nativeBalance.value, nativeBalance.decimals) : undefined
-        : tokenBalance
-            ? formatUnits(tokenBalance as bigint, token?.decimals || 18)
-            : undefined;
+    // Get the raw bigint value
+    const rawBigInt = token?.isNative
+        ? nativeBalance?.value
+        : tokenBalance as bigint | undefined;
+
+    // Format with full precision for calculations
+    const balance = rawBigInt !== undefined && token
+        ? formatUnits(rawBigInt, token.decimals || 18)
+        : undefined;
 
     const refetch = () => {
         if (token?.isNative) {
@@ -43,7 +47,8 @@ export function useTokenBalance(token: Token | undefined) {
 
     return {
         balance,
-        raw: balance || '0', // Full precision for MAX button
+        rawBigInt, // Actual bigint for precise calculations
+        raw: balance || '0', // Full precision string for MAX button
         formatted: balance ? parseFloat(balance).toFixed(4) : '--',
         refetch,
     };
