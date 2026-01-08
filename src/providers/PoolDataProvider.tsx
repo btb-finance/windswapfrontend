@@ -542,6 +542,60 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // Start priority fetch immediately (non-blocking)
                 priorityFetchPromise.catch(() => { }); // Handle silently
 
+
+                // Fetch ALL gauge reward rates (not just priority pool)
+                try {
+                    const { GAUGE_LIST } = await import('@/config/gauges');
+                    const gaugesWithAddress = GAUGE_LIST.filter(g => g.gauge && g.gauge.length > 0);
+
+                    // Batch fetch all reward rates
+                    const rewardCalls = gaugesWithAddress.map(g => ({
+                        to: g.gauge,
+                        data: '0x7b0a47ee', // rewardRate()
+                        pool: g.pool.toLowerCase(),
+                        token0: g.token0.toLowerCase(),
+                        token1: g.token1.toLowerCase()
+                    }));
+
+                    if (rewardCalls.length > 0) {
+                        const rewardResults = await batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data })));
+                        const newRewards = new Map<string, bigint>();
+
+                        // Build token pair to reward rate mapping
+                        const pairRewardMap = new Map<string, bigint>();
+
+                        rewardCalls.forEach((call, i) => {
+                            const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
+                            if (rate > BigInt(0)) {
+                                // Key by GAUGE_LIST pool address
+                                newRewards.set(call.pool, rate);
+
+                                // Also key by token pair (for subgraph pool address matching)
+                                const pairKey = [call.token0, call.token1].sort().join('-');
+                                pairRewardMap.set(pairKey, rate);
+                            }
+                        });
+
+                        // Also add rewards for subgraph pools that match by token pair
+                        subgraphPools.forEach(pool => {
+                            const t0 = pool.token0.address.toLowerCase();
+                            const t1 = pool.token1.address.toLowerCase();
+                            const pairKey = [t0, t1].sort().join('-');
+                            const rate = pairRewardMap.get(pairKey);
+                            if (rate && rate > BigInt(0)) {
+                                newRewards.set(pool.address.toLowerCase(), rate);
+                            }
+                        });
+
+                        if (newRewards.size > 0) {
+                            setPoolRewards(newRewards);
+                            console.log(`[PoolDataProvider] 🎉 Loaded ${newRewards.size} gauge reward rates`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[PoolDataProvider] Failed to fetch gauge reward rates:', err);
+                }
+
                 // Fetch gauge data for voting (in parallel with priority fetch)
                 await fetchGaugeData(newTokenMap);
 
