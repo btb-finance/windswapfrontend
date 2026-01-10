@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useReadContract, useWriteContract } from 'wagmi';
-import { formatUnits, Address } from 'viem';
+import { useAccount, useReadContract, useWriteContract, usePublicClient } from 'wagmi';
+import { formatUnits, Address, encodeFunctionData } from 'viem';
 import Link from 'next/link';
 import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';
 import { useTokenBalance } from '@/hooks/useToken';
@@ -146,19 +146,175 @@ export default function VotePage() {
     // Distribute state
     const [isDistributing, setIsDistributing] = useState(false);
     const { writeContractAsync } = useWriteContract();
+    const publicClient = usePublicClient();
 
-    // Handle distribute rewards (anyone can call this!)
+    // Claimable voting rewards state: { tokenId: { gaugePool: { token: amount } } }
+    const [votingRewards, setVotingRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
+    const [isLoadingVotingRewards, setIsLoadingVotingRewards] = useState(false);
+
+    // ABI for fee reward contracts (earned + getReward)
+    const FEE_REWARD_ABI = [
+        {
+            inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
+            name: 'earned',
+            outputs: [{ name: '', type: 'uint256' }],
+            stateMutability: 'view',
+            type: 'function',
+        },
+        {
+            inputs: [{ name: 'tokenId', type: 'uint256' }, { name: 'tokens', type: 'address[]' }],
+            name: 'getReward',
+            outputs: [],
+            stateMutability: 'nonpayable',
+            type: 'function',
+        },
+    ] as const;
+
+    // Fetch claimable voting rewards for all veNFTs using batch RPC
+    const fetchVotingRewards = useCallback(async () => {
+        if (positions.length === 0 || gauges.length === 0) return;
+
+        setIsLoadingVotingRewards(true);
+        try {
+            // Build all earned() calls upfront
+            interface EarnedCall {
+                tokenId: string;
+                pool: string;
+                token: string;
+                feeReward: string;
+            }
+            const calls: EarnedCall[] = [];
+
+            for (const position of positions) {
+                for (const gauge of gauges) {
+                    if (!gauge.feeReward || gauge.feeReward === '0x0000000000000000000000000000000000000000') continue;
+
+                    // Add call for token0 and token1
+                    calls.push({
+                        tokenId: position.tokenId.toString(),
+                        pool: gauge.pool,
+                        token: gauge.token0,
+                        feeReward: gauge.feeReward,
+                    });
+                    calls.push({
+                        tokenId: position.tokenId.toString(),
+                        pool: gauge.pool,
+                        token: gauge.token1,
+                        feeReward: gauge.feeReward,
+                    });
+                }
+            }
+
+            if (calls.length === 0) {
+                setVotingRewards({});
+                setIsLoadingVotingRewards(false);
+                return;
+            }
+
+            // Encode earned(token, tokenId) calls
+            const earnedSelector = '0x3e491d47'; // earned(address,uint256)
+            const rpcCalls = calls.map(call => ({
+                method: 'eth_call',
+                params: [{
+                    to: call.feeReward,
+                    data: earnedSelector +
+                        call.token.slice(2).padStart(64, '0') +
+                        BigInt(call.tokenId).toString(16).padStart(64, '0')
+                }, 'latest']
+            }));
+
+            // Execute batch RPC call
+            const response = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rpcCalls.map((call, i) => ({
+                    jsonrpc: '2.0',
+                    method: call.method,
+                    params: call.params,
+                    id: i + 1,
+                }))),
+            });
+
+            const results = await response.json();
+            const earnedResults = Array.isArray(results) ? results.map(r => r.result || '0x0') : [];
+
+            // Parse results into votingRewards structure
+            const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
+
+            earnedResults.forEach((result, idx) => {
+                const call = calls[idx];
+                if (!call) return;
+
+                const earned = result && result !== '0x' && result.length > 2
+                    ? BigInt(result)
+                    : BigInt(0);
+
+                if (earned > BigInt(0)) {
+                    if (!newRewards[call.tokenId]) newRewards[call.tokenId] = {};
+                    if (!newRewards[call.tokenId][call.pool]) newRewards[call.tokenId][call.pool] = {};
+                    newRewards[call.tokenId][call.pool][call.token] = earned;
+                }
+            });
+
+            setVotingRewards(newRewards);
+        } catch (err) {
+            console.error('Error fetching voting rewards:', err);
+        }
+        setIsLoadingVotingRewards(false);
+    }, [positions, gauges]);
+
+    // Fetch voting rewards when positions or gauges change
+    useEffect(() => {
+        fetchVotingRewards();
+    }, [fetchVotingRewards]);
+
+    // Claim voting rewards for a specific veNFT and gauge
+    const [isClaimingVotingRewards, setIsClaimingVotingRewards] = useState<string | null>(null);
+    const handleClaimVotingRewards = async (tokenId: bigint, feeRewardAddress: Address, tokens: Address[]) => {
+        const claimKey = `${tokenId}-${feeRewardAddress}`;
+        setIsClaimingVotingRewards(claimKey);
+        try {
+            const hash = await writeContractAsync({
+                address: feeRewardAddress,
+                abi: FEE_REWARD_ABI,
+                functionName: 'getReward',
+                args: [tokenId, tokens],
+            });
+            setTxHash(hash);
+            // Refetch voting rewards after claiming
+            setTimeout(() => fetchVotingRewards(), 3000);
+        } catch (err: any) {
+            console.error('Claim voting rewards failed:', err);
+        }
+        setIsClaimingVotingRewards(null);
+    };
+
+    // Handle distribute rewards (anyone can call this!) - batch in groups of 10 to avoid gas limits
     const handleDistributeRewards = async () => {
         if (!voterPoolCount || Number(voterPoolCount) === 0) return;
         setIsDistributing(true);
+
+        const totalPools = Number(voterPoolCount);
+        const batchSize = 10;
+
         try {
-            const hash = await writeContractAsync({
-                address: V2_CONTRACTS.Voter as Address,
-                abi: VOTER_DISTRIBUTE_ABI,
-                functionName: 'distribute',
-                args: [BigInt(0), voterPoolCount],
-            });
-            setTxHash(hash);
+            for (let start = 0; start < totalPools; start += batchSize) {
+                const end = Math.min(start + batchSize, totalPools);
+                console.log(`Distributing pools ${start} to ${end - 1}...`);
+
+                const hash = await writeContractAsync({
+                    address: V2_CONTRACTS.Voter as Address,
+                    abi: VOTER_DISTRIBUTE_ABI,
+                    functionName: 'distribute',
+                    args: [BigInt(start), BigInt(end)],
+                });
+                setTxHash(hash);
+
+                // Brief pause between batches
+                if (end < totalPools) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
         } catch (err: any) {
             console.error('Distribute failed:', err);
         }
@@ -1005,31 +1161,110 @@ export default function VotePage() {
                             <button onClick={() => setActiveTab('lock')} className="btn-primary px-4 py-2 text-xs rounded-lg">Lock WIND</button>
                         </div>
                     ) : (
-                        <div className="glass-card p-3 sm:p-4">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-semibold">Rebase Rewards</h3>
-                                <span className="text-xs text-gray-400">Protects voting power</span>
+                        <>
+                            <div className="glass-card p-3 sm:p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-semibold">Rebase Rewards</h3>
+                                    <span className="text-xs text-gray-400">Protects voting power</span>
+                                </div>
+                                <div className="space-y-2">
+                                    {positions.map((position) => (
+                                        <div key={position.tokenId.toString()} className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
+                                            <div className="min-w-0">
+                                                <div className="text-xs text-gray-400">#{position.tokenId.toString()}</div>
+                                                <div className="font-bold text-sm text-green-400">
+                                                    {parseFloat(formatUnits(position.claimable, 18)).toFixed(4)} WIND
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleClaimRebases(position.tokenId)}
+                                                disabled={isLoading || position.claimable === BigInt(0)}
+                                                className="px-3 py-1.5 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-40"
+                                            >
+                                                Claim
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                {positions.map((position) => (
-                                    <div key={position.tokenId.toString()} className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
-                                        <div className="min-w-0">
-                                            <div className="text-xs text-gray-400">#{position.tokenId.toString()}</div>
-                                            <div className="font-bold text-sm text-green-400">
-                                                {parseFloat(formatUnits(position.claimable, 18)).toFixed(4)} WIND
+
+                            {/* Voting Fee Rewards - Personal Claimable */}
+                            <div className="glass-card p-3 sm:p-4 mt-3">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-semibold">Voting Rewards</h3>
+                                    <span className="text-xs text-gray-400">
+                                        {isLoadingVotingRewards ? 'Loading...' : 'Your claimable fees'}
+                                    </span>
+                                </div>
+                                {positions.map((position) => {
+                                    const tokenIdStr = position.tokenId.toString();
+                                    const positionRewards = votingRewards[tokenIdStr] || {};
+                                    const hasRewards = Object.keys(positionRewards).some(pool =>
+                                        Object.keys(positionRewards[pool] || {}).length > 0
+                                    );
+
+                                    if (!hasRewards) return null;
+
+                                    return (
+                                        <div key={tokenIdStr} className="mb-3">
+                                            <div className="text-xs text-gray-400 mb-2">veNFT #{tokenIdStr}</div>
+                                            <div className="space-y-2">
+                                                {Object.entries(positionRewards).map(([poolAddress, tokens]) => {
+                                                    if (Object.keys(tokens).length === 0) return null;
+                                                    const gauge = gauges.find(g => g.pool === poolAddress);
+                                                    if (!gauge) return null;
+
+                                                    return (
+                                                        <div key={poolAddress} className="p-2 rounded-lg bg-white/5 border border-white/10">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs font-medium">{gauge.symbol0}/{gauge.symbol1}</span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleClaimVotingRewards(
+                                                                        position.tokenId,
+                                                                        gauge.feeReward as Address,
+                                                                        Object.keys(tokens) as Address[]
+                                                                    )}
+                                                                    disabled={isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}`}
+                                                                    className="px-2 py-1 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
+                                                                >
+                                                                    {isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}` ? '...' : 'Claim'}
+                                                                </button>
+                                                            </div>
+                                                            <div className="text-xs text-green-400">
+                                                                {Object.entries(tokens).map(([tokenAddr, amount], idx) => {
+                                                                    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === tokenAddr.toLowerCase());
+                                                                    const decimals = token?.decimals || 18;
+                                                                    const symbol = token?.symbol || tokenAddr.slice(0, 6);
+                                                                    return (
+                                                                        <span key={tokenAddr}>
+                                                                            {parseFloat(formatUnits(amount, decimals)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {symbol}
+                                                                            {idx < Object.keys(tokens).length - 1 && ' + '}
+                                                                        </span>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={() => handleClaimRebases(position.tokenId)}
-                                            disabled={isLoading || position.claimable === BigInt(0)}
-                                            className="px-3 py-1.5 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-40"
-                                        >
-                                            Claim
-                                        </button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
+                                {!isLoadingVotingRewards && Object.keys(votingRewards).every(tid =>
+                                    Object.keys(votingRewards[tid] || {}).every(pool =>
+                                        Object.keys(votingRewards[tid][pool] || {}).length === 0
+                                    )
+                                ) && (
+                                        <div className="text-center text-gray-500 text-xs py-4">
+                                            <div className="text-2xl mb-2">📊</div>
+                                            <div>No voting rewards to claim yet</div>
+                                            <div className="text-[10px] mt-1">Vote for pools to earn trading fees</div>
+                                        </div>
+                                    )}
                             </div>
-                        </div>
+                        </>
                     )}
                 </motion.div>
             )}

@@ -12,7 +12,7 @@ import { useTokenBalance } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
-import { calculateBaseAPR, formatAPR } from '@/utils/aprCalculator';
+import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
 import { GAUGE_LIST } from '@/config/gauges';
 import { isStablecoinPair, tickToStablecoinPrice } from '@/config/stablecoinTicks';
 import {
@@ -82,7 +82,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const { raw: rawBalanceA, formatted: balanceA } = useTokenBalance(tokenA);
     const { raw: rawBalanceB, formatted: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
-    const { poolRewards, windPrice, seiPrice } = usePoolData();
+    const { poolRewards, windPrice, seiPrice, allPools } = usePoolData();
 
     // Find gauge for current pool configuration
     const getPoolGauge = useCallback(() => {
@@ -234,16 +234,17 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                 // Auto-set default range when pool price loads
                 if (!priceLower && !priceUpper) {
-                    // Check if this is a stablecoin pair
+                    // Check if this is a stablecoin or pegged asset pair (1:1 pairs)
                     const isStablePair = isStablecoinPair(
                         actualTokenA.symbol || actualTokenA.address,
                         actualTokenB.symbol || actualTokenB.address
                     );
 
                     if (isStablePair) {
-                        // Use tight range for stablecoins: ±0.5% centered on current price
-                        setPriceLower((price * 0.995).toFixed(6));
-                        setPriceUpper((price * 1.005).toFixed(6));
+                        // For stablecoin/pegged pairs, always center around 1.0 (they should trade 1:1)
+                        // Use tight ±0.5% range centered on 1.0
+                        setPriceLower('0.995');
+                        setPriceUpper('1.005');
                     } else {
                         // Standard ±10% range for other pairs
                         setPriceLower((price * 0.9).toFixed(6));
@@ -1181,27 +1182,40 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             const rewardRate = poolRewards.get(clPoolAddress.toLowerCase());
                                                             if (!rewardRate || rewardRate === BigInt(0)) return null;
 
+                                                            // Find pool data to get actual TVL
+                                                            const pool = allPools.find(p => p.address.toLowerCase() === clPoolAddress.toLowerCase());
+                                                            const tvlUsd = pool ? (parseFloat(pool.tvl) || 1) : 1;
+
+                                                            // Get base pool APR (without range adjustment)
+                                                            const poolAPR = calculatePoolAPR(rewardRate, windPrice, tvlUsd, undefined);
+
+                                                            // Calculate range-adjusted APR based on user's selected range
                                                             const pLow = parseFloat(priceLower || '0');
                                                             const pHigh = parseFloat(priceUpper || '0');
 
-                                                            if (pLow <= 0 || pHigh <= 0 || pLow >= pHigh || !currentPrice) return null;
+                                                            if (pLow > 0 && pHigh > 0 && pLow < pHigh && currentPrice) {
+                                                                // Range width as percentage of current price
+                                                                const rangeWidth = (pHigh - pLow) / currentPrice;
 
-                                                            // Calculate range width as ratio - this determines "capital efficiency"
-                                                            const rangeWidth = (pHigh - pLow) / currentPrice;
-                                                            const referenceWidth = 1.5; // Full range reference (±100%)
-                                                            const rawMultiplier = referenceWidth / rangeWidth;
-                                                            const multiplier = Math.max(1, Math.min(rawMultiplier, 100));
+                                                                // Reference: ±100% range = 2x width = rangeWidth of 2
+                                                                // Tighter ranges get higher multiplier using sqrt for balance
+                                                                const referenceWidth = 2.0;
+                                                                const rawMultiplier = Math.sqrt(referenceWidth / rangeWidth);
+                                                                const rangeMultiplier = Math.max(1, Math.min(rawMultiplier, 500));
 
-                                                            // Use reference TVL of $10k for base APR estimate  
-                                                            const referenceTvl = 10000;
-                                                            const baseAPR = calculateBaseAPR(rewardRate, windPrice, referenceTvl);
+                                                                const rangeAdjustedAPR = poolAPR * rangeMultiplier;
 
-                                                            // Apply concentration multiplier
-                                                            const adjustedAPR = baseAPR * multiplier;
+                                                                return (
+                                                                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
+                                                                        🔥 APR {formatAPR(rangeAdjustedAPR)}
+                                                                    </span>
+                                                                );
+                                                            }
 
+                                                            // Fallback to base pool APR if no range selected
                                                             return (
                                                                 <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
-                                                                    🔥 APR {formatAPR(adjustedAPR)}
+                                                                    🔥 APR {formatAPR(poolAPR)}
                                                                 </span>
                                                             );
                                                         })()}

@@ -24,11 +24,11 @@ function loadCachedDexScreenerVolumes(): Map<string, number> | null {
 
         const { timestamp, data } = JSON.parse(cached);
         if (Date.now() - timestamp > DEXSCREENER_CACHE_TTL) {
-            console.log('[DexScreener] Cache expired, will fetch fresh data');
+            // Cache expired
             return null;
         }
 
-        console.log(`[DexScreener] 📦 Loaded cached volume data (${Object.keys(data).length} pools)`);
+
         return new Map(Object.entries(data));
     } catch {
         return null;
@@ -98,7 +98,7 @@ async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string
             saveDexScreenerVolumes(volumeMap);
         }
 
-        console.log(`[DexScreener] ✅ Got data for ${dataMap.size} pools (volume + TVL + reserves)`);
+        // Successfully fetched DexScreener data
     } catch (err) {
         console.warn('[DexScreener] Failed to fetch data:', err);
     }
@@ -342,7 +342,7 @@ function loadCachedPools(): { clPools: PoolData[]; v2Pools: PoolData[]; timestam
             const data = JSON.parse(cached);
             // Check if cache is still valid (less than 1 hour old)
             if (Date.now() - data.timestamp < CACHE_EXPIRY) {
-                console.log('[PoolDataProvider] ⚡ Loading from cache');
+                // Loading from cache
                 return data;
             }
         }
@@ -361,7 +361,7 @@ function saveCachePools(clPools: PoolData[], v2Pools: PoolData[]) {
             v2Pools,
             timestamp: Date.now()
         }));
-        console.log('[PoolDataProvider] 💾 Saved to cache');
+        // Saved to cache
     } catch (e) {
         console.warn('[PoolDataProvider] Cache write error');
     }
@@ -384,11 +384,9 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (onChainWindPrice > 0) {
             setWindPrice(onChainWindPrice);
-            console.log(`[PoolDataProvider] 💰 WIND price from on-chain: $${onChainWindPrice.toFixed(6)}`);
         }
         if (onChainSeiPrice > 0) {
             setSeiPrice(onChainSeiPrice);
-            console.log(`[PoolDataProvider] 💰 SEI price from on-chain: $${onChainSeiPrice.toFixed(4)}`);
         }
     }, [onChainWindPrice, onChainSeiPrice]);
 
@@ -415,15 +413,15 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setClPools(cached.clPools);
                 setV2Pools(cached.v2Pools);
                 setIsLoading(false); // Show cached data immediately!
-                console.log(`[PoolDataProvider] ⚡ Loaded ${cached.clPools.length} pools from cache`);
+                // Loaded pools from cache
             }
 
             // Step 1: Try fetching from SUBGRAPH (primary source - all pools!)
-            console.log('[PoolDataProvider] 🔍 Fetching pools from subgraph...');
+            // Fetching from subgraph
             const subgraphData = await fetchPoolsFromSubgraph();
 
             if (subgraphData && subgraphData.pools.length > 0) {
-                console.log(`[PoolDataProvider] ✅ Got ${subgraphData.pools.length} pools from subgraph`);
+                // Got pools from subgraph
 
                 // Convert subgraph pools to PoolData format
                 const subgraphPools: PoolData[] = subgraphData.pools.map(p => {
@@ -449,7 +447,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         },
                         poolType: 'CL' as const,
                         stable: false,
-                        tickSpacing: p.tickSpacing,
+                        tickSpacing: typeof p.tickSpacing === 'number' ? p.tickSpacing : parseInt(String(p.tickSpacing)) || 0,
                         reserve0: '0', // Subgraph doesn't give individual reserves
                         reserve1: '0',
                         tvl: tvl > 0 ? tvl.toFixed(2) : '0',
@@ -468,7 +466,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // Set pools from subgraph (for immediate display - priority pool first!)
                 setClPools(subgraphPools);
                 setIsLoading(false);
-                console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
+                // Showing pools from subgraph
 
                 // Fetch volume + TVL + PRICES from DexScreener (non-blocking) - replaces ALL RPC fetching!
                 const poolAddresses = subgraphPools.map(p => p.address);
@@ -486,7 +484,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             detectedSeiPrice = usdcWseiData.reserve0 / usdcWseiData.reserve1;
                             if (detectedSeiPrice > 0 && detectedSeiPrice < 100) {
                                 setSeiPrice(detectedSeiPrice);
-                                console.log(`[DexScreener] ⚡ SEI price: $${detectedSeiPrice.toFixed(4)}`);
                             }
                         }
 
@@ -522,9 +519,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
                         if (detectedWindPrice > 0 && detectedWindPrice < 1000) {
                             setWindPrice(detectedWindPrice);
-                            console.log(`[DexScreener] ⚡ WIND price: $${detectedWindPrice.toFixed(6)}`);
-                        } else {
-                            console.warn(`[DexScreener] ⚠️ Could not detect WIND price, APR may be wrong`);
                         }
 
                         // Update pool data
@@ -539,7 +533,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
                             };
                         }));
-                        console.log(`[PoolDataProvider] 📈 Updated ${dataMap.size} pools with DexScreener data`);
                     }
                 });
 
@@ -554,7 +547,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
                 const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
                 const priorityFetchPromise = priorityPool ? (async () => {
-                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI APR...');
                     try {
                         // Only fetch reward rate (prices come from DexScreener now!)
                         const priorityCalls = [
@@ -566,7 +558,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
                         if (rewardRate > BigInt(0)) {
                             setPoolRewards(prev => new Map(prev).set(PRIORITY_POOL, rewardRate));
-                            console.log(`[PoolDataProvider] ⚡ WIND/WSEI APR loaded: ${formatUnits(rewardRate, 18)}/sec`);
                         }
                     } catch (err) {
                         console.warn('[PoolDataProvider] Priority pool fetch error:', err);
@@ -600,21 +591,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         // Key: token0-token1-tickSpacing (tokens sorted alphabetically)
                         const pairRewardMap = new Map<string, bigint>();
 
-                        // Log all reward rates for debugging
-                        const { GAUGE_LIST } = await import('@/config/gauges');
-
                         rewardCalls.forEach((call, i) => {
                             const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
-                            const gaugeInfo = GAUGE_LIST.find(g => g.gauge?.toLowerCase() === call.to.toLowerCase());
-                            const pairName = gaugeInfo ? `${gaugeInfo.symbol0}/${gaugeInfo.symbol1}` : call.pool;
-
-                            // Log ALL rates for debugging
-                            const ratePerDay = Number(rate) / 1e18 * 86400;
-                            if (rate === BigInt(0)) {
-                                console.log(`[Gauge] ⚠️ ${pairName} (ts:${call.tickSpacing}): 0 reward rate`);
-                            } else {
-                                console.log(`[Gauge] ✅ ${pairName} (ts:${call.tickSpacing}): ${ratePerDay.toFixed(2)} WIND/day`);
-                            }
 
                             if (rate > BigInt(0)) {
                                 // Key by GAUGE_LIST pool address
@@ -628,8 +606,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         });
 
                         // Also add rewards for subgraph pools that match by token pair + tickSpacing
+                        // Also store the correct tickSpacing from gauge for APR calculation
                         let matchedCount = 0;
                         let unmatchedPools: string[] = [];
+
+                        // Store tickSpacing corrections for pools that matched with different tickSpacing
+                        const tickSpacingCorrections = new Map<string, number>();
 
                         subgraphPools.forEach(pool => {
                             const t0 = pool.token0.address.toLowerCase();
@@ -646,10 +628,11 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 pairRewardMap.forEach((altRate, altKey) => {
                                     if (altKey.startsWith(`${sortedTokens[0]}-${sortedTokens[1]}-`) && !foundAlternate) {
                                         foundAlternate = true;
-                                        const altTickSpacing = altKey.split('-')[2];
-                                        console.log(`[Match] ⚠️ ${pool.token0.symbol}/${pool.token1.symbol}: subgraph ts=${pool.tickSpacing}, gauge ts=${altTickSpacing}`);
+                                        const altTickSpacing = parseInt(altKey.split('-')[2]) || 0;
                                         // Use the alternate rate
                                         newRewards.set(pool.address.toLowerCase(), altRate);
+                                        // Store the correct tickSpacing from gauge
+                                        tickSpacingCorrections.set(pool.address.toLowerCase(), altTickSpacing);
                                         matchedCount++;
                                     }
                                 });
@@ -659,13 +642,21 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             }
                         });
 
-                        if (unmatchedPools.length > 0) {
-                            console.log(`[Match] ❌ No gauge found for: ${unmatchedPools.join(', ')}`);
+                        // Apply tickSpacing corrections to pools
+                        if (tickSpacingCorrections.size > 0) {
+                            setClPools(prev => prev.map(pool => {
+                                const correctedTs = tickSpacingCorrections.get(pool.address.toLowerCase());
+                                if (correctedTs !== undefined) {
+                                    return { ...pool, tickSpacing: correctedTs };
+                                }
+                                return pool;
+                            }));
                         }
+
+                        // unmatchedPools are pools without gauges, APR will show as "—"
 
                         if (newRewards.size > 0) {
                             setPoolRewards(newRewards);
-                            console.log(`[PoolDataProvider] 🎉 Loaded ${newRewards.size} gauge reward rates (matched ${matchedCount} subgraph pools)`);
                         }
                     }
                 } catch (err) {
@@ -682,7 +673,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 return; // Done!
             } else {
                 // Subgraph failed or empty - fall back to GAUGE_LIST
-                console.log('[PoolDataProvider] ⚠️ Subgraph empty/failed, using GAUGE_LIST');
+                // Subgraph empty/failed, using GAUGE_LIST
 
                 if (!cached || cached.clPools.length === 0) {
                     try {
@@ -742,7 +733,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                             reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
                                         };
                                     }));
-                                    console.log(`[PoolDataProvider] 📈 Updated GAUGE_LIST pools with DexScreener data`);
+                                    // Updated GAUGE_LIST pools with DexScreener data
                                 }
                             });
                         }
@@ -1016,7 +1007,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 });
             }
 
-            console.log('[PoolDataProvider] Fee reward addresses:', feeRewardAddresses.filter(a => a !== null));
+            // Fee reward addresses loaded
 
             // Step 3: Calculate current epoch start (Thursday 00:00 UTC)
             const EPOCH_DURATION = 604800; // 7 days in seconds

@@ -19,7 +19,14 @@ export const STABLECOIN_ADDRESSES = [
     '0x3894085Ef7Ff0f0aeDf52E2A2704928d1Ec074F1', // USDC.n (Noble)
 ] as const;
 
+// Pegged asset addresses (other 1:1 pairs like wrapped BTC variants)
+export const PEGGED_ASSET_ADDRESSES = [
+    '0x9cC02b09f7dDB2F88f8d36f0EF57900c0f65ae25', // cbBTC (Coinbase Wrapped BTC)
+    '0xE53E4F58E765Dcb75a76B22D48D9d6eB552E7C7a', // WBTC
+] as const;
+
 export const STABLECOIN_SYMBOLS = ['USDC', 'USDT', 'USDT0', 'USDC.n', 'DAI', 'FRAX', 'LUSD', 'USDS'] as const;
+export const PEGGED_ASSET_SYMBOLS = ['WBTC', 'cbBTC', 'CBTC'] as const;
 
 // Check if a token is a stablecoin
 export function isStablecoin(addressOrSymbol: string): boolean {
@@ -30,9 +37,22 @@ export function isStablecoin(addressOrSymbol: string): boolean {
     );
 }
 
-// Check if pair is stablecoin-stablecoin
+// Check if a token is a pegged asset (like BTC variants)
+export function isPeggedAsset(addressOrSymbol: string): boolean {
+    const lower = addressOrSymbol.toLowerCase();
+    return (
+        PEGGED_ASSET_ADDRESSES.some(addr => addr.toLowerCase() === lower) ||
+        PEGGED_ASSET_SYMBOLS.some(sym => sym.toLowerCase() === lower)
+    );
+}
+
+// Check if pair is stablecoin-stablecoin OR pegged asset pair (1:1 pairs)
 export function isStablecoinPair(token0: string, token1: string): boolean {
-    return isStablecoin(token0) && isStablecoin(token1);
+    // Both stablecoins
+    if (isStablecoin(token0) && isStablecoin(token1)) return true;
+    // Both pegged assets (like WBTC/cbBTC)
+    if (isPeggedAsset(token0) && isPeggedAsset(token1)) return true;
+    return false;
 }
 
 /**
