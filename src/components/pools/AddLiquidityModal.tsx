@@ -1184,11 +1184,34 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             // Find pool data to get actual TVL
                                                             const pool = allPools.find(p => p.address.toLowerCase() === clPoolAddress.toLowerCase());
                                                             const tvlUsd = pool ? (parseFloat(pool.tvl) || 1) : 1;
-                                                            const poolTickSpacing = pool?.tickSpacing || tickSpacing;
 
-                                                            // Use the same calculation as pools page
-                                                            const poolAPR = calculatePoolAPR(rewardRate, windPrice, tvlUsd, poolTickSpacing);
+                                                            // Get base pool APR (without range adjustment)
+                                                            const poolAPR = calculatePoolAPR(rewardRate, windPrice, tvlUsd, undefined);
 
+                                                            // Calculate range-adjusted APR based on user's selected range
+                                                            const pLow = parseFloat(priceLower || '0');
+                                                            const pHigh = parseFloat(priceUpper || '0');
+
+                                                            if (pLow > 0 && pHigh > 0 && pLow < pHigh && currentPrice) {
+                                                                // Range width as percentage of current price
+                                                                const rangeWidth = (pHigh - pLow) / currentPrice;
+
+                                                                // Reference: ±100% range = 2x width = rangeWidth of 2
+                                                                // Tighter ranges get higher multiplier using sqrt for balance
+                                                                const referenceWidth = 2.0;
+                                                                const rawMultiplier = Math.sqrt(referenceWidth / rangeWidth);
+                                                                const rangeMultiplier = Math.max(1, Math.min(rawMultiplier, 500));
+
+                                                                const rangeAdjustedAPR = poolAPR * rangeMultiplier;
+
+                                                                return (
+                                                                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
+                                                                        🔥 APR {formatAPR(rangeAdjustedAPR)}
+                                                                    </span>
+                                                                );
+                                                            }
+
+                                                            // Fallback to base pool APR if no range selected
                                                             return (
                                                                 <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
                                                                     🔥 APR {formatAPR(poolAPR)}
