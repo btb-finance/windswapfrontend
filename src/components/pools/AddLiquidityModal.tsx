@@ -234,16 +234,17 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                 // Auto-set default range when pool price loads
                 if (!priceLower && !priceUpper) {
-                    // Check if this is a stablecoin pair
+                    // Check if this is a stablecoin or pegged asset pair (1:1 pairs)
                     const isStablePair = isStablecoinPair(
                         actualTokenA.symbol || actualTokenA.address,
                         actualTokenB.symbol || actualTokenB.address
                     );
 
                     if (isStablePair) {
-                        // Use tight range for stablecoins: ±0.5% centered on current price
-                        setPriceLower((price * 0.995).toFixed(6));
-                        setPriceUpper((price * 1.005).toFixed(6));
+                        // For stablecoin/pegged pairs, always center around 1.0 (they should trade 1:1)
+                        // Use tight ±0.5% range centered on 1.0
+                        setPriceLower('0.995');
+                        setPriceUpper('1.005');
                     } else {
                         // Standard ±10% range for other pairs
                         setPriceLower((price * 0.9).toFixed(6));
