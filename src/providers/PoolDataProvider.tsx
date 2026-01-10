@@ -24,11 +24,11 @@ function loadCachedDexScreenerVolumes(): Map<string, number> | null {
 
         const { timestamp, data } = JSON.parse(cached);
         if (Date.now() - timestamp > DEXSCREENER_CACHE_TTL) {
-            console.log('[DexScreener] Cache expired, will fetch fresh data');
+            // Cache expired
             return null;
         }
 
-        console.log(`[DexScreener] 📦 Loaded cached volume data (${Object.keys(data).length} pools)`);
+
         return new Map(Object.entries(data));
     } catch {
         return null;
@@ -98,7 +98,7 @@ async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string
             saveDexScreenerVolumes(volumeMap);
         }
 
-        console.log(`[DexScreener] ✅ Got data for ${dataMap.size} pools (volume + TVL + reserves)`);
+        // Successfully fetched DexScreener data
     } catch (err) {
         console.warn('[DexScreener] Failed to fetch data:', err);
     }
@@ -342,7 +342,7 @@ function loadCachedPools(): { clPools: PoolData[]; v2Pools: PoolData[]; timestam
             const data = JSON.parse(cached);
             // Check if cache is still valid (less than 1 hour old)
             if (Date.now() - data.timestamp < CACHE_EXPIRY) {
-                console.log('[PoolDataProvider] ⚡ Loading from cache');
+                // Loading from cache
                 return data;
             }
         }
@@ -361,7 +361,7 @@ function saveCachePools(clPools: PoolData[], v2Pools: PoolData[]) {
             v2Pools,
             timestamp: Date.now()
         }));
-        console.log('[PoolDataProvider] 💾 Saved to cache');
+        // Saved to cache
     } catch (e) {
         console.warn('[PoolDataProvider] Cache write error');
     }
@@ -413,15 +413,15 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setClPools(cached.clPools);
                 setV2Pools(cached.v2Pools);
                 setIsLoading(false); // Show cached data immediately!
-                console.log(`[PoolDataProvider] ⚡ Loaded ${cached.clPools.length} pools from cache`);
+                // Loaded pools from cache
             }
 
             // Step 1: Try fetching from SUBGRAPH (primary source - all pools!)
-            console.log('[PoolDataProvider] 🔍 Fetching pools from subgraph...');
+            // Fetching from subgraph
             const subgraphData = await fetchPoolsFromSubgraph();
 
             if (subgraphData && subgraphData.pools.length > 0) {
-                console.log(`[PoolDataProvider] ✅ Got ${subgraphData.pools.length} pools from subgraph`);
+                // Got pools from subgraph
 
                 // Convert subgraph pools to PoolData format
                 const subgraphPools: PoolData[] = subgraphData.pools.map(p => {
@@ -466,7 +466,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // Set pools from subgraph (for immediate display - priority pool first!)
                 setClPools(subgraphPools);
                 setIsLoading(false);
-                console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
+                // Showing pools from subgraph
 
                 // Fetch volume + TVL + PRICES from DexScreener (non-blocking) - replaces ALL RPC fetching!
                 const poolAddresses = subgraphPools.map(p => p.address);
@@ -673,7 +673,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 return; // Done!
             } else {
                 // Subgraph failed or empty - fall back to GAUGE_LIST
-                console.log('[PoolDataProvider] ⚠️ Subgraph empty/failed, using GAUGE_LIST');
+                // Subgraph empty/failed, using GAUGE_LIST
 
                 if (!cached || cached.clPools.length === 0) {
                     try {
@@ -733,7 +733,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                             reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
                                         };
                                     }));
-                                    console.log(`[PoolDataProvider] 📈 Updated GAUGE_LIST pools with DexScreener data`);
+                                    // Updated GAUGE_LIST pools with DexScreener data
                                 }
                             });
                         }
@@ -1007,7 +1007,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 });
             }
 
-            console.log('[PoolDataProvider] Fee reward addresses:', feeRewardAddresses.filter(a => a !== null));
+            // Fee reward addresses loaded
 
             // Step 3: Calculate current epoch start (Thursday 00:00 UTC)
             const EPOCH_DURATION = 604800; // 7 days in seconds
