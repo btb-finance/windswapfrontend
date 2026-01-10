@@ -384,11 +384,9 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (onChainWindPrice > 0) {
             setWindPrice(onChainWindPrice);
-            console.log(`[PoolDataProvider] 💰 WIND price from on-chain: $${onChainWindPrice.toFixed(6)}`);
         }
         if (onChainSeiPrice > 0) {
             setSeiPrice(onChainSeiPrice);
-            console.log(`[PoolDataProvider] 💰 SEI price from on-chain: $${onChainSeiPrice.toFixed(4)}`);
         }
     }, [onChainWindPrice, onChainSeiPrice]);
 
@@ -554,7 +552,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
                 const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
                 const priorityFetchPromise = priorityPool ? (async () => {
-                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI APR...');
                     try {
                         // Only fetch reward rate (prices come from DexScreener now!)
                         const priorityCalls = [
@@ -566,7 +563,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
                         if (rewardRate > BigInt(0)) {
                             setPoolRewards(prev => new Map(prev).set(PRIORITY_POOL, rewardRate));
-                            console.log(`[PoolDataProvider] ⚡ WIND/WSEI APR loaded: ${formatUnits(rewardRate, 18)}/sec`);
                         }
                     } catch (err) {
                         console.warn('[PoolDataProvider] Priority pool fetch error:', err);
@@ -600,21 +596,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         // Key: token0-token1-tickSpacing (tokens sorted alphabetically)
                         const pairRewardMap = new Map<string, bigint>();
 
-                        // Log all reward rates for debugging
-                        const { GAUGE_LIST } = await import('@/config/gauges');
-
                         rewardCalls.forEach((call, i) => {
                             const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
-                            const gaugeInfo = GAUGE_LIST.find(g => g.gauge?.toLowerCase() === call.to.toLowerCase());
-                            const pairName = gaugeInfo ? `${gaugeInfo.symbol0}/${gaugeInfo.symbol1}` : call.pool;
-
-                            // Log ALL rates for debugging
-                            const ratePerDay = Number(rate) / 1e18 * 86400;
-                            if (rate === BigInt(0)) {
-                                console.log(`[Gauge] ⚠️ ${pairName} (ts:${call.tickSpacing}): 0 reward rate`);
-                            } else {
-                                console.log(`[Gauge] ✅ ${pairName} (ts:${call.tickSpacing}): ${ratePerDay.toFixed(2)} WIND/day`);
-                            }
 
                             if (rate > BigInt(0)) {
                                 // Key by GAUGE_LIST pool address
@@ -651,7 +634,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                     if (altKey.startsWith(`${sortedTokens[0]}-${sortedTokens[1]}-`) && !foundAlternate) {
                                         foundAlternate = true;
                                         const altTickSpacing = parseInt(altKey.split('-')[2]) || 0;
-                                        console.log(`[Match] ⚠️ ${pool.token0.symbol}/${pool.token1.symbol}: subgraph ts=${pool.tickSpacing}, gauge ts=${altTickSpacing}`);
                                         // Use the alternate rate
                                         newRewards.set(pool.address.toLowerCase(), altRate);
                                         // Store the correct tickSpacing from gauge
@@ -670,20 +652,16 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             setClPools(prev => prev.map(pool => {
                                 const correctedTs = tickSpacingCorrections.get(pool.address.toLowerCase());
                                 if (correctedTs !== undefined) {
-                                    console.log(`[Fix] Correcting ${pool.token0.symbol}/${pool.token1.symbol} tickSpacing: ${pool.tickSpacing} → ${correctedTs}`);
                                     return { ...pool, tickSpacing: correctedTs };
                                 }
                                 return pool;
                             }));
                         }
 
-                        if (unmatchedPools.length > 0) {
-                            console.log(`[Match] ❌ No gauge found for: ${unmatchedPools.join(', ')}`);
-                        }
+                        // unmatchedPools are pools without gauges, APR will show as "—"
 
                         if (newRewards.size > 0) {
                             setPoolRewards(newRewards);
-                            console.log(`[PoolDataProvider] 🎉 Loaded ${newRewards.size} gauge reward rates (matched ${matchedCount} subgraph pools, ${tickSpacingCorrections.size} corrected)`);
                         }
                     }
                 } catch (err) {
