@@ -152,13 +152,20 @@ export default function VotePage() {
     const [votingRewards, setVotingRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
     const [isLoadingVotingRewards, setIsLoadingVotingRewards] = useState(false);
 
-    // ABI for earned function on fee reward contracts
-    const EARNED_ABI = [
+    // ABI for fee reward contracts (earned + getReward)
+    const FEE_REWARD_ABI = [
         {
             inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
             name: 'earned',
             outputs: [{ name: '', type: 'uint256' }],
             stateMutability: 'view',
+            type: 'function',
+        },
+        {
+            inputs: [{ name: 'tokenId', type: 'uint256' }, { name: 'tokens', type: 'address[]' }],
+            name: 'getReward',
+            outputs: [],
+            stateMutability: 'nonpayable',
             type: 'function',
         },
     ] as const;
@@ -190,7 +197,7 @@ export default function VotePage() {
                         try {
                             const earned = await publicClient.readContract({
                                 address: gauge.feeReward as Address,
-                                abi: EARNED_ABI,
+                                abi: FEE_REWARD_ABI,
                                 functionName: 'earned',
                                 args: [tokens[i] as Address, position.tokenId],
                             });
@@ -215,6 +222,27 @@ export default function VotePage() {
     useEffect(() => {
         fetchVotingRewards();
     }, [fetchVotingRewards]);
+
+    // Claim voting rewards for a specific veNFT and gauge
+    const [isClaimingVotingRewards, setIsClaimingVotingRewards] = useState<string | null>(null);
+    const handleClaimVotingRewards = async (tokenId: bigint, feeRewardAddress: Address, tokens: Address[]) => {
+        const claimKey = `${tokenId}-${feeRewardAddress}`;
+        setIsClaimingVotingRewards(claimKey);
+        try {
+            const hash = await writeContractAsync({
+                address: feeRewardAddress,
+                abi: FEE_REWARD_ABI,
+                functionName: 'getReward',
+                args: [tokenId, tokens],
+            });
+            setTxHash(hash);
+            // Refetch voting rewards after claiming
+            setTimeout(() => fetchVotingRewards(), 3000);
+        } catch (err: any) {
+            console.error('Claim voting rewards failed:', err);
+        }
+        setIsClaimingVotingRewards(null);
+    };
 
     // Handle distribute rewards (anyone can call this!) - batch in groups of 10 to avoid gas limits
     const handleDistributeRewards = async () => {
@@ -1147,6 +1175,17 @@ export default function VotePage() {
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="text-xs font-medium">{gauge.symbol0}/{gauge.symbol1}</span>
                                                                 </div>
+                                                                <button
+                                                                    onClick={() => handleClaimVotingRewards(
+                                                                        position.tokenId,
+                                                                        gauge.feeReward as Address,
+                                                                        Object.keys(tokens) as Address[]
+                                                                    )}
+                                                                    disabled={isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}`}
+                                                                    className="px-2 py-1 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
+                                                                >
+                                                                    {isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}` ? '...' : 'Claim'}
+                                                                </button>
                                                             </div>
                                                             <div className="text-xs text-green-400">
                                                                 {Object.entries(tokens).map(([tokenAddr, amount], idx) => {
