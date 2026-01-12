@@ -598,6 +598,45 @@ export const SWAP_ROUTER_ABI = [
         stateMutability: 'payable',
         type: 'function',
     },
+    // Multicall for batching swap + unwrap
+    {
+        inputs: [{ name: 'data', type: 'bytes[]' }],
+        name: 'multicall',
+        outputs: [{ name: 'results', type: 'bytes[]' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    // Unwrap WSEI to native SEI
+    {
+        inputs: [
+            { name: 'amountMinimum', type: 'uint256' },
+            { name: 'recipient', type: 'address' },
+        ],
+        name: 'unwrapWETH9',
+        outputs: [],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    // ExactInput for multi-hop swaps
+    {
+        inputs: [
+            {
+                components: [
+                    { name: 'path', type: 'bytes' },
+                    { name: 'recipient', type: 'address' },
+                    { name: 'deadline', type: 'uint256' },
+                    { name: 'amountIn', type: 'uint256' },
+                    { name: 'amountOutMinimum', type: 'uint256' },
+                ],
+                name: 'params',
+                type: 'tuple',
+            },
+        ],
+        name: 'exactInput',
+        outputs: [{ name: 'amountOut', type: 'uint256' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
 ] as const;
 
 // VotingEscrow ABI (veYAKA locking)

@@ -3,7 +3,7 @@ import { getPrimaryRpc } from '@/utils/rpc';
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
-import { parseUnits, formatUnits, Address } from 'viem';
+import { parseUnits, formatUnits, Address, encodeFunctionData } from 'viem';
 import { Token, WSEI } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
 import { SWAP_ROUTER_ABI, ERC20_ABI } from '@/config/abis';
@@ -196,23 +196,58 @@ export function useSwapV3() {
 
             // NOTE: Approval is handled by SwapInterface before calling this function
 
-            // Execute swap
-            const hash = await writeContractAsync({
-                address: CL_CONTRACTS.SwapRouter as Address,
-                abi: SWAP_ROUTER_ABI,
-                functionName: 'exactInputSingle',
-                args: [{
-                    tokenIn: actualTokenIn.address as Address,
-                    tokenOut: actualTokenOut.address as Address,
-                    tickSpacing,
-                    recipient: address,
-                    deadline,
-                    amountIn: amountInWei,
-                    amountOutMinimum,
-                    sqrtPriceLimitX96: BigInt(0),
-                }],
-                value: tokenIn.isNative ? amountInWei : undefined,
-            });
+            let hash: `0x${string}`;
+
+            if (tokenOut.isNative) {
+                // Swapping to native SEI - need to unwrap WSEI
+                // Use multicall: swap to router, then unwrap and send to user
+                const swapData = encodeFunctionData({
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'exactInputSingle',
+                    args: [{
+                        tokenIn: actualTokenIn.address as Address,
+                        tokenOut: actualTokenOut.address as Address,
+                        tickSpacing,
+                        recipient: CL_CONTRACTS.SwapRouter as Address, // Send WSEI to router first
+                        deadline,
+                        amountIn: amountInWei,
+                        amountOutMinimum,
+                        sqrtPriceLimitX96: BigInt(0),
+                    }],
+                });
+
+                const unwrapData = encodeFunctionData({
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'unwrapWETH9',
+                    args: [amountOutMinimum, address],
+                });
+
+                hash = await writeContractAsync({
+                    address: CL_CONTRACTS.SwapRouter as Address,
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'multicall',
+                    args: [[swapData, unwrapData]],
+                    value: tokenIn.isNative ? amountInWei : undefined,
+                });
+            } else {
+                // Normal swap - recipient is the user
+                hash = await writeContractAsync({
+                    address: CL_CONTRACTS.SwapRouter as Address,
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'exactInputSingle',
+                    args: [{
+                        tokenIn: actualTokenIn.address as Address,
+                        tokenOut: actualTokenOut.address as Address,
+                        tickSpacing,
+                        recipient: address,
+                        deadline,
+                        amountIn: amountInWei,
+                        amountOutMinimum,
+                        sqrtPriceLimitX96: BigInt(0),
+                    }],
+                    value: tokenIn.isNative ? amountInWei : undefined,
+                });
+            }
 
             setTxHash(hash);
             setIsLoading(false);
@@ -301,38 +336,52 @@ export function useSwapV3() {
 
             // NOTE: Approval is handled by SwapInterface before calling this function
 
-            // Execute multi-hop swap using exactInput
-            const hash = await writeContractAsync({
-                address: CL_CONTRACTS.SwapRouter as Address,
-                abi: [
-                    {
-                        inputs: [{
-                            components: [
-                                { name: 'path', type: 'bytes' },
-                                { name: 'recipient', type: 'address' },
-                                { name: 'deadline', type: 'uint256' },
-                                { name: 'amountIn', type: 'uint256' },
-                                { name: 'amountOutMinimum', type: 'uint256' },
-                            ],
-                            name: 'params',
-                            type: 'tuple',
-                        }],
-                        name: 'exactInput',
-                        outputs: [{ name: 'amountOut', type: 'uint256' }],
-                        stateMutability: 'payable',
-                        type: 'function',
-                    }
-                ],
-                functionName: 'exactInput',
-                args: [{
-                    path: path as `0x${string}`,
-                    recipient: address,
-                    deadline,
-                    amountIn: amountInWei,
-                    amountOutMinimum,
-                }],
-                value: tokenIn.isNative ? amountInWei : undefined,
-            });
+            let hash: `0x${string}`;
+
+            if (tokenOut.isNative) {
+                // Swapping to native SEI - need to unwrap WSEI
+                // Use multicall: swap to router, then unwrap and send to user
+                const swapData = encodeFunctionData({
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'exactInput',
+                    args: [{
+                        path: path as `0x${string}`,
+                        recipient: CL_CONTRACTS.SwapRouter as Address, // Send WSEI to router first
+                        deadline,
+                        amountIn: amountInWei,
+                        amountOutMinimum,
+                    }],
+                });
+
+                const unwrapData = encodeFunctionData({
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'unwrapWETH9',
+                    args: [amountOutMinimum, address],
+                });
+
+                hash = await writeContractAsync({
+                    address: CL_CONTRACTS.SwapRouter as Address,
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'multicall',
+                    args: [[swapData, unwrapData]],
+                    value: tokenIn.isNative ? amountInWei : undefined,
+                });
+            } else {
+                // Normal swap - recipient is the user
+                hash = await writeContractAsync({
+                    address: CL_CONTRACTS.SwapRouter as Address,
+                    abi: SWAP_ROUTER_ABI,
+                    functionName: 'exactInput',
+                    args: [{
+                        path: path as `0x${string}`,
+                        recipient: address,
+                        deadline,
+                        amountIn: amountInWei,
+                        amountOutMinimum,
+                    }],
+                    value: tokenIn.isNative ? amountInWei : undefined,
+                });
+            }
 
             setTxHash(hash);
             setIsLoading(false);
