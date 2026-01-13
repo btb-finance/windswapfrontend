@@ -125,16 +125,20 @@ export function MobileBottomNav() {
                                 }}
                                 onTouchStart={handleTouchStart}
                                 onTouchEnd={(e) => handleTouchEnd(e, item.href, true)}
-                                className="relative flex flex-col items-center justify-center flex-1 -mt-3 touch-none"
+                                className="relative flex flex-col items-center justify-end flex-1 -mt-6 touch-none"
                             >
                                 <div
-                                    className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${isActive
+                                    className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all mb-1 ${isActive
                                         ? 'bg-gradient-to-r from-primary to-secondary scale-110'
                                         : 'bg-gradient-to-r from-primary/80 to-secondary/80 active:scale-95'
                                         }`}
                                 >
                                     <Icon className="w-6 h-6 text-white" />
                                 </div>
+                                <span className={`text-[10px] font-medium transition-colors ${isActive ? 'text-primary' : 'text-gray-400'
+                                    }`}>
+                                    {item.label}
+                                </span>
                             </a>
                         );
                     }
@@ -155,19 +159,23 @@ export function MobileBottomNav() {
                             }}
                             onTouchStart={handleTouchStart}
                             onTouchEnd={(e) => handleTouchEnd(e, item.href)}
-                            className="relative flex items-center justify-center flex-1 py-3 group touch-none"
+                            className="relative flex flex-col items-center justify-center flex-1 py-2 group touch-none"
                         >
                             {isActive && (
                                 <motion.div
                                     layoutId="bottomNavActive"
-                                    className="absolute inset-2 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-lg"
+                                    className="absolute inset-x-2 top-1 bottom-1 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg -z-10"
                                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                 />
                             )}
                             <Icon
-                                className={`w-6 h-6 transition-all ${isActive ? 'text-primary scale-110' : 'text-gray-500 group-active:scale-90'
+                                className={`w-6 h-6 mb-1 transition-all ${isActive ? 'text-primary scale-110' : 'text-gray-500 group-active:scale-90'
                                     }`}
                             />
+                            <span className={`text-[10px] font-medium transition-colors ${isActive ? 'text-primary' : 'text-gray-500'
+                                }`}>
+                                {item.label}
+                            </span>
                         </a>
                     );
                 })}
