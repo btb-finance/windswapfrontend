@@ -6,11 +6,14 @@ import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { Address, formatUnits } from 'viem';
 import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
-import { DEFAULT_TOKEN_LIST, WSEI, USDC, Token } from '@/config/tokens';
+import { WSEI, Token } from '@/config/tokens';
+import { getTokenLogo as getTokenLogoUtil, getTokenDisplayInfo } from '@/utils/tokens';
+import { formatPrice } from '@/utils/format';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
+import { useToast } from '@/providers/ToastProvider';
 
 // VotingEscrow ABI for veNFT data
 const VOTING_ESCROW_ABI = [
@@ -101,16 +104,15 @@ interface StakedPosition {
     rewardRate: bigint;
 }
 
-// Get token info from known token list
+// Get token info from known token list (uses centralized utility)
 const getTokenInfo = (addr: string) => {
-    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-    return { symbol: token?.symbol || addr.slice(0, 10) + '...', decimals: token?.decimals || 18 };
+    const info = getTokenDisplayInfo(addr);
+    return { symbol: info.symbol, decimals: info.decimals };
 };
 
-// Get token logo from known token list
+// Get token logo from known token list (uses centralized utility)
 const getTokenLogo = (addr: string): string | undefined => {
-    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-    return token?.logoURI;
+    return getTokenLogoUtil(addr);
 };
 
 // Calculate token amounts from CL position liquidity and tick range
@@ -182,17 +184,6 @@ const tickToPrice = (tick: number, token0Decimals: number, token1Decimals: numbe
     return rawPrice * Math.pow(10, token0Decimals - token1Decimals);
 };
 
-// Format price for display with appropriate precision
-const formatPrice = (price: number): string => {
-    if (price === 0) return '0';
-    if (price < 0.0001) return price.toExponential(2);
-    if (price < 0.01) return price.toFixed(6);
-    if (price < 1) return price.toFixed(4);
-    if (price < 100) return price.toFixed(3);
-    if (price < 10000) return price.toFixed(2);
-    return price.toLocaleString(undefined, { maximumFractionDigits: 0 });
-};
-
 // Check if position is in range based on current tick
 const isPositionInRange = (currentTick: number, tickLower: number, tickUpper: number): boolean => {
     return currentTick >= tickLower && currentTick < tickUpper;
@@ -200,6 +191,7 @@ const isPositionInRange = (currentTick: number, tickLower: number, tickUpper: nu
 
 export default function PortfolioPage() {
     const { isConnected, address } = useAccount();
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'staked' | 'locks' | 'rewards'>('overview');
     const [actionLoading, setActionLoading] = useState(false);
 
@@ -219,15 +211,15 @@ export default function PortfolioPage() {
     const stakedPositions = prefetchedStakedPositions;
     const veNFTs = prefetchedVeNFTs;
 
-    // Shadow outer getTokenInfo - uses global data first, then fallback to token list
+    // Shadow outer getTokenInfo - uses global data first, then fallback to utility
     const getTokenInfo = (addr: string) => {
         const globalInfo = getGlobalTokenInfo(addr);
         if (globalInfo) {
             return { symbol: globalInfo.symbol, decimals: globalInfo.decimals };
         }
-        // Fallback to local token list
-        const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-        return { symbol: token?.symbol || addr.slice(0, 10) + '...', decimals: token?.decimals || 18 };
+        // Fallback to centralized utility
+        const info = getTokenDisplayInfo(addr);
+        return { symbol: info.symbol, decimals: info.decimals };
     };
 
     // Increase liquidity modal state
@@ -603,11 +595,11 @@ export default function PortfolioPage() {
                     amount1Max: maxUint128,
                 }],
             });
-            alert('Fees collected successfully!');
+            toast.success('Fees collected!');
             refetchCL();
         } catch (err) {
             console.error('Collect fees error:', err);
-            alert('Failed to collect fees. Check console for details.');
+            toast.error('Failed to collect fees');
         }
         setActionLoading(false);
     };
@@ -647,11 +639,11 @@ export default function PortfolioPage() {
                 }],
             });
 
-            alert('Liquidity removed successfully!');
+            toast.success('Liquidity removed!');
             refetchCL();
         } catch (err) {
             console.error('Remove liquidity error:', err);
-            alert('Failed to remove liquidity. Check console for details.');
+            toast.error('Failed to remove liquidity');
         }
         setActionLoading(false);
     };
@@ -680,7 +672,7 @@ export default function PortfolioPage() {
             }).then(r => r.json());
 
             if (!poolResult.result || poolResult.result === '0x' + '0'.repeat(64)) {
-                alert('Pool not found for this position.');
+                toast.error('Pool not found');
                 setActionLoading(false);
                 return;
             }
@@ -699,7 +691,7 @@ export default function PortfolioPage() {
             }).then(r => r.json());
 
             if (!gaugeResult.result || gaugeResult.result === '0x' + '0'.repeat(64)) {
-                alert('No gauge found for this pool. It may not be gauged yet.');
+                toast.warning('No gauge found for this pool');
                 setActionLoading(false);
                 return;
             }
@@ -758,7 +750,7 @@ export default function PortfolioPage() {
                 }
 
                 if (!confirmed) {
-                    alert('Approval transaction failed or timed out. Please try again.');
+                    toast.error('Approval failed. Try again');
                     setActionLoading(false);
                     return;
                 }
@@ -772,11 +764,11 @@ export default function PortfolioPage() {
                 args: [position.tokenId],
             });
 
-            alert('Position staked successfully! You will now earn WIND rewards.');
+            toast.success('Position staked! Earning WIND rewards');
             refetchCL();
         } catch (err) {
             console.error('Stake position error:', err);
-            alert('Failed to stake position. Check console for details.');
+            toast.error('Failed to stake position');
         }
         setActionLoading(false);
     };
@@ -793,12 +785,12 @@ export default function PortfolioPage() {
                 args: [pos.tokenId],
             });
 
-            alert('Position unstaked successfully!');
+            toast.success('Position unstaked!');
             refetchStaked(); // Refresh staked positions from provider
             refetchCL();
         } catch (err) {
             console.error('Unstake position error:', err);
-            alert('Failed to unstake position. Check console for details.');
+            toast.error('Failed to unstake position');
         }
         setActionLoading(false);
     };
@@ -815,12 +807,12 @@ export default function PortfolioPage() {
                 args: [pos.tokenId],
             });
 
-            alert('Rewards claimed successfully!');
+            toast.success('Rewards claimed!');
             // Refresh staked positions to show updated rewards
             refetchStaked();
         } catch (err) {
             console.error('Claim rewards error:', err);
-            alert('Failed to claim rewards. Check console for details.');
+            toast.error('Failed to claim rewards');
         }
         setActionLoading(false);
     };
@@ -840,11 +832,11 @@ export default function PortfolioPage() {
                     });
                 }
             }
-            alert('All rewards claimed successfully!');
+            toast.success('All rewards claimed!');
             refetchStaked(); // Refresh staked positions
         } catch (err) {
             console.error('Claim all rewards error:', err);
-            alert('Failed to claim all rewards. Check console for details.');
+            toast.error('Failed to claim all rewards');
         }
         setActionLoading(false);
     };
@@ -909,7 +901,7 @@ export default function PortfolioPage() {
                 }
 
                 if (!confirmed) {
-                    alert('Approval transaction failed or timed out. Please try again.');
+                    toast.error('Approval failed. Try again');
                     setActionLoading(false);
                     return;
                 }
@@ -932,12 +924,12 @@ export default function PortfolioPage() {
                 ],
             });
 
-            alert(`Successfully removed ${percent}% liquidity!`);
+            toast.success(`Removed ${percent}% liquidity!`);
             refetchV2();
             setExpandedV2Position(null);
         } catch (err) {
             console.error('Remove V2 liquidity error:', err);
-            alert('Failed to remove liquidity. Check console for details.');
+            toast.error('Failed to remove liquidity');
         }
         setActionLoading(false);
     };
@@ -1031,7 +1023,7 @@ export default function PortfolioPage() {
                     // Wait for approval to confirm
                     const confirmed = await waitForTxConfirmation(approvalTx);
                     if (!confirmed) {
-                        alert('Token0 approval failed or timed out. Please try again.');
+                        toast.error('Token0 approval failed');
                         setActionLoading(false);
                         return;
                     }
@@ -1051,7 +1043,7 @@ export default function PortfolioPage() {
                     // Wait for approval to confirm
                     const confirmed = await waitForTxConfirmation(approvalTx);
                     if (!confirmed) {
-                        alert('Token1 approval failed or timed out. Please try again.');
+                        toast.error('Token1 approval failed');
                         setActionLoading(false);
                         return;
                     }
@@ -1074,13 +1066,13 @@ export default function PortfolioPage() {
                 value: nativeValue,
             });
 
-            alert('Liquidity increased successfully!');
+            toast.success('Liquidity increased!');
             setShowIncreaseLiquidityModal(false);
             setSelectedPosition(null);
             refetchCL();
         } catch (err) {
             console.error('Increase liquidity error:', err);
-            alert('Failed to increase liquidity. Check console for details.');
+            toast.error('Failed to increase liquidity');
         }
         setActionLoading(false);
     };

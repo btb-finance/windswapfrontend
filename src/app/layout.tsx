@@ -4,6 +4,8 @@ import "./globals.css";
 import { ClientProviders } from "@/providers/ClientProviders";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { MainContent } from "@/components/layout/MainContent";
 
 
 const geistSans = Geist({
@@ -78,16 +80,19 @@ export default function RootLayout({
           <div className="bg-orb bg-orb-primary" />
           <div className="bg-orb bg-orb-secondary" />
 
-          {/* Header */}
+          {/* Header - hidden on mobile when connected */}
           <Header />
 
-          {/* Main Content */}
-          <main className="flex-1 pt-24 pb-16">
-            {children}
-          </main>
+          {/* Main Content - dynamic padding based on connection */}
+          <MainContent>{children}</MainContent>
 
-          {/* Footer */}
-          <Footer />
+          {/* Mobile Bottom Navigation */}
+          <MobileBottomNav />
+
+          {/* Footer - hidden on mobile since we have bottom nav */}
+          <div className="hidden md:block">
+            <Footer />
+          </div>
         </ClientProviders>
       </body>
     </html>
