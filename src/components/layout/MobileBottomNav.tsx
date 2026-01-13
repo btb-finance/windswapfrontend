@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { useRef } from 'react';
 import { haptic } from '@/hooks/useHaptic';
 
 // SVG Icons as components
@@ -48,14 +48,62 @@ const navItems = [
 /**
  * Mobile bottom navigation bar - fixed at bottom like native apps
  * Portfolio is elevated in the center like main action in mobile apps
+ * Uses custom touch handling to prevent accidental navigation during scroll/swipe
  * Only visible on mobile (< md breakpoint)
  */
 export function MobileBottomNav() {
     const pathname = usePathname();
+    const router = useRouter();
+
+    // Track touch start position to distinguish taps from swipes
+    const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+    // Handle touch start - record position
+    const handleTouchStart = (e: React.TouchEvent) => {
+        const touch = e.touches[0];
+        touchStartRef.current = {
+            x: touch.clientX,
+            y: touch.clientY,
+            time: Date.now(),
+        };
+    };
+
+    // Handle touch end - only navigate if it was a true tap (not a swipe)
+    const handleTouchEnd = (e: React.TouchEvent, href: string, isMain?: boolean) => {
+        const touch = e.changedTouches[0];
+        const start = touchStartRef.current;
+
+        if (!start) return;
+
+        const deltaX = Math.abs(touch.clientX - start.x);
+        const deltaY = Math.abs(touch.clientY - start.y);
+        const deltaTime = Date.now() - start.time;
+
+        // Only navigate if:
+        // 1. Movement was less than 15px (a tap, not a swipe)
+        // 2. Duration was less than 300ms (quick tap)
+        // 3. Not already on this page
+        if (deltaX < 15 && deltaY < 15 && deltaTime < 300 && pathname !== href) {
+            e.preventDefault();
+            haptic(isMain ? 'medium' : 'light');
+            router.push(href);
+        }
+
+        touchStartRef.current = null;
+    };
+
+    // Prevent default click to avoid double navigation
+    const handleClick = (e: React.MouseEvent) => {
+        // On touch devices, we handle navigation in touchEnd
+        // On desktop, allow normal click
+        if ('ontouchstart' in window) {
+            e.preventDefault();
+        }
+    };
 
     return (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[var(--bg-primary)]/95 backdrop-blur-xl border-t border-white/10 safe-area-bottom">
-            <div className="flex items-end justify-around px-2 py-1.5">
+            <div className="flex items-end justify-around px-2 py-2.5">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;
                     const Icon = item.Icon;
@@ -63,31 +111,51 @@ export function MobileBottomNav() {
                     // Elevated center button (Portfolio)
                     if (item.isMain) {
                         return (
-                            <Link
+                            <a
                                 key={item.href}
                                 href={item.href}
-                                onClick={() => haptic('medium')}
-                                className="relative flex flex-col items-center justify-center flex-1 -mt-3"
+                                onClick={(e) => {
+                                    if (!('ontouchstart' in window)) {
+                                        e.preventDefault();
+                                        haptic('medium');
+                                        router.push(item.href);
+                                    } else {
+                                        e.preventDefault();
+                                    }
+                                }}
+                                onTouchStart={handleTouchStart}
+                                onTouchEnd={(e) => handleTouchEnd(e, item.href, true)}
+                                className="relative flex flex-col items-center justify-center flex-1 -mt-3 touch-none"
                             >
                                 <div
-                                    className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all ${isActive
+                                    className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${isActive
                                         ? 'bg-gradient-to-r from-primary to-secondary scale-110'
                                         : 'bg-gradient-to-r from-primary/80 to-secondary/80 active:scale-95'
                                         }`}
                                 >
-                                    <Icon className="w-5 h-5 text-white" />
+                                    <Icon className="w-6 h-6 text-white" />
                                 </div>
-                            </Link>
+                            </a>
                         );
                     }
 
                     // Regular nav items
                     return (
-                        <Link
+                        <a
                             key={item.href}
                             href={item.href}
-                            onClick={() => haptic('light')}
-                            className="relative flex items-center justify-center flex-1 py-2 group"
+                            onClick={(e) => {
+                                if (!('ontouchstart' in window)) {
+                                    e.preventDefault();
+                                    haptic('light');
+                                    router.push(item.href);
+                                } else {
+                                    e.preventDefault();
+                                }
+                            }}
+                            onTouchStart={handleTouchStart}
+                            onTouchEnd={(e) => handleTouchEnd(e, item.href)}
+                            className="relative flex items-center justify-center flex-1 py-3 group touch-none"
                         >
                             {isActive && (
                                 <motion.div
@@ -97,13 +165,14 @@ export function MobileBottomNav() {
                                 />
                             )}
                             <Icon
-                                className={`w-5 h-5 transition-all ${isActive ? 'text-primary scale-110' : 'text-gray-500 group-active:scale-90'
+                                className={`w-6 h-6 transition-all ${isActive ? 'text-primary scale-110' : 'text-gray-500 group-active:scale-90'
                                     }`}
                             />
-                        </Link>
+                        </a>
                     );
                 })}
             </div>
         </nav>
     );
 }
+
