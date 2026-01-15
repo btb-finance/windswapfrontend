@@ -591,7 +591,7 @@ export default function VotePage() {
                                         Distributing...
                                     </>
                                 ) : (
-                                    <>💰 Distribute Rewards</>
+                                    <>Distribute Rewards</>
                                 )}
                             </button>
                         ) : (
@@ -1041,7 +1041,7 @@ export default function VotePage() {
                                                                             <>
                                                                                 <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20">
                                                                                     <div className="text-xs text-purple-300">
-                                                                                        💎 Permanent lock gives you maximum voting power forever. Your tokens will be locked until you unlock (which converts to a 4-year lock).
+                                                                                        Permanent lock gives you maximum voting power forever. Your tokens will be locked until you unlock (which converts to a 4-year lock).
                                                                                     </div>
                                                                                 </div>
                                                                                 <button
@@ -1192,7 +1192,7 @@ export default function VotePage() {
                                                             </div>
                                                             {/* Pool Fees Display */}
                                                             <div className="text-[10px] flex items-center gap-1 mt-0.5">
-                                                                <span className="text-gray-400">💰 Fees:</span>
+                                                                <span className="text-gray-400">Fees:</span>
                                                                 {gauge.rewardTokens && gauge.rewardTokens.length > 0 ? (
                                                                     <span className="text-green-400">
                                                                         {gauge.rewardTokens.map((reward, idx) => (
@@ -1226,7 +1226,7 @@ export default function VotePage() {
                                                     {!gauge.gauge ? (
                                                         /* No gauge exists yet - show Coming Soon */
                                                         <span className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 flex items-center gap-1">
-                                                            🚧 Voting Coming Soon
+                                                            Voting Coming Soon
                                                         </span>
                                                     ) : positions.length > 0 ? (
                                                         <>
@@ -1277,7 +1277,7 @@ export default function VotePage() {
                                                             }}
                                                             className="px-2 py-1 text-[10px] rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition flex items-center gap-1"
                                                         >
-                                                            💎 Add Incentive
+                                                            Add Incentive
                                                         </button>
                                                     )}
                                                 </div>
@@ -1303,7 +1303,7 @@ export default function VotePage() {
                                                     disabled={!selectedVeNFT}
                                                     className="px-3 py-1.5 text-[10px] rounded bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 hover:from-blue-500/30 hover:to-cyan-500/30 transition disabled:opacity-50"
                                                 >
-                                                    ⚡ Vote All
+                                                    Vote All
                                                 </button>
                                                 {selectedVeNFT && (
                                                     <button
