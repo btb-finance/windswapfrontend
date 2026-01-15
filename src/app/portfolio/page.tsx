@@ -574,7 +574,7 @@ export default function PortfolioPage() {
     // Use refetchStaked from usePoolData to refresh staked positions if needed.
 
     // Calculate totals
-    const totalLockedYaka = veNFTs.reduce((sum, nft) => sum + nft.amount, BigInt(0));
+    const totalLockedWind = veNFTs.reduce((sum, nft) => sum + nft.amount, BigInt(0));
     const totalVotingPower = veNFTs.reduce((sum, nft) => sum + nft.votingPower, BigInt(0));
     const totalPendingRewards = stakedPositions.reduce((sum, pos) => sum + pos.pendingRewards, BigInt(0));
     const totalUncollectedFees = clPositions.reduce((sum, pos) => sum + pos.tokensOwed0 + pos.tokensOwed1, BigInt(0));
@@ -1152,7 +1152,7 @@ export default function PortfolioPage() {
                         <div className="glass-card p-3">
                             <div className="text-[10px] text-gray-400">Locked WIND</div>
                             <div className="text-lg font-bold text-primary">
-                                {parseFloat(formatUnits(totalLockedYaka, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                {parseFloat(formatUnits(totalLockedWind, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
                             <div className="text-[10px] text-gray-500">{veNFTs.length} veNFT{veNFTs.length !== 1 ? 's' : ''}</div>
                         </div>
@@ -1278,9 +1278,9 @@ export default function PortfolioPage() {
 
                                                 {/* Stake to Earn Banner - for unstaked positions */}
                                                 <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-cyan-500/10 border border-green-500/30 mb-2">
-                                                    <span className="text-lg">✨</span>
+                                                    <span className="text-lg"></span>
                                                     <div className="flex-1">
-                                                        <div className="text-xs font-medium text-green-400">✨ Earning trading fees!</div>
+                                                        <div className="text-xs font-medium text-green-400">Earning trading fees!</div>
                                                         <div className="text-[10px] text-gray-400">Already earning more than DragonSwap • Stake for extra WIND rewards</div>
                                                     </div>
                                                     <button
@@ -1330,13 +1330,13 @@ export default function PortfolioPage() {
                                                                         !hasTickData ? 'bg-gray-500/20 text-gray-400' :
                                                                             inRange ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
                                                                         }`}>
-                                                                        {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? '∞ Full Range' :
-                                                                            !hasTickData ? 'Loading' : inRange ? '✓ In Range' : '⚠ Out of Range'}
+                                                                        {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'Full Range' :
+                                                                            !hasTickData ? 'Loading' : inRange ? 'In Range' : 'Out of Range'}
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex items-center gap-2 text-sm">
                                                                     {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? (
-                                                                        <span className="font-medium text-purple-300">0 → ∞ (covers all prices)</span>
+                                                                        <span className="font-medium text-purple-300">0 to max (covers all prices)</span>
                                                                     ) : (
                                                                         <>
                                                                             <span className="font-medium">{formatPrice(priceLower)}</span>
@@ -1620,10 +1620,10 @@ export default function PortfolioPage() {
                                                                     : 'bg-yellow-500/20 text-yellow-400'
                                                                 }`}>
                                                                 {isFullRangePosition(pos.tickLower, pos.tickUpper)
-                                                                    ? '∞ Full Range'
+                                                                    ? 'Full Range'
                                                                     : inRange
-                                                                        ? '✓ In Range'
-                                                                        : '⚠ Out of Range'}
+                                                                        ? 'In Range'
+                                                                        : 'Out of Range'}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -1706,7 +1706,7 @@ export default function PortfolioPage() {
                                             {!nft.isPermanent && (
                                                 <div className="text-[10px] text-gray-400 mt-1">
                                                     {isExpired ? (
-                                                        <span className="text-yellow-400">🔓 Unlocked - go to Vote page to withdraw</span>
+                                                        <span className="text-yellow-400">Unlocked - go to Vote page to withdraw</span>
                                                     ) : (
                                                         <>Unlocks {lockEndDate.toLocaleDateString()}</>
                                                     )}
@@ -1940,7 +1940,7 @@ export default function PortfolioPage() {
                                 ) : (!amount0ToAdd && !amount1ToAdd) ? (
                                     'Enter Amount'
                                 ) : (
-                                    '✨ Add Liquidity'
+                                    'Add Liquidity'
                                 )}
                             </button>
                         </div>

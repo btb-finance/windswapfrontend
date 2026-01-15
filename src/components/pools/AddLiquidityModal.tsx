@@ -932,7 +932,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     }`}
                                             >
                                                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
-                                                    <span className="text-2xl">💧</span>
+                                                    <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                                    </svg>
                                                 </div>
                                                 <div className="font-semibold mb-1">Classic V2</div>
                                                 <div className="text-xs text-gray-400">Simple 50/50</div>
@@ -945,7 +947,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     }`}
                                             >
                                                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center">
-                                                    <span className="text-2xl">⚡</span>
+                                                    <span className="text-2xl"></span>
                                                 </div>
                                                 <div className="font-semibold mb-1">Concentrated</div>
                                                 <div className="text-xs text-gray-400">Higher yields</div>
@@ -966,7 +968,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     : 'bg-white/5 border border-white/10 hover:bg-white/8 text-gray-300'
                                                     }`}
                                             >
-                                                <span className="block text-lg mb-1">📈</span>
+                                                <span className="block text-lg mb-1"></span>
                                                 Volatile
                                             </button>
                                             <button
@@ -976,7 +978,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     : 'bg-white/5 border border-white/10 hover:bg-white/8 text-gray-300'
                                                     }`}
                                             >
-                                                <span className="block text-lg mb-1">💎</span>
+                                                <span className="block text-lg mb-1"></span>
                                                 Stable
                                             </button>
                                         </div>
@@ -1018,7 +1020,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                         {!poolExists && (
                                             <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-yellow-400 text-xs">⚠️ New Pool</span>
+                                                    <span className="text-yellow-400 text-xs">New Pool</span>
                                                     <div className="flex-1 flex items-center gap-1 bg-white/5 rounded-lg px-2 py-1">
                                                         <span className="text-gray-400 text-xs">1 {tokenA?.symbol} =</span>
                                                         <input
@@ -1111,7 +1113,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 return (
                                                     <div className="mt-3">
                                                         <div className="text-[10px] text-gray-500 mb-1.5 flex items-center gap-1">
-                                                            <span>🎯</span> One-Sided LP ({rangeLabel} range)
+                                                            One-Sided LP ({rangeLabel} range)
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <button
@@ -1208,7 +1210,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                                                                 return (
                                                                     <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
-                                                                        🔥 APR {formatAPR(rangeAdjustedAPR)}
+                                                                        APR {formatAPR(rangeAdjustedAPR)}
                                                                     </span>
                                                                 );
                                                             }
@@ -1331,7 +1333,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
                                                             <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceUpper ? parseFloat(priceUpper).toFixed(4) : '∞'}
+                                                                {priceUpper ? parseFloat(priceUpper).toFixed(4) : 'Max'}
                                                             </span>
                                                             <button
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '1') * 1.05).toFixed(6))}
@@ -1353,7 +1355,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                         <div className="flex items-center justify-between mb-2">
                                             <label className="text-xs text-gray-400">
                                                 {depositTokenAForOneSided ? (
-                                                    <span className="text-green-400">✓ You Deposit</span>
+                                                    <span className="text-green-400">You Deposit</span>
                                                 ) : depositTokenBForOneSided ? (
                                                     <span className="text-gray-500">Not needed (0)</span>
                                                 ) : 'You Deposit'}
@@ -1405,7 +1407,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                         <div className="flex items-center justify-between mb-2">
                                             <label className="text-xs text-gray-400">
                                                 {depositTokenBForOneSided ? (
-                                                    <span className="text-green-400">✓ You Deposit</span>
+                                                    <span className="text-green-400">You Deposit</span>
                                                 ) : poolType === 'cl' ? (
                                                     depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
                                                 ) : 'You Deposit'}
@@ -1536,7 +1538,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     ) : !amountA || (parseFloat(amountA) <= 0 && parseFloat(amountB || '0') <= 0) ? (
                                         'Enter Amount'
                                     ) : (
-                                        <>✨ Add Liquidity</>
+                                        <>Add Liquidity</>
                                     )}
                                 </motion.button>
                             </div>

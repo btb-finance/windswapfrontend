@@ -1,4 +1,4 @@
-// Minimal ABIs for YAKA Finance contracts
+// Minimal ABIs for WindSwap contracts
 // These contain only the functions needed for the frontend
 
 export const ERC20_ABI = [
@@ -639,7 +639,7 @@ export const SWAP_ROUTER_ABI = [
     },
 ] as const;
 
-// VotingEscrow ABI (veYAKA locking)
+// VotingEscrow ABI (veWIND locking)
 export const VOTING_ESCROW_ABI = [
     // View functions
     {
@@ -687,6 +687,13 @@ export const VOTING_ESCROW_ABI = [
         inputs: [{ name: '_tokenId', type: 'uint256' }],
         name: 'ownerOf',
         outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'voted',
+        outputs: [{ name: '', type: 'bool' }],
         stateMutability: 'view',
         type: 'function',
     },
