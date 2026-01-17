@@ -13,6 +13,7 @@ const AddLiquidityModal = dynamic(
     () => import('@/components/pools/AddLiquidityModal').then(mod => mod.AddLiquidityModal),
     { ssr: false }
 );
+import { StablecoinZapCard } from '@/components/pools/StablecoinZapCard';
 import { Token, SEI, WSEI } from '@/config/tokens';
 import { getTokenByAddress } from '@/utils/tokens';
 import { formatTVL } from '@/utils/format';
@@ -228,6 +229,9 @@ export default function PoolsPage() {
                     + New Pool
                 </motion.button>
             </motion.div>
+
+            {/* Stablecoin Zap Card - Easy LP access */}
+            <StablecoinZapCard />
 
             {/* Filters Row - Compact */}
             <motion.div
