@@ -1248,7 +1248,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                 )}
 
                                 {/* CL Price Range */}
-                                {poolType === 'cl' && (
+                                {poolType === 'cl' && !isZapActive && (
                                     <div className="space-y-3">
                                         {/* New Pool - Initial Price Input (only if no pool exists) */}
                                         {!poolExists && (
@@ -1583,115 +1583,118 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     </div>
                                 )}
 
-                                <div className="space-y-0.5">
-                                    {/* Token A */}
-                                    <div className={`p-3 rounded-lg border ${depositTokenAForOneSided ? 'bg-green-500/5 border-green-500/30' : depositTokenBForOneSided ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <label className="text-xs text-gray-400">
-                                                {depositTokenAForOneSided ? (
-                                                    <span className="text-green-400">You Deposit</span>
-                                                ) : depositTokenBForOneSided ? (
-                                                    <span className="text-gray-500">Not needed (0)</span>
-                                                ) : 'You Deposit'}
-                                            </label>
-                                            <span className="text-[10px] text-gray-400">
-                                                Bal: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={amountA}
-                                                onChange={(e) => !depositTokenBForOneSided && setAmountA(e.target.value)}
-                                                readOnly={depositTokenBForOneSided}
-                                                placeholder={depositTokenBForOneSided ? '0' : '0.0'}
-                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${depositTokenBForOneSided ? 'text-gray-400' : ''}`}
-                                            />
-                                            <button
-                                                onClick={() => setSelectorOpen('A')}
-                                                className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
-                                            >
-                                                {tokenA && tokenA.logoURI && (
-                                                    <img src={tokenA.logoURI} alt="" className="w-5 h-5 rounded-full" />
-                                                )}
-                                                <span className="font-semibold text-sm">{tokenA?.symbol || 'Select'}</span>
-                                            </button>
-                                        </div>
-                                        {/* Quick percentage buttons - only show when it's the deposit token */}
-                                        {rawBalanceA && parseFloat(rawBalanceA) > 0 && !depositTokenBForOneSided && (
-                                            <div className="flex gap-1 mt-2">
-                                                {[25, 50, 75, 100].map(pct => (
-                                                    <button
-                                                        key={pct}
-                                                        onClick={() => setAmountA((parseFloat(rawBalanceA) * pct / 100).toString())}
-                                                        className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                                                    >
-                                                        {pct === 100 ? 'MAX' : `${pct}%`}
-                                                    </button>
-                                                ))}
+                                {/* Token Inputs - Hide when zap is active */}
+                                {!isZapActive && (
+                                    <div className="space-y-0.5">
+                                        {/* Token A */}
+                                        <div className={`p-3 rounded-lg border ${depositTokenAForOneSided ? 'bg-green-500/5 border-green-500/30' : depositTokenBForOneSided ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10'}`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-xs text-gray-400">
+                                                    {depositTokenAForOneSided ? (
+                                                        <span className="text-green-400">You Deposit</span>
+                                                    ) : depositTokenBForOneSided ? (
+                                                        <span className="text-gray-500">Not needed (0)</span>
+                                                    ) : 'You Deposit'}
+                                                </label>
+                                                <span className="text-[10px] text-gray-400">
+                                                    Bal: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
+                                                </span>
                                             </div>
-                                        )}
-                                    </div>
-
-
-
-                                    {/* Token B */}
-                                    <div className={`p-3 rounded-lg border ${depositTokenBForOneSided ? 'bg-green-500/5 border-green-500/30' : 'bg-white/5 border-white/10'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <label className="text-xs text-gray-400">
-                                                {depositTokenBForOneSided ? (
-                                                    <span className="text-green-400">You Deposit</span>
-                                                ) : poolType === 'cl' ? (
-                                                    depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
-                                                ) : 'You Deposit'}
-                                            </label>
-                                            <button
-                                                onClick={() => rawBalanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(rawBalanceB)}
-                                                className="text-[10px] text-gray-400 hover:text-primary transition-colors"
-                                            >
-                                                Bal: {balanceB || '--'}
-                                            </button>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={amountB}
-                                                onChange={(e) => (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(e.target.value)}
-                                                readOnly={poolType === 'cl' && !depositTokenBForOneSided}
-                                                placeholder={poolType === 'cl' ? (depositTokenBForOneSided ? '0.0' : 'Auto') : '0.0'}
-                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' && !depositTokenBForOneSided ? 'text-gray-400' : ''}`}
-                                            />
-                                            <button
-                                                onClick={() => setSelectorOpen('B')}
-                                                className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
-                                            >
-                                                {tokenB && tokenB.logoURI && (
-                                                    <img src={tokenB.logoURI} alt="" className="w-5 h-5 rounded-full" />
-                                                )}
-                                                <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
-                                            </button>
-                                        </div>
-                                        {/* Quick percentage buttons - only show when it's the deposit token */}
-                                        {rawBalanceB && parseFloat(rawBalanceB) > 0 && depositTokenBForOneSided && (
-                                            <div className="flex gap-1 mt-2">
-                                                {[25, 50, 75, 100].map(pct => (
-                                                    <button
-                                                        key={pct}
-                                                        onClick={() => setAmountB((parseFloat(rawBalanceB) * pct / 100).toString())}
-                                                        className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                                                    >
-                                                        {pct === 100 ? 'MAX' : `${pct}%`}
-                                                    </button>
-                                                ))}
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={amountA}
+                                                    onChange={(e) => !depositTokenBForOneSided && setAmountA(e.target.value)}
+                                                    readOnly={depositTokenBForOneSided}
+                                                    placeholder={depositTokenBForOneSided ? '0' : '0.0'}
+                                                    className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${depositTokenBForOneSided ? 'text-gray-400' : ''}`}
+                                                />
+                                                <button
+                                                    onClick={() => setSelectorOpen('A')}
+                                                    className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
+                                                >
+                                                    {tokenA && tokenA.logoURI && (
+                                                        <img src={tokenA.logoURI} alt="" className="w-5 h-5 rounded-full" />
+                                                    )}
+                                                    <span className="font-semibold text-sm">{tokenA?.symbol || 'Select'}</span>
+                                                </button>
                                             </div>
-                                        )}
+                                            {/* Quick percentage buttons - only show when it's the deposit token */}
+                                            {rawBalanceA && parseFloat(rawBalanceA) > 0 && !depositTokenBForOneSided && (
+                                                <div className="flex gap-1 mt-2">
+                                                    {[25, 50, 75, 100].map(pct => (
+                                                        <button
+                                                            key={pct}
+                                                            onClick={() => setAmountA((parseFloat(rawBalanceA) * pct / 100).toString())}
+                                                            className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                                                        >
+                                                            {pct === 100 ? 'MAX' : `${pct}%`}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+
+
+                                        {/* Token B */}
+                                        <div className={`p-3 rounded-lg border ${depositTokenBForOneSided ? 'bg-green-500/5 border-green-500/30' : 'bg-white/5 border-white/10'}`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-xs text-gray-400">
+                                                    {depositTokenBForOneSided ? (
+                                                        <span className="text-green-400">You Deposit</span>
+                                                    ) : poolType === 'cl' ? (
+                                                        depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
+                                                    ) : 'You Deposit'}
+                                                </label>
+                                                <button
+                                                    onClick={() => rawBalanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(rawBalanceB)}
+                                                    className="text-[10px] text-gray-400 hover:text-primary transition-colors"
+                                                >
+                                                    Bal: {balanceB || '--'}
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={amountB}
+                                                    onChange={(e) => (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(e.target.value)}
+                                                    readOnly={poolType === 'cl' && !depositTokenBForOneSided}
+                                                    placeholder={poolType === 'cl' ? (depositTokenBForOneSided ? '0.0' : 'Auto') : '0.0'}
+                                                    className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' && !depositTokenBForOneSided ? 'text-gray-400' : ''}`}
+                                                />
+                                                <button
+                                                    onClick={() => setSelectorOpen('B')}
+                                                    className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
+                                                >
+                                                    {tokenB && tokenB.logoURI && (
+                                                        <img src={tokenB.logoURI} alt="" className="w-5 h-5 rounded-full" />
+                                                    )}
+                                                    <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
+                                                </button>
+                                            </div>
+                                            {/* Quick percentage buttons - only show when it's the deposit token */}
+                                            {rawBalanceB && parseFloat(rawBalanceB) > 0 && depositTokenBForOneSided && (
+                                                <div className="flex gap-1 mt-2">
+                                                    {[25, 50, 75, 100].map(pct => (
+                                                        <button
+                                                            key={pct}
+                                                            onClick={() => setAmountB((parseFloat(rawBalanceB) * pct / 100).toString())}
+                                                            className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                                                        >
+                                                            {pct === 100 ? 'MAX' : `${pct}%`}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* Auto-Stake Toggle - only show for pools with gauges */}
-                                {hasGauge && poolType === 'cl' && (
+                                {hasGauge && poolType === 'cl' && !isZapActive && (
                                     <div className="p-3 rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30">
                                         <label className="flex items-center justify-between cursor-pointer">
                                             <div className="flex items-center gap-2">
