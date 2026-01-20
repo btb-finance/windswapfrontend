@@ -886,3 +886,333 @@ export const BRIBE_VOTING_REWARD_ABI = [
         type: 'function',
     },
 ] as const;
+
+// ============================================
+// BTB Finance ABIs (Ethereum Mainnet)
+// ============================================
+
+// BTB Bear Token ABI (Wrapped BTB with 1% tax)
+export const BTBB_TOKEN_ABI = [
+    // ERC20 standard
+    ...ERC20_ABI,
+    // Mint BTBB by depositing BTB (1:1)
+    {
+        inputs: [{ name: 'btbAmount', type: 'uint256' }],
+        name: 'mint',
+        outputs: [{ name: 'btbbAmount', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    // Redeem BTB by burning BTBB (1:1)
+    {
+        inputs: [{ name: 'btbbAmount', type: 'uint256' }],
+        name: 'redeem',
+        outputs: [{ name: 'btbAmount', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    // Preview transfer to see net amount after 1% tax
+    {
+        inputs: [{ name: 'amount', type: 'uint256' }],
+        name: 'previewTransfer',
+        outputs: [
+            { name: 'netAmount', type: 'uint256' },
+            { name: 'taxAmount', type: 'uint256' },
+        ],
+        stateMutability: 'pure',
+        type: 'function',
+    },
+    // Get pending fees in contract
+    {
+        inputs: [],
+        name: 'pendingFees',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    // Get contract stats
+    {
+        inputs: [],
+        name: 'getStats',
+        outputs: [
+            { name: 'btbBalance', type: 'uint256' },
+            { name: 'btbbSupply', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    // Get underlying BTB token
+    {
+        inputs: [],
+        name: 'BTB_TOKEN',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Bear NFT ABI
+export const BEAR_NFT_ABI = [
+    // ERC721 standard functions
+    {
+        inputs: [{ name: 'owner', type: 'address' }],
+        name: 'balanceOf',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'ownerOf',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'owner', type: 'address' },
+            { name: 'index', type: 'uint256' },
+        ],
+        name: 'tokenOfOwnerByIndex',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'totalSupply',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    // Approval functions
+    {
+        inputs: [
+            { name: 'to', type: 'address' },
+            { name: 'tokenId', type: 'uint256' },
+        ],
+        name: 'approve',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'operator', type: 'address' },
+            { name: 'approved', type: 'bool' },
+        ],
+        name: 'setApprovalForAll',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'owner', type: 'address' },
+            { name: 'operator', type: 'address' },
+        ],
+        name: 'isApprovedForAll',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    // Bear NFT specific
+    {
+        inputs: [{ name: 'amount', type: 'uint256' }],
+        name: 'buyNFT',
+        outputs: [{ name: '', type: 'uint256[]' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'pricePerNFT',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'MAX_SUPPLY',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'totalMinted',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'remainingSupply',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'amount', type: 'uint256' }],
+        name: 'getPrice',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'tokenURI',
+        outputs: [{ name: '', type: 'string' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Bear Staking ABI
+export const BEAR_STAKING_ABI = [
+    // Stake NFTs
+    {
+        inputs: [{ name: 'tokenIds', type: 'uint256[]' }],
+        name: 'stake',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    // Unstake NFTs
+    {
+        inputs: [{ name: 'count', type: 'uint256' }],
+        name: 'unstake',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    // Claim rewards
+    {
+        inputs: [],
+        name: 'claim',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    // Collect fees (anyone can call)
+    {
+        inputs: [],
+        name: 'collectFees',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    // View functions
+    {
+        inputs: [{ name: '_user', type: 'address' }],
+        name: 'pendingRewards',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_user', type: 'address' }],
+        name: 'pendingRewardsNet',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_user', type: 'address' }],
+        name: 'pendingRewardsDetailed',
+        outputs: [
+            { name: 'gross', type: 'uint256' },
+            { name: 'net', type: 'uint256' },
+            { name: 'taxAmount', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_user', type: 'address' }],
+        name: 'stakedCountOf',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'totalStaked',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'totalRewardsDistributed',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'estimatedAPR',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'getStats',
+        outputs: [
+            { name: '_totalStaked', type: 'uint256' },
+            { name: '_totalRewardsDistributed', type: 'uint256' },
+            { name: '_pendingToCollect', type: 'uint256' },
+            { name: '_rewardsLast24h', type: 'uint256' },
+            { name: '_estimatedAPR', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_user', type: 'address' }],
+        name: 'getUserInfo',
+        outputs: [
+            { name: 'staked', type: 'uint256' },
+            { name: 'pending', type: 'uint256' },
+            { name: 'debt', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'poolSize',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'offset', type: 'uint256' },
+            { name: 'limit', type: 'uint256' },
+        ],
+        name: 'getPoolTokensPaginated',
+        outputs: [
+            { name: 'tokens', type: 'uint256[]' },
+            { name: 'total', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    // Contract addresses
+    {
+        inputs: [],
+        name: 'bearNFT',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'btbbToken',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
