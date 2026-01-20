@@ -133,3 +133,20 @@ export const ALL_CONTRACTS = {
     ...CL_CONTRACTS,
     ...COMMON,
 } as const;
+
+// ============================================
+// BTB Finance Contracts (Ethereum Mainnet)
+// ============================================
+export const BTB_CONTRACTS = {
+    // BTB Finance Token (ERC20)
+    BTB: '0x88888888c90CD71B35830daBFD24743DbC135B51',
+
+    // BTB Bear Token (Wrapped BTB with 1% tax)
+    BTBB: '0x88888880d5Ca13018D2dC11e2e4744BD91a5656f',
+
+    // Bear NFT Collection
+    BearNFT: '0x88888888aBa934ceA0b4f0000FeA62F1397D02A0',
+
+    // Bear Staking Contract
+    BearStaking: '0x8888888Faf81E6a98deb2B90A05B46b6E903e927',
+} as const;

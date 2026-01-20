@@ -21,7 +21,7 @@ import {
     safeWallet,
     compassWallet,
 } from '@rainbow-me/rainbowkit/wallets';
-import { sei } from '@/config/chains';
+import { sei, ethereum } from '@/config/chains';
 import { base } from 'viem/chains';
 import { PoolDataProvider } from '@/providers/PoolDataProvider';
 import { UserBalanceProvider } from '@/providers/UserBalanceProvider';
@@ -33,9 +33,10 @@ const projectId = 'ecd20f8c23408a4397afc0f5466eb6b6';
 const config = getDefaultConfig({
     appName: 'Wind Swap',
     projectId,
-    chains: [sei, base],
+    chains: [sei, ethereum, base],
     transports: {
         [sei.id]: http('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8'),
+        [ethereum.id]: http('https://eth.llamarpc.com'),
         [base.id]: http('https://mainnet.base.org'),
     },
     ssr: false, // SSR disabled - we dynamically import this with ssr:false

@@ -12,6 +12,7 @@ const navLinks = [
     { href: '/bridge', label: 'Bridge' },
     { href: '/portfolio', label: 'Portfolio' },
     { href: '/vote', label: 'Vote' },
+    { href: '/btb', label: 'BTB' },
 ];
 
 export function Header() {

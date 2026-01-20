@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import { sei } from 'viem/chains';
 
 /**
- * Hook to auto-switch back to Sei network when leaving the bridge page.
- * Only the /bridge page uses Base network; all other pages require Sei.
+ * Hook to auto-switch back to Sei network when leaving special pages.
+ * /bridge uses Base network, /btb uses Ethereum - all other pages require Sei.
  */
 export function useAutoSwitchToSei() {
     const { chainId, isConnected } = useAccount();
@@ -15,14 +15,18 @@ export function useAutoSwitchToSei() {
     const pathname = usePathname();
 
     useEffect(() => {
-        // Only auto-switch if:
-        // 1. User is connected
-        // 2. Not on the bridge page
-        // 3. Currently on a non-Sei chain (e.g., Base)
+        // Pages that use non-Sei networks
         const isBridgePage = pathname === '/bridge';
+        const isBTBPage = pathname === '/btb';
+        const isSpecialPage = isBridgePage || isBTBPage;
+
         const isOnSei = chainId === sei.id;
 
-        if (isConnected && !isBridgePage && !isOnSei && chainId !== undefined) {
+        // Only auto-switch if:
+        // 1. User is connected
+        // 2. Not on a special page (bridge/btb)
+        // 3. Currently on a non-Sei chain
+        if (isConnected && !isSpecialPage && !isOnSei && chainId !== undefined) {
             console.log('[useAutoSwitchToSei] Switching back to Sei from chain', chainId);
             try {
                 switchChain({ chainId: sei.id });
