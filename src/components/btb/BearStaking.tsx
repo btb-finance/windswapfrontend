@@ -131,7 +131,7 @@ export function BearStaking() {
             </div>
 
             {/* Staking Stats */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div className="bg-white/5 rounded-xl p-4">
                     <p className="text-white/50 text-sm mb-1">Available to Stake</p>
                     <p className="text-2xl font-bold text-white">
@@ -150,7 +150,7 @@ export function BearStaking() {
             {hasPendingRewards && (
                 <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl p-4 mb-6 border border-emerald-500/20">
                     <p className="text-white/50 text-sm mb-2">Pending Rewards</p>
-                    <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                         <div>
                             <p className="text-white/60 text-xs">Gross</p>
                             <p className="text-lg font-bold text-white">

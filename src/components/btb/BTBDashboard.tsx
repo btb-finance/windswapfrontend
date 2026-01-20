@@ -135,7 +135,7 @@ export function BTBDashboard() {
             )}
 
             {/* Compact Stats Row (Matches Portfolio Overview) */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div className="glass-card p-3">
                     <div className="text-[10px] text-gray-400">APR</div>
                     <div className="text-sm sm:text-lg font-bold text-purple-400">
@@ -186,7 +186,7 @@ export function BTBDashboard() {
                             {/* User Portfolio */}
                             <div className="glass-card p-4 rounded-2xl">
                                 <h3 className="text-lg font-bold mb-4 text-white">Your Portfolio</h3>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl p-3 border border-white/10">
                                         <p className="text-white/50 text-xs mb-1">BTB Balance</p>
                                         <p className="text-lg font-bold text-white">
@@ -218,7 +218,7 @@ export function BTBDashboard() {
                             {pendingRewards && (pendingRewards[0] > BigInt(0)) && (
                                 <div className="glass-card p-4 rounded-2xl bg-gradient-to-r from-emerald-500/5 to-teal-500/5">
                                     <h3 className="text-lg font-bold mb-4 text-white">Pending Rewards</h3>
-                                    <div className="grid grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <div>
                                             <p className="text-white/50 text-xs mb-1">Gross</p>
                                             <p className="text-lg font-bold text-white">
@@ -242,7 +242,7 @@ export function BTBDashboard() {
                             )}
 
                             {/* Quick Actions Guide */}
-                            <div className="grid grid-cols-3 gap-2 text-center text-xs text-white/40">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center text-xs text-white/40">
                                 <div className="p-2 bg-white/5 rounded-lg">
                                     Step 1: Get BTB & Wrap
                                 </div>

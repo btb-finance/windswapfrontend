@@ -120,7 +120,7 @@ export function BearNFTMint() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                 <div className="bg-white/5 rounded-xl p-3">
                     <p className="text-white/50 text-xs mb-1">Price</p>
                     <p className="text-lg font-bold text-white">
