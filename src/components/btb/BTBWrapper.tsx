@@ -111,7 +111,7 @@ export function BTBWrapper() {
             animate={{ opacity: 1, y: 0 }}
             className="glass-card p-3 sm:p-4 rounded-2xl"
         >
-            <h2 className="text-xl font-bold mb-6">🔄 Token Wrapper</h2>
+            <h2 className="text-xl font-bold mb-6">Token Wrapper</h2>
 
             {/* Mode Toggle */}
             <div className="flex flex-col sm:flex-row gap-2 mb-6 p-1 bg-white/5 rounded-xl">

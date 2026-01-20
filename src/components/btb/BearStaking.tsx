@@ -122,7 +122,7 @@ export function BearStaking() {
             className="glass-card p-3 sm:p-4 rounded-2xl"
         >
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold">⛏️ Bear Staking</h2>
+                <h2 className="text-xl font-bold">Bear Staking</h2>
                 {apr && (
                     <div className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-sm font-medium">
                         APR: {formatAPR(apr)}%

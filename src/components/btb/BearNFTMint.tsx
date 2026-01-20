@@ -107,7 +107,7 @@ export function BearNFTMint() {
             animate={{ opacity: 1, y: 0 }}
             className="glass-card p-3 sm:p-4 rounded-2xl"
         >
-            <h2 className="text-xl font-bold mb-6">🐻 Bear NFT Mint</h2>
+            <h2 className="text-xl font-bold mb-6">Bear NFT Mint</h2>
 
             {/* NFT Preview */}
             <div className="relative mb-6 rounded-xl overflow-hidden bg-gradient-to-br from-amber-500/20 to-orange-500/20 aspect-square max-w-[200px] mx-auto">
