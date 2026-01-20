@@ -109,7 +109,7 @@ export function BTBWrapper() {
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-6 rounded-2xl"
+            className="glass-card p-3 sm:p-4 rounded-2xl"
         >
             <h2 className="text-xl font-bold mb-6">🔄 Token Wrapper</h2>
 
