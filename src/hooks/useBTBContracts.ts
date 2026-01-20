@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useReadContract, useWriteContract, useAccount, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther, formatUnits } from 'viem';
 import { BTB_CONTRACTS } from '@/config/contracts';
@@ -125,15 +126,66 @@ export function useBearNFTRemainingSupply() {
 }
 
 export function useUserNFTTokenIds(address: `0x${string}` | undefined) {
-    const { data: balance } = useBearNFTBalance(address);
+    const { data: balance, refetch: refetchBalance } = useBearNFTBalance(address);
+    const [tokenIds, setTokenIds] = useState<bigint[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
-    // We'll need to fetch token IDs individually
-    // This is a simplified version - for many tokens, you'd want pagination
-    const tokenIds: bigint[] = [];
+    useEffect(() => {
+        const fetchTokenIds = async () => {
+            if (!address || !balance || balance === BigInt(0)) {
+                setTokenIds([]);
+                return;
+            }
+
+            setIsLoading(true);
+            try {
+                const count = Number(balance);
+                // Build batch RPC calls for tokenOfOwnerByIndex
+                const selector = '0x2f745c59'; // tokenOfOwnerByIndex(address,uint256)
+                const paddedAddress = address.slice(2).toLowerCase().padStart(64, '0');
+
+                const rpcCalls = Array.from({ length: count }, (_, i) => ({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{
+                        to: BTB_CONTRACTS.BearNFT,
+                        data: selector + paddedAddress + BigInt(i).toString(16).padStart(64, '0')
+                    }, 'latest'],
+                    id: i + 1,
+                }));
+
+                const response = await fetch('https://eth.llamarpc.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(rpcCalls),
+                });
+
+                const results = await response.json();
+                const ids = (Array.isArray(results) ? results : [results])
+                    .filter(r => r.result && r.result !== '0x')
+                    .map(r => BigInt(r.result))
+                    .sort((a, b) => Number(a - b));
+
+                setTokenIds(ids);
+            } catch (err) {
+                console.error('Error fetching NFT token IDs:', err);
+                setTokenIds([]);
+            }
+            setIsLoading(false);
+        };
+
+        fetchTokenIds();
+    }, [address, balance]);
+
+    const refetch = () => {
+        refetchBalance();
+    };
 
     return {
         data: tokenIds,
-        balance: balance,
+        balance,
+        isLoading,
+        refetch,
     };
 }
 

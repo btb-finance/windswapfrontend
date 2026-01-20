@@ -5,7 +5,7 @@ import { useAccount, useChainId, useSwitchChain } from 'wagmi';
 import { formatUnits } from 'viem';
 import { motion } from 'framer-motion';
 import {
-    useBearNFTBalance,
+    useUserNFTTokenIds,
     useUserStakedCount,
     usePendingRewardsDetailed,
     useIsApprovedForStaking,
@@ -26,8 +26,8 @@ export function BearStaking() {
     const [unstakeCount, setUnstakeCount] = useState(1);
     const [selectedTokenIds, setSelectedTokenIds] = useState<bigint[]>([]);
 
-    // Data
-    const { data: nftBalance, refetch: refetchNFTBalance } = useBearNFTBalance(address);
+    // Data - use useUserNFTTokenIds to get actual token IDs
+    const { data: nftTokenIds, balance: nftBalance, refetch: refetchNFTTokenIds, isLoading: isLoadingTokenIds } = useUserNFTTokenIds(address);
     const { data: stakedCount, refetch: refetchStakedCount } = useUserStakedCount(address);
     const { data: pendingRewards, refetch: refetchPendingRewards } = usePendingRewardsDetailed(address);
     const { data: isApproved, refetch: refetchApproval } = useIsApprovedForStaking(address);
@@ -46,7 +46,7 @@ export function BearStaking() {
     // Refetch on success
     useEffect(() => {
         if (approveSuccess || stakeSuccess || unstakeSuccess || claimSuccess) {
-            refetchNFTBalance();
+            refetchNFTTokenIds();
             refetchStakedCount();
             refetchPendingRewards();
             refetchApproval();
@@ -73,14 +73,9 @@ export function BearStaking() {
     const handleStake = () => {
         if (!isApproved) {
             approveAll();
-        } else {
-            const tokenIds: bigint[] = [];
-            for (let i = 0; i < Number(nftBalance || BigInt(0)); i++) {
-                tokenIds.push(BigInt(i + 1));
-            }
-            if (tokenIds.length > 0) {
-                stake(tokenIds);
-            }
+        } else if (nftTokenIds && nftTokenIds.length > 0) {
+            // Use actual token IDs fetched from the contract
+            stake(nftTokenIds);
         }
     };
 
@@ -169,10 +164,10 @@ export function BearStaking() {
             {hasNFTs && (
                 <button
                     onClick={handleStake}
-                    disabled={isApproving || isStaking}
+                    disabled={isApproving || isStaking || isLoadingTokenIds}
                     className="w-full btn-primary py-3 text-sm mb-3 disabled:opacity-50"
                 >
-                    {isApproving ? 'Approving...' : isStaking ? 'Staking...' : !isApproved ? 'Approve NFTs' : `Stake ${nftBalance?.toString() || '0'} NFTs`}
+                    {isApproving ? 'Approving...' : isStaking ? 'Staking...' : isLoadingTokenIds ? 'Loading NFTs...' : !isApproved ? 'Approve NFTs' : `Stake ${nftTokenIds?.length || 0} NFTs`}
                 </button>
             )}
 
