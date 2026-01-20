@@ -45,7 +45,13 @@ export function BTBDashboard() {
     const formatAPR = (value: bigint | undefined) => {
         if (!value) return '0';
         // APR is in basis points * 100 (e.g., 500000 = 50%)
-        return (Number(value) / 100).toFixed(2);
+        const percentage = Number(value) / 100;
+
+        if (percentage > 1_000_000_000) return '>1B';
+        if (percentage > 1_000_000) return (percentage / 1_000_000).toFixed(1) + 'M';
+        if (percentage > 1_000) return (percentage / 1_000).toFixed(1) + 'k';
+
+        return percentage.toFixed(2);
     };
 
     const tabConfig = [
@@ -70,64 +76,73 @@ export function BTBDashboard() {
 
     return (
         <div className="space-y-4">
-            {/* Compact Header */}
+            {/* Compact Inline Header (Matches Portfolio) */}
             <motion.div
+                className="flex items-center justify-between gap-3"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-xl sm:text-2xl font-bold">
-                    <span className="gradient-text">BTB</span> Finance
-                </h1>
-                <p className="text-xs sm:text-sm text-gray-400">
-                    Bear Time Bear Ecosystem
-                </p>
-            </motion.div>
-
-            {/* Network Banner */}
-            <motion.div
-                className={`p-3 rounded-xl border ${isOnEthereum
-                    ? 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'
-                    : 'bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-500/20'}`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-            >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <div className="text-xl">{isOnEthereum ? '🌲' : '⚠️'}</div>
-                        <div>
-                            <div className="text-xs text-gray-400">Network Status</div>
-                            <div className={`font-bold ${isOnEthereum ? 'text-green-400' : 'text-blue-400'}`}>
-                                {isOnEthereum ? 'Connected to Ethereum' : 'Incorrect Network'}
-                            </div>
+                <div>
+                    <h1 className="text-xl sm:text-2xl font-bold">
+                        <span className="gradient-text">BTB</span> Finance
+                    </h1>
+                    <p className="text-xs sm:text-sm text-gray-400">
+                        Bear Time Bear Ecosystem
+                    </p>
+                </div>
+                {pendingRewards && pendingRewards[1] > BigInt(0) && (
+                    <div className="text-right">
+                        <div className="text-xs text-gray-400">Claimable</div>
+                        <div className="text-sm sm:text-base font-bold text-emerald-400">
+                            {formatNumber(pendingRewards[1])} BTBB
                         </div>
                     </div>
-                    {!isOnEthereum && (
+                )}
+            </motion.div>
+
+            {/* Network Banner - Only show if on wrong network */}
+            {!isOnEthereum && (
+                <motion.div
+                    className="p-3 rounded-xl border bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-500/20"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="text-xl">⚠️</div>
+                            <div>
+                                <div className="text-xs text-gray-400">Network Status</div>
+                                <div className="font-bold text-blue-400">
+                                    Incorrect Network
+                                </div>
+                            </div>
+                        </div>
                         <button
                             onClick={() => switchChain({ chainId: ethereum.id })}
                             className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-bold hover:bg-blue-500/30 transition flex items-center gap-2"
                         >
                             Switch to Ethereum
                         </button>
-                    )}
-                </div>
-            </motion.div>
+                    </div>
+                </motion.div>
+            )}
 
-            {/* Compact Stats Row */}
+            {/* Compact Stats Row (Matches Portfolio Overview) */}
             <div className="grid grid-cols-3 gap-2">
-                <div className="glass-card p-2 sm:p-3 text-center">
+                <div className="glass-card p-3">
                     <div className="text-[10px] text-gray-400">APR</div>
                     <div className="text-sm sm:text-lg font-bold text-purple-400">
                         {statsLoading ? '...' : formatAPR(stakingStats?.[4])}%
                     </div>
                 </div>
-                <div className="glass-card p-2 sm:p-3 text-center">
+                <div className="glass-card p-3">
                     <div className="text-[10px] text-gray-400">Total Staked</div>
                     <div className="text-sm sm:text-lg font-bold">
                         {statsLoading ? '...' : formatNumber(stakingStats?.[0], 0)}
                     </div>
                 </div>
-                <div className="glass-card p-2 sm:p-3 text-center bg-emerald-500/10">
+                <div className="glass-card p-3 bg-emerald-500/10">
                     <div className="text-[10px] text-gray-400">Distributed</div>
                     <div className="text-sm sm:text-lg font-bold text-emerald-400">
                         {formatNumber(stakingStats?.[1])}
@@ -135,19 +150,18 @@ export function BTBDashboard() {
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            {/* Tabs (Matches Portfolio styles: Pills) */}
+            <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
                 {tabConfig.map((tab) => (
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`flex-1 min-w-0 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2 flex items-center justify-center gap-2 ${activeTab === tab.key
-                            ? 'bg-gradient-to-r from-primary to-secondary text-white border-primary shadow-lg shadow-primary/30'
-                            : 'bg-white/5 text-gray-300 border-white/10 hover:border-primary/50 hover:bg-white/10 hover:text-white'
+                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${activeTab === tab.key
+                            ? 'bg-primary text-white'
+                            : 'text-gray-400 hover:text-white bg-white/5'
                             }`}
                     >
-                        <span className="text-base">{tab.icon}</span>
-                        <span className="hidden sm:inline">{tab.label}</span>
+                        {tab.label}
                     </button>
                 ))}
             </div>
