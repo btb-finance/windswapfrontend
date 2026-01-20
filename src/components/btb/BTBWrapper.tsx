@@ -38,6 +38,7 @@ export function BTBWrapper() {
     const { redeem, isPending: isRedeeming, isSuccess: redeemSuccess } = useBTBBRedeem();
 
     const balance = mode === 'wrap' ? btbBalance : btbbBalance;
+    const outputBalance = mode === 'wrap' ? btbbBalance : btbBalance;
     const parsedAmount = amount ? parseUnits(amount, 18) : BigInt(0);
     const needsApproval = mode === 'wrap' && allowance !== undefined && parsedAmount > allowance;
 
@@ -71,119 +72,148 @@ export function BTBWrapper() {
         }
     };
 
+    const handleSwapMode = () => {
+        setMode(mode === 'wrap' ? 'unwrap' : 'wrap');
+        setAmount('');
+    };
+
     const isPending = isApproving || isMinting || isRedeeming;
+
+    const formatBalance = (val: bigint | undefined) => {
+        if (!val) return '0';
+        return Number(formatUnits(val, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 });
+    };
 
     if (!isConnected) {
         return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass-card p-6 rounded-2xl"
-            >
-                <h2 className="text-xl font-bold mb-4">Token Wrapper</h2>
-                <p className="text-white/60">Connect wallet to wrap/unwrap tokens</p>
-            </motion.div>
+            <div className="swap-card max-w-md mx-auto">
+                <h2 className="text-base sm:text-lg font-bold mb-3">Token Wrapper</h2>
+                <p className="text-white/60 text-sm">Connect wallet to wrap/unwrap tokens</p>
+            </div>
         );
     }
 
     if (!isOnEthereum) {
         return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass-card p-6 rounded-2xl"
-            >
-                <h2 className="text-xl font-bold mb-4">Token Wrapper</h2>
-                <p className="text-white/60 mb-4">Switch to Ethereum to wrap/unwrap tokens</p>
+            <div className="swap-card max-w-md mx-auto">
+                <h2 className="text-base sm:text-lg font-bold mb-3">Token Wrapper</h2>
+                <p className="text-white/60 mb-3 text-sm">Switch to Ethereum to wrap/unwrap tokens</p>
                 <button
                     onClick={() => switchChain({ chainId: ethereum.id })}
-                    className="btn-primary px-6 py-2 rounded-xl font-medium"
+                    className="w-full btn-primary py-3 text-sm"
                 >
                     Switch to Ethereum
                 </button>
-            </motion.div>
+            </div>
         );
     }
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-3 sm:p-4 rounded-2xl"
-        >
-            <h2 className="text-xl font-bold mb-6">Token Wrapper</h2>
-
-            {/* Mode Toggle */}
-            <div className="flex flex-col sm:flex-row gap-2 mb-6 p-1 bg-white/5 rounded-xl">
-                <button
-                    onClick={() => setMode('wrap')}
-                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${mode === 'wrap'
-                        ? 'bg-primary text-white'
-                        : 'text-white/60 hover:text-white'
-                        }`}
-                >
-                    Wrap BTB → BTBB
-                </button>
-                <button
-                    onClick={() => setMode('unwrap')}
-                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${mode === 'unwrap'
-                        ? 'bg-primary text-white'
-                        : 'text-white/60 hover:text-white'
-                        }`}
-                >
-                    Unwrap BTBB → BTB
-                </button>
+        <div className="swap-card max-w-md mx-auto">
+            {/* Header - Matching Swap style */}
+            <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base sm:text-lg font-bold">
+                    {mode === 'wrap' ? 'Wrap BTB' : 'Unwrap BTBB'}
+                </h2>
+                <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/20 text-blue-400">
+                    1:1 Rate
+                </span>
             </div>
 
-            {/* Amount Input */}
-            <div className="bg-white/5 rounded-xl p-4 mb-4">
-                <div className="flex justify-between mb-2">
-                    <span className="text-white/50 text-sm">Amount</span>
-                    <span className="text-white/50 text-sm">
-                        Balance: {balance ? Number(formatUnits(balance, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '0'}{' '}
-                        {mode === 'wrap' ? 'BTB' : 'BTBB'}
+            {/* Input Token */}
+            <div className="token-input-row">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-400">You pay</span>
+                    <span className="text-sm text-gray-400">
+                        Balance: {formatBalance(balance)}
+                        <button
+                            onClick={handleMax}
+                            className="ml-2 text-primary hover:text-primary/80 font-medium"
+                        >
+                            MAX
+                        </button>
                     </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                     <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                setAmount(value);
+                            }
+                        }}
                         placeholder="0.0"
-                        className="flex-1 bg-transparent text-2xl font-bold text-white outline-none"
+                        className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600"
                     />
-                    <button
-                        onClick={handleMax}
-                        className="px-3 py-1 rounded-lg bg-white/10 text-white/80 hover:bg-white/20 text-sm font-medium"
-                    >
-                        MAX
-                    </button>
+                    <div className="token-select pointer-events-none">
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center">
+                            <span className="text-xs font-bold">{mode === 'wrap' ? 'B' : 'BB'}</span>
+                        </div>
+                        <span>{mode === 'wrap' ? 'BTB' : 'BTBB'}</span>
+                    </div>
                 </div>
             </div>
 
-            {/* Info Box */}
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-6">
-                <p className="text-blue-300 text-sm">
-                    {mode === 'wrap' ? (
-                        <>
-                            Wrapping BTB to BTBB is 1:1. BTBB has a 1% transfer tax that funds NFT staking rewards.
-                        </>
-                    ) : (
-                        <>
-                            Unwrapping BTBB to BTB is 1:1. No tax is applied when unwrapping.
-                        </>
-                    )}
-                </p>
+            {/* Swap Direction Button */}
+            <div className="relative h-0 flex items-center justify-center z-10">
+                <motion.button
+                    onClick={handleSwapMode}
+                    className="swap-arrow-btn"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                    </svg>
+                </motion.button>
+            </div>
+
+            {/* Output Token */}
+            <div className="token-input-row">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-400">You receive</span>
+                    <span className="text-sm text-gray-400">
+                        Balance: {formatBalance(outputBalance)}
+                    </span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        value={amount || '0.0'}
+                        disabled
+                        className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none text-gray-400"
+                    />
+                    <div className="token-select pointer-events-none">
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-500/30 to-teal-500/30 flex items-center justify-center">
+                            <span className="text-xs font-bold">{mode === 'wrap' ? 'BB' : 'B'}</span>
+                        </div>
+                        <span>{mode === 'wrap' ? 'BTBB' : 'BTB'}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Info Box - Compact */}
+            <div className="mt-3 p-2 rounded-lg bg-white/5 text-xs space-y-1">
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Rate</span>
+                    <span>1 {mode === 'wrap' ? 'BTB' : 'BTBB'} = 1 {mode === 'wrap' ? 'BTBB' : 'BTB'}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Tax</span>
+                    <span className={mode === 'wrap' ? 'text-yellow-400' : 'text-green-400'}>
+                        {mode === 'wrap' ? 'BTBB has 1% transfer tax' : 'No tax on unwrap'}
+                    </span>
+                </div>
             </div>
 
             {/* Action Button */}
             <button
                 onClick={handleAction}
                 disabled={!parsedAmount || isPending}
-                className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${!parsedAmount || isPending
-                    ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                    : 'btn-primary hover:scale-[1.02]'
-                    }`}
+                className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
             >
                 {isPending ? (
                     <span className="flex items-center justify-center gap-2">
@@ -201,6 +231,6 @@ export function BTBWrapper() {
                     'Unwrap to BTB'
                 )}
             </button>
-        </motion.div>
+        </div>
     );
 }

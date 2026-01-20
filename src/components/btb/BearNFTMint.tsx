@@ -41,6 +41,7 @@ export function BearNFTMint() {
     // Calculate total price
     const totalPrice = pricePerNFT ? pricePerNFT * BigInt(quantity) : BigInt(0);
     const hasEnoughETH = ethBalance && ethBalance.value >= totalPrice;
+    const maxBuy = remainingSupply ? Math.min(Number(remainingSupply), 10) : 10;
 
     // Refetch on success
     useEffect(() => {
@@ -56,136 +57,104 @@ export function BearNFTMint() {
         }
     };
 
-    const incrementQuantity = () => {
-        const maxBuy = remainingSupply ? Math.min(Number(remainingSupply), 10) : 10;
-        if (quantity < maxBuy) {
-            setQuantity(q => q + 1);
-        }
-    };
-
-    const decrementQuantity = () => {
-        if (quantity > 1) {
-            setQuantity(q => q - 1);
-        }
-    };
-
     if (!isConnected) {
         return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass-card p-6 rounded-2xl"
-            >
-                <h2 className="text-xl font-bold mb-4">Bear NFT Mint</h2>
-                <p className="text-white/60">Connect wallet to mint Bear NFTs</p>
-            </motion.div>
+            <div className="swap-card max-w-md mx-auto">
+                <h2 className="text-base sm:text-lg font-bold mb-3">Bear NFT Mint</h2>
+                <p className="text-white/60 text-sm">Connect wallet to mint Bear NFTs</p>
+            </div>
         );
     }
 
     if (!isOnEthereum) {
         return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass-card p-6 rounded-2xl"
-            >
-                <h2 className="text-xl font-bold mb-4">Bear NFT Mint</h2>
-                <p className="text-white/60 mb-4">Switch to Ethereum to mint Bear NFTs</p>
+            <div className="swap-card max-w-md mx-auto">
+                <h2 className="text-base sm:text-lg font-bold mb-3">Bear NFT Mint</h2>
+                <p className="text-white/60 mb-3 text-sm">Switch to Ethereum to mint Bear NFTs</p>
                 <button
                     onClick={() => switchChain({ chainId: ethereum.id })}
-                    className="btn-primary px-6 py-2 rounded-xl font-medium"
+                    className="w-full btn-primary py-3 text-sm"
                 >
                     Switch to Ethereum
                 </button>
-            </motion.div>
+            </div>
         );
     }
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-3 sm:p-4 rounded-2xl"
-        >
-            <h2 className="text-xl font-bold mb-6">Bear NFT Mint</h2>
+        <div className="swap-card max-w-md mx-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base sm:text-lg font-bold">Bear NFT Mint</h2>
+                <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/20 text-amber-400">
+                    {pricePerNFT ? formatEther(pricePerNFT) : '0.01'} ETH each
+                </span>
+            </div>
 
-            {/* NFT Preview */}
-            <div className="relative mb-6 rounded-xl overflow-hidden bg-gradient-to-br from-amber-500/20 to-orange-500/20 aspect-square max-w-[200px] mx-auto">
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-6xl">🐻</span>
+            {/* Compact Stats Row */}
+            <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="text-center p-2 bg-white/5 rounded-lg">
+                    <p className="text-[10px] text-gray-400">Minted</p>
+                    <p className="text-sm font-bold">{totalMinted?.toString() || '0'}</p>
                 </div>
-                <div className="absolute bottom-2 left-2 right-2 text-center">
-                    <p className="text-white/80 text-sm font-medium">BTB Bear NFT</p>
+                <div className="text-center p-2 bg-white/5 rounded-lg">
+                    <p className="text-[10px] text-gray-400">Supply</p>
+                    <p className="text-sm font-bold">{maxSupply?.toString() || '100k'}</p>
+                </div>
+                <div className="text-center p-2 bg-amber-500/10 rounded-lg">
+                    <p className="text-[10px] text-gray-400">Left</p>
+                    <p className="text-sm font-bold text-amber-400">{remainingSupply?.toLocaleString() || '...'}</p>
+                </div>
+                <div className="text-center p-2 bg-purple-500/10 rounded-lg">
+                    <p className="text-[10px] text-gray-400">Owned</p>
+                    <p className="text-sm font-bold text-purple-400">{userNFTBalance?.toString() || '0'}</p>
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-                <div className="bg-white/5 rounded-xl p-3">
-                    <p className="text-white/50 text-xs mb-1">Price</p>
-                    <p className="text-lg font-bold text-white">
-                        {pricePerNFT ? formatEther(pricePerNFT) : '0.01'} ETH
-                    </p>
-                </div>
-                <div className="bg-white/5 rounded-xl p-3">
-                    <p className="text-white/50 text-xs mb-1">Minted</p>
-                    <p className="text-lg font-bold text-white">
-                        {totalMinted?.toString() || '0'} / {maxSupply?.toString() || '100,000'}
-                    </p>
-                </div>
-                <div className="bg-white/5 rounded-xl p-3">
-                    <p className="text-white/50 text-xs mb-1">Remaining</p>
-                    <p className="text-lg font-bold text-amber-400">
-                        {remainingSupply?.toLocaleString() || '...'}
-                    </p>
-                </div>
-                <div className="bg-white/5 rounded-xl p-3">
-                    <p className="text-white/50 text-xs mb-1">You Own</p>
-                    <p className="text-lg font-bold text-purple-400">
-                        {userNFTBalance?.toString() || '0'}
-                    </p>
-                </div>
-            </div>
-
-            {/* Quantity Selector */}
-            <div className="bg-white/5 rounded-xl p-4 mb-4">
+            {/* Quantity Selector - Compact */}
+            <div className="token-input-row">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-white/50 text-sm">Quantity</span>
-                    <span className="text-white/50 text-sm">
-                        Max: {remainingSupply ? Math.min(Number(remainingSupply), 10) : 10}
-                    </span>
+                    <span className="text-sm text-gray-400">Quantity</span>
+                    <span className="text-sm text-gray-400">Max: {maxBuy}</span>
                 </div>
-                <div className="flex items-center justify-center gap-4">
-                    <button
-                        onClick={decrementQuantity}
-                        disabled={quantity <= 1}
-                        className="w-12 h-12 rounded-xl bg-white/10 text-white text-2xl font-bold hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        −
-                    </button>
-                    <span className="text-3xl font-bold text-white w-16 text-center">
-                        {quantity}
-                    </span>
-                    <button
-                        onClick={incrementQuantity}
-                        disabled={quantity >= (remainingSupply ? Math.min(Number(remainingSupply), 10) : 10)}
-                        className="w-12 h-12 rounded-xl bg-white/10 text-white text-2xl font-bold hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        +
-                    </button>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                            disabled={quantity <= 1}
+                            className="w-10 h-10 rounded-lg bg-white/10 text-white text-xl font-bold hover:bg-white/20 disabled:opacity-50"
+                        >
+                            −
+                        </button>
+                        <span className="text-2xl font-bold w-12 text-center">{quantity}</span>
+                        <button
+                            onClick={() => setQuantity(q => Math.min(maxBuy, q + 1))}
+                            disabled={quantity >= maxBuy}
+                            className="w-10 h-10 rounded-lg bg-white/10 text-white text-xl font-bold hover:bg-white/20 disabled:opacity-50"
+                        >
+                            +
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500/30 to-orange-500/30 flex items-center justify-center">
+                            <span className="text-lg">🐻</span>
+                        </div>
+                        <span className="font-medium">Bear NFT</span>
+                    </div>
                 </div>
             </div>
 
-            {/* Total Price */}
-            <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-xl p-4 mb-6 border border-amber-500/20">
-                <div className="flex justify-between items-center">
-                    <span className="text-white/70">Total Price</span>
-                    <span className="text-2xl font-bold text-white">
-                        {totalPrice ? formatEther(totalPrice) : '0'} ETH
-                    </span>
+            {/* Total Price - Compact */}
+            <div className="mt-3 p-2 rounded-lg bg-white/5 text-xs space-y-1">
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Total Price</span>
+                    <span className="font-bold">{totalPrice ? formatEther(totalPrice) : '0'} ETH</span>
                 </div>
-                <div className="text-right text-white/50 text-sm">
-                    Your balance: {ethBalance ? Number(formatEther(ethBalance.value)).toFixed(4) : '0'} ETH
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Your ETH</span>
+                    <span className={hasEnoughETH ? 'text-green-400' : 'text-red-400'}>
+                        {ethBalance ? Number(formatEther(ethBalance.value)).toFixed(4) : '0'} ETH
+                    </span>
                 </div>
             </div>
 
@@ -193,7 +162,7 @@ export function BearNFTMint() {
             <button
                 onClick={handleMint}
                 disabled={isPending || !hasEnoughETH || !pricePerNFT}
-                className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${isPending || !hasEnoughETH || !pricePerNFT
+                className={`w-full py-4 text-base mt-4 rounded-xl font-bold transition-all ${isPending || !hasEnoughETH || !pricePerNFT
                     ? 'bg-white/10 text-white/40 cursor-not-allowed'
                     : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:scale-[1.02] hover:shadow-lg hover:shadow-amber-500/20'
                     }`}
@@ -213,10 +182,9 @@ export function BearNFTMint() {
                 )}
             </button>
 
-            {/* Info */}
-            <p className="text-white/40 text-sm text-center mt-4">
-                Stake Bear NFTs to earn BTBB rewards from the 1% transfer tax
-            </p>
-        </motion.div>
+            <div className="mt-3 text-center text-[10px] text-gray-500">
+                Stake NFTs to earn BTBB rewards
+            </div>
+        </div>
     );
 }

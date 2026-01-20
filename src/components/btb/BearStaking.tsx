@@ -63,18 +63,19 @@ export function BearStaking() {
 
     const formatAPR = (value: bigint | undefined) => {
         if (!value) return '0';
-        return (Number(value) / 100).toFixed(2);
+        const percentage = Number(value) / 100;
+        if (percentage > 1_000_000_000) return '>1B';
+        if (percentage > 1_000_000) return (percentage / 1_000_000).toFixed(1) + 'M';
+        if (percentage > 1_000) return (percentage / 1_000).toFixed(1) + 'k';
+        return percentage.toFixed(2);
     };
 
     const handleStake = () => {
         if (!isApproved) {
             approveAll();
         } else {
-            // For simplicity, stake all available NFTs
-            // In production, you'd fetch the actual token IDs
             const tokenIds: bigint[] = [];
             for (let i = 0; i < Number(nftBalance || BigInt(0)); i++) {
-                // This is a placeholder - in production you'd get actual token IDs
                 tokenIds.push(BigInt(i + 1));
             }
             if (tokenIds.length > 0) {
@@ -85,95 +86,79 @@ export function BearStaking() {
 
     if (!isConnected) {
         return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass-card p-6 rounded-2xl"
-            >
-                <h2 className="text-xl font-bold mb-4">Bear Staking</h2>
-                <p className="text-white/60">Connect wallet to stake Bear NFTs</p>
-            </motion.div>
+            <div className="swap-card max-w-md mx-auto">
+                <h2 className="text-base sm:text-lg font-bold mb-3">Bear Staking</h2>
+                <p className="text-white/60 text-sm">Connect wallet to stake Bear NFTs</p>
+            </div>
         );
     }
 
     if (!isOnEthereum) {
         return (
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass-card p-6 rounded-2xl"
-            >
-                <h2 className="text-xl font-bold mb-4">Bear Staking</h2>
-                <p className="text-white/60 mb-4">Switch to Ethereum to stake Bear NFTs</p>
+            <div className="swap-card max-w-md mx-auto">
+                <h2 className="text-base sm:text-lg font-bold mb-3">Bear Staking</h2>
+                <p className="text-white/60 mb-3 text-sm">Switch to Ethereum to stake Bear NFTs</p>
                 <button
                     onClick={() => switchChain({ chainId: ethereum.id })}
-                    className="btn-primary px-6 py-2 rounded-xl font-medium"
+                    className="w-full btn-primary py-3 text-sm"
                 >
                     Switch to Ethereum
                 </button>
-            </motion.div>
+            </div>
         );
     }
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-3 sm:p-4 rounded-2xl"
-        >
-            <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold">Bear Staking</h2>
+        <div className="swap-card max-w-md mx-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base sm:text-lg font-bold">Bear Staking</h2>
                 {apr && (
-                    <div className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-sm font-medium">
+                    <span className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/20 text-emerald-400">
                         APR: {formatAPR(apr)}%
-                    </div>
+                    </span>
                 )}
             </div>
 
-            {/* Staking Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                <div className="bg-white/5 rounded-xl p-4">
-                    <p className="text-white/50 text-sm mb-1">Available to Stake</p>
-                    <p className="text-2xl font-bold text-white">
-                        {nftBalance?.toString() || '0'} NFTs
-                    </p>
+            {/* Stats Row - Compact */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="token-input-row !p-3">
+                    <p className="text-[10px] text-gray-400 mb-1">Available</p>
+                    <p className="text-lg font-bold">{nftBalance?.toString() || '0'} NFTs</p>
                 </div>
-                <div className="bg-white/5 rounded-xl p-4">
-                    <p className="text-white/50 text-sm mb-1">Staked</p>
-                    <p className="text-2xl font-bold text-purple-400">
-                        {stakedCount?.toString() || '0'} NFTs
-                    </p>
+                <div className="token-input-row !p-3 !bg-purple-500/5">
+                    <p className="text-[10px] text-gray-400 mb-1">Staked</p>
+                    <p className="text-lg font-bold text-purple-400">{stakedCount?.toString() || '0'} NFTs</p>
                 </div>
             </div>
 
-            {/* Pending Rewards */}
+            {/* Pending Rewards - Compact */}
             {hasPendingRewards && (
-                <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl p-4 mb-6 border border-emerald-500/20">
-                    <p className="text-white/50 text-sm mb-2">Pending Rewards</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
+                <div className="token-input-row !bg-gradient-to-r !from-emerald-500/10 !to-teal-500/10 mb-3">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">Pending Rewards</span>
+                        <span className="text-sm font-bold text-emerald-400">
+                            {formatNumber(pendingRewards?.[1])} BTBB
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
                         <div>
-                            <p className="text-white/60 text-xs">Gross</p>
-                            <p className="text-lg font-bold text-white">
-                                {formatNumber(pendingRewards?.[0])}
-                            </p>
+                            <p className="text-gray-500">Gross</p>
+                            <p className="font-medium">{formatNumber(pendingRewards?.[0])}</p>
                         </div>
                         <div>
-                            <p className="text-white/60 text-xs">Tax (1%)</p>
-                            <p className="text-lg font-bold text-red-400">
-                                -{formatNumber(pendingRewards?.[2])}
-                            </p>
+                            <p className="text-gray-500">Tax</p>
+                            <p className="font-medium text-red-400">-{formatNumber(pendingRewards?.[2])}</p>
                         </div>
                         <div>
-                            <p className="text-white/60 text-xs">Net</p>
-                            <p className="text-lg font-bold text-emerald-400">
-                                {formatNumber(pendingRewards?.[1])}
-                            </p>
+                            <p className="text-gray-500">Net</p>
+                            <p className="font-medium text-emerald-400">{formatNumber(pendingRewards?.[1])}</p>
                         </div>
                     </div>
                     <button
                         onClick={() => claim()}
                         disabled={isClaiming}
-                        className="w-full mt-4 py-3 rounded-xl font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:scale-[1.02] transition-all disabled:opacity-50"
+                        className="w-full py-2.5 rounded-lg font-bold text-sm bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:opacity-90 transition disabled:opacity-50"
                     >
                         {isClaiming ? 'Claiming...' : 'Claim Rewards'}
                     </button>
@@ -182,33 +167,23 @@ export function BearStaking() {
 
             {/* Stake Section */}
             {hasNFTs && (
-                <div className="mb-4">
-                    <button
-                        onClick={handleStake}
-                        disabled={isApproving || isStaking}
-                        className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${isApproving || isStaking
-                            ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                            : 'btn-primary hover:scale-[1.02]'
-                            }`}
-                    >
-                        {isApproving ? (
-                            'Approving...'
-                        ) : isStaking ? (
-                            'Staking...'
-                        ) : !isApproved ? (
-                            'Approve NFTs for Staking'
-                        ) : (
-                            `Stake ${nftBalance?.toString() || '0'} NFTs`
-                        )}
-                    </button>
-                </div>
+                <button
+                    onClick={handleStake}
+                    disabled={isApproving || isStaking}
+                    className="w-full btn-primary py-3 text-sm mb-3 disabled:opacity-50"
+                >
+                    {isApproving ? 'Approving...' : isStaking ? 'Staking...' : !isApproved ? 'Approve NFTs' : `Stake ${nftBalance?.toString() || '0'} NFTs`}
+                </button>
             )}
 
-            {/* Unstake Section */}
+            {/* Unstake Section - Compact */}
             {hasStaked && (
-                <div className="bg-white/5 rounded-xl p-4">
-                    <p className="text-white/50 text-sm mb-3">Unstake NFTs</p>
-                    <div className="flex items-center gap-3 mb-3">
+                <div className="token-input-row">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">Unstake</span>
+                        <span className="text-sm text-gray-400">Staked: {stakedCount?.toString()}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
                         <button
                             onClick={() => setUnstakeCount(c => Math.max(1, c - 1))}
                             disabled={unstakeCount <= 1}
@@ -216,9 +191,7 @@ export function BearStaking() {
                         >
                             −
                         </button>
-                        <span className="text-2xl font-bold text-white flex-1 text-center">
-                            {unstakeCount}
-                        </span>
+                        <span className="text-xl font-bold flex-1 text-center">{unstakeCount}</span>
                         <button
                             onClick={() => setUnstakeCount(c => Math.min(Number(stakedCount), c + 1))}
                             disabled={unstakeCount >= Number(stakedCount)}
@@ -226,25 +199,25 @@ export function BearStaking() {
                         >
                             +
                         </button>
+                        <button
+                            onClick={() => unstake(unstakeCount)}
+                            disabled={isUnstaking}
+                            className="px-4 py-2.5 rounded-lg font-bold text-sm bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition disabled:opacity-50"
+                        >
+                            {isUnstaking ? '...' : 'Unstake'}
+                        </button>
                     </div>
-                    <button
-                        onClick={() => unstake(unstakeCount)}
-                        disabled={isUnstaking}
-                        className="w-full py-3 rounded-xl font-bold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all disabled:opacity-50"
-                    >
-                        {isUnstaking ? 'Unstaking...' : `Unstake ${unstakeCount} NFT${unstakeCount > 1 ? 's' : ''}`}
-                    </button>
                 </div>
             )}
 
             {/* No NFTs State */}
             {!hasNFTs && !hasStaked && (
-                <div className="text-center py-8 text-white/50">
-                    <p className="text-4xl mb-3">🐻</p>
-                    <p>You don&apos;t have any Bear NFTs</p>
-                    <p className="text-sm">Mint some NFTs to start earning rewards!</p>
+                <div className="text-center py-6 text-white/50">
+                    <p className="text-3xl mb-2">🐻</p>
+                    <p className="text-sm">No Bear NFTs</p>
+                    <p className="text-xs">Mint some to start earning!</p>
                 </div>
             )}
-        </motion.div>
+        </div>
     );
 }

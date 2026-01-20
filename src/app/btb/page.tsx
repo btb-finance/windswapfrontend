@@ -128,7 +128,7 @@ export default function BTBPage() {
                 <div className="glass-card p-2 sm:p-3 text-center">
                     <div className="text-[10px] text-gray-400">Total Staked</div>
                     <div className="text-sm sm:text-lg font-bold">
-                        {statsLoading ? '...' : formatNumber(stakingStats?.[0], 0)}
+                        {statsLoading ? '...' : stakingStats?.[0]?.toString() || '0'}
                     </div>
                 </div>
                 <div className="glass-card p-2 sm:p-3 text-center bg-emerald-500/10">
@@ -208,32 +208,6 @@ export default function BTBPage() {
                                 </div>
                             )}
 
-                            {/* Pending Rewards */}
-                            {pendingRewards && (pendingRewards[0] > BigInt(0)) && (
-                                <div className="glass-card p-4 rounded-2xl bg-gradient-to-r from-emerald-500/5 to-teal-500/5">
-                                    <h3 className="text-lg font-bold mb-4 text-white">Pending Rewards</h3>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                            <p className="text-white/50 text-xs mb-1">Gross</p>
-                                            <p className="text-lg font-bold text-white">
-                                                {formatNumber(pendingRewards[0])}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-white/50 text-xs mb-1">Tax</p>
-                                            <p className="text-lg font-bold text-red-400">
-                                                -{formatNumber(pendingRewards[2])}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-white/50 text-xs mb-1">Net</p>
-                                            <p className="text-lg font-bold text-emerald-400">
-                                                {formatNumber(pendingRewards[1])}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
                             {/* How It Works */}
                             <div className="glass-card p-4 rounded-2xl">
