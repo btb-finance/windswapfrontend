@@ -55,10 +55,10 @@ export function BTBDashboard() {
     };
 
     const tabConfig = [
-        { key: 'info' as const, label: 'Info', icon: '📊' },
-        { key: 'wrap' as const, label: 'Wrap', icon: '🔄' },
-        { key: 'mint' as const, label: 'Mint', icon: '🐻' },
-        { key: 'stake' as const, label: 'Stake', icon: '⛏️' },
+        { key: 'info' as const, label: 'Info' },
+        { key: 'wrap' as const, label: 'Wrap' },
+        { key: 'mint' as const, label: 'Mint' },
+        { key: 'stake' as const, label: 'Stake' },
     ];
 
     if (!isConnected) {
@@ -110,7 +110,13 @@ export function BTBDashboard() {
                 >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                            <div className="text-xl">⚠️</div>
+                            <div className="text-xl">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-500">
+                                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                                    <path d="M12 9v4" />
+                                    <path d="M12 17h.01" />
+                                </svg>
+                            </div>
                             <div>
                                 <div className="text-xs text-gray-400">Network Status</div>
                                 <div className="font-bold text-blue-400">
