@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useReadContract, useWriteContract, useAccount, useWaitForTransactionReceipt } from 'wagmi';
+import { useReadContract, useAccount, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther, formatUnits } from 'viem';
 import { BTB_CONTRACTS } from '@/config/contracts';
 import { ERC20_ABI, BTBB_TOKEN_ABI, BEAR_NFT_ABI, BEAR_STAKING_ABI } from '@/config/abis';
 import { ethereum } from '@/config/chains';
+import { useWriteContract } from '@/hooks/useWriteContract';
 
 // ============================================
 // BTB Token Hooks
@@ -286,11 +287,11 @@ export function useTotalRewardsDistributed() {
 // ============================================
 
 export function useBTBApprove() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const approve = (spender: `0x${string}`, amount: bigint) => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BTB as `0x${string}`,
             abi: ERC20_ABI,
             functionName: 'approve',
@@ -303,11 +304,11 @@ export function useBTBApprove() {
 }
 
 export function useBTBBMint() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const mint = (amount: bigint) => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BTBB as `0x${string}`,
             abi: BTBB_TOKEN_ABI,
             functionName: 'mint',
@@ -320,11 +321,11 @@ export function useBTBBMint() {
 }
 
 export function useBTBBRedeem() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const redeem = (amount: bigint) => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BTBB as `0x${string}`,
             abi: BTBB_TOKEN_ABI,
             functionName: 'redeem',
@@ -337,12 +338,12 @@ export function useBTBBRedeem() {
 }
 
 export function useBearNFTMint() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const buyNFT = (amount: number, pricePerNFT: bigint) => {
         const totalPrice = pricePerNFT * BigInt(amount);
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BearNFT as `0x${string}`,
             abi: BEAR_NFT_ABI,
             functionName: 'buyNFT',
@@ -356,11 +357,11 @@ export function useBearNFTMint() {
 }
 
 export function useNFTApproveForStaking() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const approveAll = () => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BearNFT as `0x${string}`,
             abi: BEAR_NFT_ABI,
             functionName: 'setApprovalForAll',
@@ -386,11 +387,11 @@ export function useIsApprovedForStaking(address: `0x${string}` | undefined) {
 }
 
 export function useStakeNFTs() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const stake = (tokenIds: bigint[]) => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BearStaking as `0x${string}`,
             abi: BEAR_STAKING_ABI,
             functionName: 'stake',
@@ -403,11 +404,11 @@ export function useStakeNFTs() {
 }
 
 export function useUnstakeNFTs() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const unstake = (count: number) => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BearStaking as `0x${string}`,
             abi: BEAR_STAKING_ABI,
             functionName: 'unstake',
@@ -420,11 +421,11 @@ export function useUnstakeNFTs() {
 }
 
 export function useClaimRewards() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const claim = () => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BearStaking as `0x${string}`,
             abi: BEAR_STAKING_ABI,
             functionName: 'claim',
@@ -436,11 +437,11 @@ export function useClaimRewards() {
 }
 
 export function useCollectFees() {
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
     const collectFees = () => {
-        writeContract({
+        void writeContractAsync({
             address: BTB_CONTRACTS.BearStaking as `0x${string}`,
             abi: BEAR_STAKING_ABI,
             functionName: 'collectFees',
