@@ -178,16 +178,30 @@ export default function PoolsPage() {
         return true;
     });
 
-    // Sort pools - WIND/WSEI always first, then by volume by default!
-    const sortedPools = [...filteredPools].sort((a, b) => {
-        // Helper to check if pool is WIND/WSEI
-        const isWindWsei = (pool: typeof allPools[0]) =>
-            (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
+    // Top pool addresses (specific pools, not just token pairs)
+    const TOP_POOL_ADDRESSES = {
+        WIND_WSEI: '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase(),
+        USDC_WSEI: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1'.toLowerCase(),
+        WETH_WSEI: '0x0B266EA5E96ec0a1B2Cd188f31EBb36774147356'.toLowerCase(),
+        WETH_WIND: '0x16722405Bb17412B84C1ad9280D41bcED322FcAB'.toLowerCase(),
+    };
 
-        // WIND/WSEI always first
-        if (isWindWsei(a) && !isWindWsei(b)) return -1;
-        if (!isWindWsei(a) && isWindWsei(b)) return 1;
+    // Sort pools - Top pools first, then by volume by default!
+    const sortedPools = [...filteredPools].sort((a, b) => {
+        // Priority order based on specific pool addresses
+        const getPriority = (pool: typeof allPools[0]) => {
+            const poolAddr = pool.address.toLowerCase();
+            if (poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI) return 1;
+            if (poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI) return 2;
+            if (poolAddr === TOP_POOL_ADDRESSES.WETH_WSEI) return 3;
+            if (poolAddr === TOP_POOL_ADDRESSES.WETH_WIND) return 4;
+            return 999;
+        };
+
+        const priorityA = getPriority(a);
+        const priorityB = getPriority(b);
+
+        if (priorityA !== priorityB) return priorityA - priorityB;
 
         if (sortBy === 'tvl') return parseFloat(b.tvl) - parseFloat(a.tvl);
 
@@ -340,14 +354,17 @@ export default function PoolsPage() {
                     </div>
                 ) : (
                     sortedPools.map((pool, index) => {
-                        // Check if this is the featured WIND/WSEI pool
-                        const isWindWsei = (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-                            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
+                        // Check if this is one of the specific top pools (by address, not just token pair)
+                        const poolAddr = pool.address.toLowerCase();
+                        const isTopPool = poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI ||
+                            poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI ||
+                            poolAddr === TOP_POOL_ADDRESSES.WETH_WSEI ||
+                            poolAddr === TOP_POOL_ADDRESSES.WETH_WIND;
 
                         return (
                             <motion.div
                                 key={pool.address}
-                                className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b transition ${isWindWsei
+                                className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b transition ${isTopPool
                                     ? 'border-2 border-green-500/50 bg-gradient-to-r from-green-500/10 via-emerald-500/5 to-transparent rounded-xl my-1'
                                     : 'border-white/5 hover:bg-white/5'
                                     }`}
@@ -404,10 +421,10 @@ export default function PoolsPage() {
                                                     {pool.stable ? 'Stable' : 'Volatile'}
                                                 </span>
                                             )}
-                                            {/* Rewards badge for WIND/WSEI */}
-                                            {isWindWsei && (
+                                            {/* Rewards badge for top pools */}
+                                            {isTopPool && (
                                                 <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-bold animate-pulse">
-                                                    ⭐ Rewards Live
+                                                    ⭐ Top Pool
                                                 </span>
                                             )}
                                         </div>
