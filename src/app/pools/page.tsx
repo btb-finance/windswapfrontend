@@ -178,16 +178,38 @@ export default function PoolsPage() {
         return true;
     });
 
-    // Sort pools - WIND/WSEI always first, then by volume by default!
+    // Sort pools - Top pools first, then by volume by default!
     const sortedPools = [...filteredPools].sort((a, b) => {
-        // Helper to check if pool is WIND/WSEI
+        // Helper functions to check if pool is one of the top pools
         const isWindWsei = (pool: typeof allPools[0]) =>
             (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
             (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
 
-        // WIND/WSEI always first
-        if (isWindWsei(a) && !isWindWsei(b)) return -1;
-        if (!isWindWsei(a) && isWindWsei(b)) return 1;
+        const isUsdcWsei = (pool: typeof allPools[0]) =>
+            (pool.token0.symbol.toUpperCase() === 'USDC' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
+            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'USDC');
+
+        const isWethWsei = (pool: typeof allPools[0]) =>
+            (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
+            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WETH');
+
+        const isWethWind = (pool: typeof allPools[0]) =>
+            (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WIND') ||
+            (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WETH');
+
+        // Priority order: WIND/WSEI -> USDC/WSEI -> WETH/WSEI -> WETH/WIND
+        const getPriority = (pool: typeof allPools[0]) => {
+            if (isWindWsei(pool)) return 1;
+            if (isUsdcWsei(pool)) return 2;
+            if (isWethWsei(pool)) return 3;
+            if (isWethWind(pool)) return 4;
+            return 999;
+        };
+
+        const priorityA = getPriority(a);
+        const priorityB = getPriority(b);
+
+        if (priorityA !== priorityB) return priorityA - priorityB;
 
         if (sortBy === 'tvl') return parseFloat(b.tvl) - parseFloat(a.tvl);
 
@@ -340,14 +362,25 @@ export default function PoolsPage() {
                     </div>
                 ) : (
                     sortedPools.map((pool, index) => {
-                        // Check if this is the featured WIND/WSEI pool
+                        // Check if this is one of the top pools
                         const isWindWsei = (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
                             (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
+
+                        const isUsdcWsei = (pool.token0.symbol.toUpperCase() === 'USDC' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
+                            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'USDC');
+
+                        const isWethWsei = (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
+                            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WETH');
+
+                        const isWethWind = (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WIND') ||
+                            (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WETH');
+
+                        const isTopPool = isWindWsei || isUsdcWsei || isWethWsei || isWethWind;
 
                         return (
                             <motion.div
                                 key={pool.address}
-                                className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b transition ${isWindWsei
+                                className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b transition ${isTopPool
                                     ? 'border-2 border-green-500/50 bg-gradient-to-r from-green-500/10 via-emerald-500/5 to-transparent rounded-xl my-1'
                                     : 'border-white/5 hover:bg-white/5'
                                     }`}
@@ -404,10 +437,10 @@ export default function PoolsPage() {
                                                     {pool.stable ? 'Stable' : 'Volatile'}
                                                 </span>
                                             )}
-                                            {/* Rewards badge for WIND/WSEI */}
-                                            {isWindWsei && (
+                                            {/* Rewards badge for top pools */}
+                                            {isTopPool && (
                                                 <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-bold animate-pulse">
-                                                    ⭐ Rewards Live
+                                                    ⭐ Top Pool
                                                 </span>
                                             )}
                                         </div>
