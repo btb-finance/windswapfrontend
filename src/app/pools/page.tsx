@@ -178,31 +178,23 @@ export default function PoolsPage() {
         return true;
     });
 
+    // Top pool addresses (specific pools, not just token pairs)
+    const TOP_POOL_ADDRESSES = {
+        WIND_WSEI: '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase(),
+        USDC_WSEI: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1'.toLowerCase(),
+        WETH_WSEI: '0x0B266EA5E96ec0a1B2Cd188f31EBb36774147356'.toLowerCase(),
+        WETH_WIND: '0x16722405Bb17412B84C1ad9280D41bcED322FcAB'.toLowerCase(),
+    };
+
     // Sort pools - Top pools first, then by volume by default!
     const sortedPools = [...filteredPools].sort((a, b) => {
-        // Helper functions to check if pool is one of the top pools
-        const isWindWsei = (pool: typeof allPools[0]) =>
-            (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
-
-        const isUsdcWsei = (pool: typeof allPools[0]) =>
-            (pool.token0.symbol.toUpperCase() === 'USDC' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'USDC');
-
-        const isWethWsei = (pool: typeof allPools[0]) =>
-            (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WETH');
-
-        const isWethWind = (pool: typeof allPools[0]) =>
-            (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WIND') ||
-            (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WETH');
-
-        // Priority order: WIND/WSEI -> USDC/WSEI -> WETH/WSEI -> WETH/WIND
+        // Priority order based on specific pool addresses
         const getPriority = (pool: typeof allPools[0]) => {
-            if (isWindWsei(pool)) return 1;
-            if (isUsdcWsei(pool)) return 2;
-            if (isWethWsei(pool)) return 3;
-            if (isWethWind(pool)) return 4;
+            const poolAddr = pool.address.toLowerCase();
+            if (poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI) return 1;
+            if (poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI) return 2;
+            if (poolAddr === TOP_POOL_ADDRESSES.WETH_WSEI) return 3;
+            if (poolAddr === TOP_POOL_ADDRESSES.WETH_WIND) return 4;
             return 999;
         };
 
@@ -362,20 +354,12 @@ export default function PoolsPage() {
                     </div>
                 ) : (
                     sortedPools.map((pool, index) => {
-                        // Check if this is one of the top pools
-                        const isWindWsei = (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-                            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
-
-                        const isUsdcWsei = (pool.token0.symbol.toUpperCase() === 'USDC' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-                            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'USDC');
-
-                        const isWethWsei = (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
-                            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WETH');
-
-                        const isWethWind = (pool.token0.symbol.toUpperCase() === 'WETH' && pool.token1.symbol.toUpperCase() === 'WIND') ||
-                            (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WETH');
-
-                        const isTopPool = isWindWsei || isUsdcWsei || isWethWsei || isWethWind;
+                        // Check if this is one of the specific top pools (by address, not just token pair)
+                        const poolAddr = pool.address.toLowerCase();
+                        const isTopPool = poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI ||
+                            poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI ||
+                            poolAddr === TOP_POOL_ADDRESSES.WETH_WSEI ||
+                            poolAddr === TOP_POOL_ADDRESSES.WETH_WIND;
 
                         return (
                             <motion.div
