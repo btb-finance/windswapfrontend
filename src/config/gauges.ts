@@ -16,6 +16,54 @@ export interface GaugeConfig {
 
 export const GAUGE_LIST: GaugeConfig[] = [
     // ============================================
+    // TOP POOLS (PRIORITY)
+    // ============================================
+    {
+        pool: '0xc7035A2Ef7C685Fc853475744623A0F164541b69',
+        gauge: '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb',
+        token0: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'WIND',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 2000,
+        isAlive: true,
+    },
+    {
+        pool: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1',
+        gauge: '0xC33fBA7DDd1dDaE4b986359515A9678275D408Ce',
+        token0: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'USDC',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200,
+        isAlive: true,
+    },
+    {
+        pool: '0x0B266EA5E96ec0a1B2Cd188f31EBb36774147356',
+        gauge: '0x3e5A298f3eFFF636A89A10c755A01C7Cd5b6a241',
+        token0: '0x160345fC359604fC6e70E3c5fAcbdE5F7A9342d8',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'WETH',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200,
+        isAlive: true,
+    },
+    {
+        pool: '0x16722405Bb17412B84C1ad9280D41bcED322FcAB',
+        gauge: '0xB7c287C0D8BED22cF9741bB5234a91aA636b196B',
+        token0: '0x160345fC359604fC6e70E3c5fAcbdE5F7A9342d8',
+        token1: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
+        symbol0: 'WETH',
+        symbol1: 'WIND',
+        type: 'CL',
+        tickSpacing: 200,
+        isAlive: true,
+    },
+
+    // ============================================
     // STABLE PAIRS
     // ============================================
     {
@@ -45,17 +93,6 @@ export const GAUGE_LIST: GaugeConfig[] = [
     // WIND PAIRS
     // ============================================
     {
-        pool: '0xc7035A2Ef7C685Fc853475744623A0F164541b69',
-        gauge: '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb',
-        token0: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
-        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
-        symbol0: 'WIND',
-        symbol1: 'WSEI',
-        type: 'CL',
-        tickSpacing: 2000,
-        isAlive: true,
-    },
-    {
         pool: '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0',
         gauge: '0x44A21C019f32Edf0C906B93b6A81fC37443A9DA2',
         token0: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
@@ -75,17 +112,6 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol1: 'WIND',
         type: 'CL',
         tickSpacing: 2000,
-        isAlive: true,
-    },
-    {
-        pool: '0x16722405Bb17412B84C1ad9280D41bcED322FcAB',
-        gauge: '0xB7c287C0D8BED22cF9741bB5234a91aA636b196B',
-        token0: '0x160345fC359604fC6e70E3c5fAcbdE5F7A9342d8',
-        token1: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
-        symbol0: 'WETH',
-        symbol1: 'WIND',
-        type: 'CL',
-        tickSpacing: 200,
         isAlive: true,
     },
     {
@@ -112,6 +138,21 @@ export const GAUGE_LIST: GaugeConfig[] = [
     },
 
     // ============================================
+    // ETH PAIRS
+    // ============================================
+    {
+        pool: '0x1C97a574b5bBDcbc70A0223e8e6DBBb0479c0570',
+        gauge: '0x2C85A7A148Fee5D27F7344B5bf9B57313f6C6745',
+        token0: '0x160345fC359604fC6e70E3c5fAcbdE5F7A9342d8',
+        token1: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
+        symbol0: 'WETH',
+        symbol1: 'USDC',
+        type: 'CL',
+        tickSpacing: 200,
+        isAlive: true,
+    },
+
+    // ============================================
     // BTC PAIRS
     // ============================================
     {
@@ -134,21 +175,6 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol1: 'cbBTC',
         type: 'CL',
         tickSpacing: 50,
-        isAlive: true,
-    },
-
-    // ============================================
-    // ETH PAIRS
-    // ============================================
-    {
-        pool: '0x1C97a574b5bBDcbc70A0223e8e6DBBb0479c0570',
-        gauge: '0x2C85A7A148Fee5D27F7344B5bf9B57313f6C6745',
-        token0: '0x160345fC359604fC6e70E3c5fAcbdE5F7A9342d8',
-        token1: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
-        symbol0: 'WETH',
-        symbol1: 'USDC',
-        type: 'CL',
-        tickSpacing: 200,
         isAlive: true,
     },
 
@@ -205,17 +231,6 @@ export const GAUGE_LIST: GaugeConfig[] = [
         token0: '0x78465cffcc7335937d48cCd9A0Ad6bCe2dfDAfD1',
         token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
         symbol0: 'uSUI',
-        symbol1: 'WSEI',
-        type: 'CL',
-        tickSpacing: 200,
-        isAlive: true,
-    },
-    {
-        pool: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1',
-        gauge: '0xC33fBA7DDd1dDaE4b986359515A9678275D408Ce',
-        token0: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
-        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
-        symbol0: 'USDC',
         symbol1: 'WSEI',
         type: 'CL',
         tickSpacing: 200,
