@@ -5,7 +5,7 @@
 [build.environment]
   NODE_VERSION = "22"
   # Use bun for faster builds
-  BUN_VERSION = "1.3.5"
+  BUN_VERSION = "1.3.7"
 
 # CORS headers for Safe Apps iframe support
 [[headers]]

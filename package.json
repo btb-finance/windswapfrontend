@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "dev:webpack": "next dev --webpack",
+    "dev": "bun --bun next dev --turbopack",
+    "dev:webpack": "bun --bun next dev --webpack",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "bun --bun next start",
     "lint": "eslint"
   },
   "dependencies": {
