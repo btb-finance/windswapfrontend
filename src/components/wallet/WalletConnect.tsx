@@ -1,8 +1,13 @@
 'use client';
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount, useBalance } from 'wagmi';
+import { formatUnits } from 'viem';
 
 export function WalletConnect() {
+    const { address } = useAccount();
+    const { data: balanceData } = useBalance({ address });
+
     return (
         <ConnectButton.Custom>
             {({
@@ -15,6 +20,11 @@ export function WalletConnect() {
             }) => {
                 const ready = mounted;
                 const connected = ready && account && chain;
+
+                // Format manual balance if available, otherwise fallback (though fallback is likely NaN)
+                const formattedBalance = balanceData
+                    ? `${parseFloat(formatUnits(balanceData.value, balanceData.decimals)).toFixed(4)} ${balanceData.symbol}`
+                    : account?.displayBalance;
 
                 return (
                     <div
@@ -85,8 +95,8 @@ export function WalletConnect() {
                                         {/* Desktop: address + balance */}
                                         <span className="hidden md:inline">
                                             {account.displayName}
-                                            {account.displayBalance
-                                                ? ` (${account.displayBalance})`
+                                            {formattedBalance
+                                                ? ` (${formattedBalance})`
                                                 : ''}
                                         </span>
                                     </button>
