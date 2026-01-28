@@ -16,6 +16,9 @@ import { useTokenBalance } from '@/hooks/useToken';
 import { useMixedRouteQuoter } from '@/hooks/useMixedRouteQuoter';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { haptic } from '@/hooks/useHaptic';
+import { SLIPPAGE, DEBOUNCE_MS } from '@/config/constants';
+import { getSwapErrorMessage, isUserRejection } from '@/utils/errors';
+import { useToast } from '@/providers/ToastProvider';
 
 interface Route {
     from: Address;
@@ -42,6 +45,7 @@ interface SwapInterfaceProps {
 
 export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterfaceProps) {
     const { isConnected, address } = useAccount();
+    const { success, error: showError } = useToast();
 
     // Token state - use props if provided, otherwise defaults
     const [tokenIn, setTokenIn] = useState<Token | undefined>(initialTokenIn || SEI);
@@ -55,13 +59,15 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
     const [noRouteFound, setNoRouteFound] = useState(false);
 
     // Settings state
-    const [slippage, setSlippage] = useState(0.5);
+    const [slippage, setSlippage] = useState(SLIPPAGE.DEFAULT);
     const [deadline, setDeadline] = useState(30);
+    const [slippageError, setSlippageError] = useState<string | null>(null);
 
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
     const [isApproving, setIsApproving] = useState(false);
     const [routeLocked, setRouteLocked] = useState(false); // Lock route during approval/swap
+    const [error, setError] = useState<string | null>(null);
 
     // Hooks
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
@@ -73,7 +79,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
     const { executeBatch, encodeApproveCall, encodeContractCall, isLoading: isBatching } = useBatchTransactions();
 
     const isLoading = isLoadingV2 || isLoadingV3 || isBatching;
-    const error = errorV2 || errorV3;
+    const hookError = errorV2 || errorV3;
 
     // Get actual token addresses (use WSEI for native SEI)
     const actualTokenIn = tokenIn?.isNative ? WSEI : tokenIn;
@@ -243,6 +249,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 setBestRoute(null);
                 setIsApproving(false);
                 setRouteLocked(false);
+                success('Swap successful!');
                 return;
             }
 
@@ -259,6 +266,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
 
         } catch (err) {
             console.error('Approve/swap error:', err);
+            const errorMsg = getSwapErrorMessage(err);
+            setError(errorMsg);
             setIsApproving(false);
             setRouteLocked(false);
             setAutoSwapAfterApproval(false);
@@ -417,9 +426,23 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             setIsQuoting(false);
         };
 
-        const debounce = setTimeout(findBestRoute, 300);
+        const debounce = setTimeout(findBestRoute, DEBOUNCE_MS.QUOTE);
         return () => clearTimeout(debounce);
     }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute, routeLocked]);
+
+    // Handle slippage change with validation
+    const handleSlippageChange = useCallback((value: number) => {
+        if (value < SLIPPAGE.MIN) {
+            setSlippageError(`Slippage must be at least ${SLIPPAGE.MIN}%`);
+            return;
+        }
+        if (value > SLIPPAGE.MAX) {
+            setSlippageError(`Slippage cannot exceed ${SLIPPAGE.MAX}%`);
+            return;
+        }
+        setSlippageError(null);
+        setSlippage(value);
+    }, []);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
@@ -485,6 +508,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 result = { hash };
             } catch (err: any) {
                 console.error('Wrap/unwrap error:', err);
+                const errorMsg = getSwapErrorMessage(err);
+                setError(errorMsg);
                 result = null;
             }
         } else if (bestRoute.type === 'v2') {
@@ -527,9 +552,14 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             setAmountIn('');
             setAmountOut('');
             setBestRoute(null);
-            haptic('success');
+            success('Swap successful!');
         } else {
             haptic('error');
+            if (!isUserRejection(error)) {
+                const errorMsg = getSwapErrorMessage(error);
+                setError(errorMsg);
+                showError(errorMsg);
+            }
         }
         setRouteLocked(false); // Unlock after swap completes or fails
     };
@@ -565,22 +595,16 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                     <SwapSettings
                         slippage={slippage}
                         deadline={deadline}
-                        onSlippageChange={setSlippage}
+                        onSlippageChange={handleSlippageChange}
                         onDeadlineChange={setDeadline}
                     />
                 </div>
             </div>
 
             {/* Error Display - Compact */}
-            {error && (
+            {(error || hookError) && (
                 <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
-                    {error.includes('User rejected') || error.includes('user rejected')
-                        ? 'Transaction cancelled'
-                        : error.includes('insufficient')
-                            ? 'Insufficient balance'
-                            : error.length > 50
-                                ? error.slice(0, 50) + '...'
-                                : error}
+                    {error || hookError}
                 </div>
             )}
 
@@ -667,6 +691,13 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                                     ? 'Enter Amount'
                                     : 'Swap'}
                 </button>
+            )}
+ 
+            {/* Slippage Error */}
+            {slippageError && (
+                <div className="mt-2 text-center text-xs text-red-400">
+                    {slippageError}
+                </div>
             )}
 
             <div className="mt-3 text-center text-[10px] text-gray-500">
