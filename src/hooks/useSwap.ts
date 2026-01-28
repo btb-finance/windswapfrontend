@@ -8,6 +8,7 @@ import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 import { Token, WSEI } from '@/config/tokens';
 import { getPrimaryRpc } from '@/utils/rpc';
+import { swrCache, dedupeRequest, getQuoteCacheKey } from '@/utils/cache';
 
 interface Route {
     from: Address;
@@ -23,7 +24,7 @@ export function useSwap() {
 
     const { writeContractAsync } = useWriteContract();
 
-    // Get quote for swap (Exact Input)
+    // Get quote for swap (Exact Input) - with caching
     const getQuote = useCallback(
         async (
             tokenIn: Token,
@@ -36,53 +37,68 @@ export function useSwap() {
 
                 const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
                 const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
-                const amountInWei = parseUnits(amountIn, tokenIn.decimals);
+                
+                // Generate cache key for this quote
+                const cacheKey = getQuoteCacheKey(
+                    'v2',
+                    actualTokenIn.address,
+                    actualTokenOut.address,
+                    amountIn,
+                    stable
+                );
 
-                const route: Route[] = [
-                    {
-                        from: actualTokenIn.address as Address,
-                        to: actualTokenOut.address as Address,
-                        stable,
-                        factory: V2_CONTRACTS.PoolFactory as Address,
+                // Use cached result or fetch fresh (3 second TTL)
+                return await swrCache(
+                    cacheKey,
+                    async () => {
+                        const amountInWei = parseUnits(amountIn, tokenIn.decimals);
+
+                        const route: Route[] = [
+                            {
+                                from: actualTokenIn.address as Address,
+                                to: actualTokenOut.address as Address,
+                                stable,
+                                factory: V2_CONTRACTS.PoolFactory as Address,
+                            },
+                        ];
+
+                        const data = encodeFunctionData({
+                            abi: ROUTER_ABI,
+                            functionName: 'getAmountsOut',
+                            args: [amountInWei, route],
+                        });
+
+                        const response = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'eth_call',
+                                params: [{ to: V2_CONTRACTS.Router, data }, 'latest'],
+                                id: 1
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.result && result.result !== '0x') {
+                            const decoded = decodeFunctionResult({
+                                abi: ROUTER_ABI,
+                                functionName: 'getAmountsOut',
+                                data: result.result,
+                            }) as bigint[];
+
+                            const amountOutWei = decoded[decoded.length - 1];
+
+                            return {
+                                amountOut: formatUnits(amountOutWei, tokenOut.decimals),
+                                route,
+                            };
+                        }
+                        return null;
                     },
-                ];
-
-                // Use JSON-RPC to call getAmountsOut
-                const data = encodeFunctionData({
-                    abi: ROUTER_ABI,
-                    functionName: 'getAmountsOut',
-                    args: [amountInWei, route],
-                });
-
-                const response = await fetch(getPrimaryRpc(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'eth_call',
-                        params: [{ to: V2_CONTRACTS.Router, data }, 'latest'],
-                        id: 1
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.result && result.result !== '0x') {
-                    const decoded = decodeFunctionResult({
-                        abi: ROUTER_ABI,
-                        functionName: 'getAmountsOut',
-                        data: result.result,
-                    }) as bigint[];
-
-                    // amounts is [amountIn, amountOut]
-                    const amountOutWei = decoded[decoded.length - 1];
-
-                    return {
-                        amountOut: formatUnits(amountOutWei, tokenOut.decimals),
-                        route,
-                    };
-                }
-                return null;
+                    3000 // 3 second cache TTL
+                );
             } catch (err) {
                 console.error('Quote error:', err);
                 return null;
@@ -91,7 +107,7 @@ export function useSwap() {
         []
     );
 
-    // Get quote for swap (Exact Output)
+    // Get quote for swap (Exact Output) - with caching
     const getQuoteExactOutput = useCallback(
         async (
             tokenIn: Token,
@@ -104,53 +120,68 @@ export function useSwap() {
 
                 const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
                 const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
-                const amountOutWei = parseUnits(amountOut, tokenOut.decimals);
 
-                const route: Route[] = [
-                    {
-                        from: actualTokenIn.address as Address,
-                        to: actualTokenOut.address as Address,
-                        stable,
-                        factory: V2_CONTRACTS.PoolFactory as Address,
+                // Generate cache key for this quote
+                const cacheKey = getQuoteCacheKey(
+                    'v2-out',
+                    actualTokenIn.address,
+                    actualTokenOut.address,
+                    amountOut,
+                    stable
+                );
+
+                // Use cached result or fetch fresh (3 second TTL)
+                return await swrCache(
+                    cacheKey,
+                    async () => {
+                        const amountOutWei = parseUnits(amountOut, tokenOut.decimals);
+
+                        const route: Route[] = [
+                            {
+                                from: actualTokenIn.address as Address,
+                                to: actualTokenOut.address as Address,
+                                stable,
+                                factory: V2_CONTRACTS.PoolFactory as Address,
+                            },
+                        ];
+
+                        const data = encodeFunctionData({
+                            abi: ROUTER_ABI,
+                            functionName: 'getAmountsIn',
+                            args: [amountOutWei, route],
+                        });
+
+                        const response = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'eth_call',
+                                params: [{ to: V2_CONTRACTS.Router, data }, 'latest'],
+                                id: 1
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.result && result.result !== '0x') {
+                            const decoded = decodeFunctionResult({
+                                abi: ROUTER_ABI,
+                                functionName: 'getAmountsIn',
+                                data: result.result,
+                            }) as bigint[];
+
+                            const amountInWei = decoded[0];
+
+                            return {
+                                amountIn: formatUnits(amountInWei, tokenIn.decimals),
+                                route,
+                            };
+                        }
+                        return null;
                     },
-                ];
-
-                // Use JSON-RPC to call getAmountsIn
-                const data = encodeFunctionData({
-                    abi: ROUTER_ABI,
-                    functionName: 'getAmountsIn',
-                    args: [amountOutWei, route],
-                });
-
-                const response = await fetch(getPrimaryRpc(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'eth_call',
-                        params: [{ to: V2_CONTRACTS.Router, data }, 'latest'],
-                        id: 1
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.result && result.result !== '0x') {
-                    const decoded = decodeFunctionResult({
-                        abi: ROUTER_ABI,
-                        functionName: 'getAmountsIn',
-                        data: result.result,
-                    }) as bigint[];
-
-                    // amounts is [amountIn, amountOut]
-                    const amountInWei = decoded[0];
-
-                    return {
-                        amountIn: formatUnits(amountInWei, tokenIn.decimals),
-                        route,
-                    };
-                }
-                return null;
+                    3000 // 3 second cache TTL
+                );
             } catch (err) {
                 console.error('Quote exact output error:', err);
                 return null;

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Token, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { useUserBalances } from '@/providers/UserBalanceProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
+import { getTokenMetadataFromCache, setTokenMetadataCache } from '@/utils/cache';
 
 interface TokenSelectorProps {
     isOpen: boolean;
@@ -20,9 +21,33 @@ const isValidAddress = (value: string): boolean => {
     return /^0x[a-fA-F0-9]{40}$/.test(value);
 };
 
-// Fetch token info from chain
+// Decode string results from hex (skip first 64 chars for offset, next 64 for length, rest is data)
+const decodeString = (hex: string): string => {
+    if (!hex || hex === '0x' || hex.length < 130) return '';
+    try {
+        const lengthHex = hex.slice(66, 130);
+        const length = parseInt(lengthHex, 16);
+        const dataHex = hex.slice(130, 130 + length * 2);
+        return Buffer.from(dataHex, 'hex').toString('utf8').replace(/\0/g, '').trim();
+    } catch {
+        return '';
+    }
+};
+
+// Fetch token info from chain with localStorage caching
 async function fetchTokenInfo(address: string): Promise<Token | null> {
     try {
+        // Check localStorage cache first (1 hour TTL)
+        const cached = getTokenMetadataFromCache(address);
+        if (cached) {
+            return {
+                address: address as `0x${string}`,
+                symbol: cached.symbol,
+                name: cached.name,
+                decimals: cached.decimals,
+            };
+        }
+
         // Prepare calldata for symbol(), name(), decimals()
         const symbolSelector = '0x95d89b41';
         const nameSelector = '0x06fdde03';
@@ -61,24 +86,14 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
             }).then(r => r.json()),
         ]);
 
-        // Decode string results (skip first 64 chars for offset, next 64 for length, rest is data)
-        const decodeString = (hex: string): string => {
-            if (!hex || hex === '0x' || hex.length < 130) return '';
-            try {
-                const lengthHex = hex.slice(66, 130);
-                const length = parseInt(lengthHex, 16);
-                const dataHex = hex.slice(130, 130 + length * 2);
-                return Buffer.from(dataHex, 'hex').toString('utf8').replace(/\0/g, '').trim();
-            } catch {
-                return '';
-            }
-        };
-
         const symbol = decodeString(symbolResult.result);
         const name = decodeString(nameResult.result);
         const decimals = decimalsResult.result ? parseInt(decimalsResult.result, 16) : 18;
 
         if (!symbol) return null;
+
+        // Cache the result
+        setTokenMetadataCache(address, { symbol, name: name || symbol, decimals });
 
         return {
             address: address as `0x${string}`,

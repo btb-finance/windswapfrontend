@@ -1,9 +1,10 @@
 // Application-wide constants
 
 export const DEBOUNCE_MS = {
-  QUOTE: 300,
-  INPUT: 150,
-  SEARCH: 200,
+  QUOTE: 400,        // Increased to reduce RPC calls while keeping UX snappy
+  INPUT: 100,        // Reduced for more responsive typing
+  SEARCH: 150,       // Reduced for faster search results
+  SLIPPAGE: 200,     // Debounce for slippage changes
 } as const;
 
 export const SLIPPAGE = {

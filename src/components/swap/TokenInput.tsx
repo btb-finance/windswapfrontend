@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Token } from '@/config/tokens';
 import { TokenSelector } from '@/components/common/TokenSelector';
@@ -15,11 +15,11 @@ interface TokenInputProps {
     disabled?: boolean;
     showMaxButton?: boolean;
     balance?: string;
-    rawBalance?: string; // Full precision for MAX button
+    rawBalance?: string;
     usdValue?: string;
 }
 
-export function TokenInput({
+function TokenInputComponent({
     label,
     token,
     amount,
@@ -34,21 +34,32 @@ export function TokenInput({
 }: TokenInputProps) {
     const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
-    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAmountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
-        // Only allow numbers and decimals
         if (value === '' || /^\d*\.?\d*$/.test(value)) {
             onAmountChange(value);
         }
-    };
+    }, [onAmountChange]);
 
-    const handleMax = () => {
-        // Use rawBalance (full precision) if available, fallback to balance
+    const handleMax = useCallback(() => {
         const maxValue = rawBalance || balance;
         if (maxValue && maxValue !== '--' && maxValue !== '0') {
             onAmountChange(maxValue);
         }
-    };
+    }, [rawBalance, balance, onAmountChange]);
+
+    const handleTokenSelect = useCallback((selectedToken: Token) => {
+        onTokenSelect(selectedToken);
+        setIsSelectorOpen(false);
+    }, [onTokenSelect]);
+
+    const handleCloseSelector = useCallback(() => {
+        setIsSelectorOpen(false);
+    }, []);
+
+    const handleOpenSelector = useCallback(() => {
+        setIsSelectorOpen(true);
+    }, []);
 
     return (
         <>
@@ -82,7 +93,7 @@ export function TokenInput({
                     />
 
                     <motion.button
-                        onClick={() => setIsSelectorOpen(true)}
+                        onClick={handleOpenSelector}
                         className="token-select"
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -132,11 +143,13 @@ export function TokenInput({
 
             <TokenSelector
                 isOpen={isSelectorOpen}
-                onClose={() => setIsSelectorOpen(false)}
-                onSelect={onTokenSelect}
+                onClose={handleCloseSelector}
+                onSelect={handleTokenSelect}
                 selectedToken={token}
                 excludeToken={excludeToken}
             />
         </>
     );
 }
+
+export const TokenInput = memo(TokenInputComponent);

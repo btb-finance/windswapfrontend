@@ -8,6 +8,7 @@ import { parseUnits, formatUnits, Address, encodeFunctionData, decodeFunctionRes
 import { Token, WSEI } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
 import { SWAP_ROUTER_ABI, ERC20_ABI, QUOTER_V2_ABI } from '@/config/abis';
+import { swrCache, getQuoteCacheKey } from '@/utils/cache';
 
 // CL tick spacings from CLFactory contract
 const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
@@ -70,7 +71,7 @@ export function useSwapV3() {
         }
     }, []);
 
-    // Get quote for specific tick spacing (Exact Input)
+    // Get quote for specific tick spacing (Exact Input) - with caching
     const getQuoteForTickSpacing = useCallback(async (
         tokenIn: Token,
         tokenOut: Token,
@@ -79,69 +80,84 @@ export function useSwapV3() {
     ): Promise<SwapQuoteV3 | null> => {
         if (!amountIn || parseFloat(amountIn) <= 0) return null;
 
-        try {
-            const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
-            const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
-            const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
+        const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
+        const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
 
-            // Use encodeFunctionData instead of manual encoding
-            const data = encodeFunctionData({
-                abi: QUOTER_V2_ABI,
-                functionName: 'quoteExactInputSingle',
-                args: [{
-                    tokenIn: actualTokenIn.address as Address,
-                    tokenOut: actualTokenOut.address as Address,
-                    amountIn: amountInWei,
-                    tickSpacing,
-                    sqrtPriceLimitX96: BigInt(0),
-                }],
-            });
+        // Generate cache key
+        const cacheKey = getQuoteCacheKey(
+            'v3',
+            actualTokenIn.address,
+            actualTokenOut.address,
+            amountIn,
+            undefined,
+            tickSpacing
+        );
 
-            const response = await fetch(getPrimaryRpc(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'eth_call',
-                    params: [{
-                        to: CL_CONTRACTS.QuoterV2,
-                        data
-                    }, 'latest'],
-                    id: 1
-                })
-            });
+        // Use cached result or fetch fresh (3 second TTL)
+        return await swrCache(
+            cacheKey,
+            async () => {
+                try {
+                    const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
 
-            const result = await response.json();
+                    const data = encodeFunctionData({
+                        abi: QUOTER_V2_ABI,
+                        functionName: 'quoteExactInputSingle',
+                        args: [{
+                            tokenIn: actualTokenIn.address as Address,
+                            tokenOut: actualTokenOut.address as Address,
+                            amountIn: amountInWei,
+                            tickSpacing,
+                            sqrtPriceLimitX96: BigInt(0),
+                        }],
+                    });
 
-            if (result.result && result.result !== '0x') {
-                const decoded = decodeFunctionResult({
-                    abi: QUOTER_V2_ABI,
-                    functionName: 'quoteExactInputSingle',
-                    data: result.result,
-                }) as [bigint, bigint, number, bigint];
+                    const response = await fetch(getPrimaryRpc(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_call',
+                            params: [{
+                                to: CL_CONTRACTS.QuoterV2,
+                                data
+                            }, 'latest'],
+                            id: 1
+                        })
+                    });
 
-                // Returns: [amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate]
-                const amountOutWei = decoded[0];
-                const gasEstimate = decoded[3];
+                    const result = await response.json();
 
-                if (amountOutWei > BigInt(0)) {
-                    return {
-                        amountOut: formatUnits(amountOutWei, actualTokenOut.decimals),
-                        gasEstimate: gasEstimate,
-                        sqrtPriceX96After: decoded[1],
-                        tickSpacing,
-                        poolExists: true,
-                    };
+                    if (result.result && result.result !== '0x') {
+                        const decoded = decodeFunctionResult({
+                            abi: QUOTER_V2_ABI,
+                            functionName: 'quoteExactInputSingle',
+                            data: result.result,
+                        }) as [bigint, bigint, number, bigint];
+
+                        const amountOutWei = decoded[0];
+                        const gasEstimate = decoded[3];
+
+                        if (amountOutWei > BigInt(0)) {
+                            return {
+                                amountOut: formatUnits(amountOutWei, actualTokenOut.decimals),
+                                gasEstimate: gasEstimate,
+                                sqrtPriceX96After: decoded[1],
+                                tickSpacing,
+                                poolExists: true,
+                            };
+                        }
+                    }
+                    return null;
+                } catch {
+                    return null;
                 }
-            }
-
-            return null;
-        } catch {
-            return null;
-        }
+            },
+            3000 // 3 second cache TTL
+        );
     }, []);
 
-    // Get quote for specific tick spacing (Exact Output)
+    // Get quote for specific tick spacing (Exact Output) - with caching
     const getQuoteExactOutputForTickSpacing = useCallback(async (
         tokenIn: Token,
         tokenOut: Token,
@@ -150,66 +166,82 @@ export function useSwapV3() {
     ): Promise<SwapQuoteV3 | null> => {
         if (!amountOut || parseFloat(amountOut) <= 0) return null;
 
-        try {
-            const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
-            const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
-            const amountOutWei = parseUnits(amountOut, actualTokenOut.decimals);
+        const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
+        const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
 
-            const data = encodeFunctionData({
-                abi: QUOTER_V2_ABI,
-                functionName: 'quoteExactOutputSingle',
-                args: [{
-                    tokenIn: actualTokenIn.address as Address,
-                    tokenOut: actualTokenOut.address as Address,
-                    amount: amountOutWei, // Note: param name is 'amount' in struct
-                    tickSpacing,
-                    sqrtPriceLimitX96: BigInt(0),
-                }],
-            });
+        // Generate cache key
+        const cacheKey = getQuoteCacheKey(
+            'v3-out',
+            actualTokenIn.address,
+            actualTokenOut.address,
+            amountOut,
+            undefined,
+            tickSpacing
+        );
 
-            const response = await fetch(getPrimaryRpc(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'eth_call',
-                    params: [{
-                        to: CL_CONTRACTS.QuoterV2,
-                        data
-                    }, 'latest'],
-                    id: 1
-                })
-            });
+        // Use cached result or fetch fresh (3 second TTL)
+        return await swrCache(
+            cacheKey,
+            async () => {
+                try {
+                    const amountOutWei = parseUnits(amountOut, actualTokenOut.decimals);
 
-            const result = await response.json();
+                    const data = encodeFunctionData({
+                        abi: QUOTER_V2_ABI,
+                        functionName: 'quoteExactOutputSingle',
+                        args: [{
+                            tokenIn: actualTokenIn.address as Address,
+                            tokenOut: actualTokenOut.address as Address,
+                            amount: amountOutWei,
+                            tickSpacing,
+                            sqrtPriceLimitX96: BigInt(0),
+                        }],
+                    });
 
-            if (result.result && result.result !== '0x') {
-                const decoded = decodeFunctionResult({
-                    abi: QUOTER_V2_ABI,
-                    functionName: 'quoteExactOutputSingle',
-                    data: result.result,
-                }) as [bigint, bigint, number, bigint];
+                    const response = await fetch(getPrimaryRpc(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_call',
+                            params: [{
+                                to: CL_CONTRACTS.QuoterV2,
+                                data
+                            }, 'latest'],
+                            id: 1
+                        })
+                    });
 
-                // Returns: [amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate]
-                const amountInWei = decoded[0];
-                const gasEstimate = decoded[3];
+                    const result = await response.json();
 
-                if (amountInWei > BigInt(0)) {
-                    return {
-                        amountOut, // Echo back desired output
-                        amountIn: formatUnits(amountInWei, actualTokenIn.decimals),
-                        gasEstimate: gasEstimate,
-                        sqrtPriceX96After: decoded[1],
-                        tickSpacing,
-                        poolExists: true,
-                    };
+                    if (result.result && result.result !== '0x') {
+                        const decoded = decodeFunctionResult({
+                            abi: QUOTER_V2_ABI,
+                            functionName: 'quoteExactOutputSingle',
+                            data: result.result,
+                        }) as [bigint, bigint, number, bigint];
+
+                        const amountInWei = decoded[0];
+                        const gasEstimate = decoded[3];
+
+                        if (amountInWei > BigInt(0)) {
+                            return {
+                                amountOut,
+                                amountIn: formatUnits(amountInWei, actualTokenIn.decimals),
+                                gasEstimate: gasEstimate,
+                                sqrtPriceX96After: decoded[1],
+                                tickSpacing,
+                                poolExists: true,
+                            };
+                        }
+                    }
+                    return null;
+                } catch {
+                    return null;
                 }
-            }
-
-            return null;
-        } catch {
-            return null;
-        }
+            },
+            3000 // 3 second cache TTL
+        );
     }, []);
 
     // Get best quote across all tick spacings (AUTO mode)
