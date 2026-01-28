@@ -4,16 +4,17 @@ import { getPrimaryRpc } from '@/utils/rpc';
 import { useState, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
-import { parseUnits, formatUnits, Address, encodeFunctionData } from 'viem';
+import { parseUnits, formatUnits, Address, encodeFunctionData, decodeFunctionResult } from 'viem';
 import { Token, WSEI } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
-import { SWAP_ROUTER_ABI, ERC20_ABI } from '@/config/abis';
+import { SWAP_ROUTER_ABI, ERC20_ABI, QUOTER_V2_ABI } from '@/config/abis';
 
 // CL tick spacings from CLFactory contract
 const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
 
 interface SwapQuoteV3 {
     amountOut: string;
+    amountIn?: string; // For exact output
     gasEstimate: bigint;
     sqrtPriceX96After: bigint;
     tickSpacing: number;
@@ -69,7 +70,7 @@ export function useSwapV3() {
         }
     }, []);
 
-    // Get quote for specific tick spacing - directly call quoter (faster than checking pool first)
+    // Get quote for specific tick spacing (Exact Input)
     const getQuoteForTickSpacing = useCallback(async (
         tokenIn: Token,
         tokenOut: Token,
@@ -83,7 +84,19 @@ export function useSwapV3() {
             const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
 
-            // Call quoter directly - it will fail if pool doesn't exist (faster than checking first)
+            // Use encodeFunctionData instead of manual encoding
+            const data = encodeFunctionData({
+                abi: QUOTER_V2_ABI,
+                functionName: 'quoteExactInputSingle',
+                args: [{
+                    tokenIn: actualTokenIn.address as Address,
+                    tokenOut: actualTokenOut.address as Address,
+                    amountIn: amountInWei,
+                    tickSpacing,
+                    sqrtPriceLimitX96: BigInt(0),
+                }],
+            });
+
             const response = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -92,12 +105,7 @@ export function useSwapV3() {
                     method: 'eth_call',
                     params: [{
                         to: CL_CONTRACTS.QuoterV2,
-                        data: encodeQuoterCall(
-                            actualTokenIn.address,
-                            actualTokenOut.address,
-                            amountInWei,
-                            tickSpacing
-                        )
+                        data
                     }, 'latest'],
                     id: 1
                 })
@@ -105,13 +113,93 @@ export function useSwapV3() {
 
             const result = await response.json();
 
-            if (result.result && result.result !== '0x' && result.result.length > 66) {
-                const decoded = decodeQuoterResult(result.result);
-                if (decoded.amountOut > BigInt(0)) {
+            if (result.result && result.result !== '0x') {
+                const decoded = decodeFunctionResult({
+                    abi: QUOTER_V2_ABI,
+                    functionName: 'quoteExactInputSingle',
+                    data: result.result,
+                }) as [bigint, bigint, number, bigint];
+
+                // Returns: [amountOut, sqrtPriceX96After, initializedTicksCrossed, gasEstimate]
+                const amountOutWei = decoded[0];
+                const gasEstimate = decoded[3];
+
+                if (amountOutWei > BigInt(0)) {
                     return {
-                        amountOut: formatUnits(decoded.amountOut, actualTokenOut.decimals),
-                        gasEstimate: decoded.gasEstimate,
-                        sqrtPriceX96After: decoded.sqrtPriceX96After,
+                        amountOut: formatUnits(amountOutWei, actualTokenOut.decimals),
+                        gasEstimate: gasEstimate,
+                        sqrtPriceX96After: decoded[1],
+                        tickSpacing,
+                        poolExists: true,
+                    };
+                }
+            }
+
+            return null;
+        } catch {
+            return null;
+        }
+    }, []);
+
+    // Get quote for specific tick spacing (Exact Output)
+    const getQuoteExactOutputForTickSpacing = useCallback(async (
+        tokenIn: Token,
+        tokenOut: Token,
+        amountOut: string,
+        tickSpacing: number
+    ): Promise<SwapQuoteV3 | null> => {
+        if (!amountOut || parseFloat(amountOut) <= 0) return null;
+
+        try {
+            const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
+            const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
+            const amountOutWei = parseUnits(amountOut, actualTokenOut.decimals);
+
+            const data = encodeFunctionData({
+                abi: QUOTER_V2_ABI,
+                functionName: 'quoteExactOutputSingle',
+                args: [{
+                    tokenIn: actualTokenIn.address as Address,
+                    tokenOut: actualTokenOut.address as Address,
+                    amount: amountOutWei, // Note: param name is 'amount' in struct
+                    tickSpacing,
+                    sqrtPriceLimitX96: BigInt(0),
+                }],
+            });
+
+            const response = await fetch(getPrimaryRpc(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{
+                        to: CL_CONTRACTS.QuoterV2,
+                        data
+                    }, 'latest'],
+                    id: 1
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.result && result.result !== '0x') {
+                const decoded = decodeFunctionResult({
+                    abi: QUOTER_V2_ABI,
+                    functionName: 'quoteExactOutputSingle',
+                    data: result.result,
+                }) as [bigint, bigint, number, bigint];
+
+                // Returns: [amountIn, sqrtPriceX96After, initializedTicksCrossed, gasEstimate]
+                const amountInWei = decoded[0];
+                const gasEstimate = decoded[3];
+
+                if (amountInWei > BigInt(0)) {
+                    return {
+                        amountOut, // Echo back desired output
+                        amountIn: formatUnits(amountInWei, actualTokenIn.decimals),
+                        gasEstimate: gasEstimate,
+                        sqrtPriceX96After: decoded[1],
                         tickSpacing,
                         poolExists: true,
                     };
@@ -168,6 +256,48 @@ export function useSwapV3() {
         }
     }, [getQuoteForTickSpacing]);
 
+    // Get best quote across all tick spacings (Exact Output)
+    const getQuoteExactOutputV3 = useCallback(async (
+        tokenIn: Token,
+        tokenOut: Token,
+        amountOut: string,
+        tickSpacing?: number
+    ): Promise<BestQuote | null> => {
+        if (!amountOut || parseFloat(amountOut) <= 0) return null;
+
+        try {
+            if (tickSpacing !== undefined) {
+                const quote = await getQuoteExactOutputForTickSpacing(tokenIn, tokenOut, amountOut, tickSpacing);
+                if (quote && quote.poolExists && quote.amountIn) {
+                    return { ...quote, allQuotes: [quote] };
+                }
+                return null;
+            }
+
+            const quotePromises = TICK_SPACINGS.map(ts =>
+                getQuoteExactOutputForTickSpacing(tokenIn, tokenOut, amountOut, ts)
+            );
+
+            const allQuotes = (await Promise.all(quotePromises)).filter(
+                (q): q is SwapQuoteV3 => q !== null && q.poolExists && !!q.amountIn
+            );
+
+            if (allQuotes.length === 0) {
+                return null;
+            }
+
+            // Find best quote (lowest amountIn)
+            const bestQuote = allQuotes.reduce((best, current) =>
+                parseFloat(current.amountIn!) < parseFloat(best.amountIn!) ? current : best
+            );
+
+            return { ...bestQuote, allQuotes };
+        } catch (err) {
+            console.error('V3 exact output quote error:', err);
+            return null;
+        }
+    }, [getQuoteExactOutputForTickSpacing]);
+
     // Execute V3 swap
     const executeSwapV3 = useCallback(async (
         tokenIn: Token,
@@ -175,7 +305,8 @@ export function useSwapV3() {
         amountIn: string,
         amountOutMin: string,
         tickSpacing: number, // Required - from quote
-        slippage: number = 0.5
+        slippage: number = 0.5,
+        tradeType: 'exactIn' | 'exactOut' = 'exactIn'
     ) => {
         if (!address) {
             setError('Wallet not connected');
@@ -189,9 +320,11 @@ export function useSwapV3() {
             const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
             const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
 
+            // For exactIn: amountIn is exact, amountOutMin is minimum output
+            // For exactOut: amountOutMin param is exact output, amountIn param is maximum input
+
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
-            // amountOutMin is already slippage-adjusted from SwapInterface
-            const amountOutMinimum = parseUnits(amountOutMin, actualTokenOut.decimals);
+            const amountOutWei = parseUnits(amountOutMin, actualTokenOut.decimals);
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
@@ -202,25 +335,44 @@ export function useSwapV3() {
             if (tokenOut.isNative) {
                 // Swapping to native SEI - need to unwrap WSEI
                 // Use multicall: swap to router, then unwrap and send to user
-                const swapData = encodeFunctionData({
-                    abi: SWAP_ROUTER_ABI,
-                    functionName: 'exactInputSingle',
-                    args: [{
-                        tokenIn: actualTokenIn.address as Address,
-                        tokenOut: actualTokenOut.address as Address,
-                        tickSpacing,
-                        recipient: CL_CONTRACTS.SwapRouter as Address, // Send WSEI to router first
-                        deadline,
-                        amountIn: amountInWei,
-                        amountOutMinimum,
-                        sqrtPriceLimitX96: BigInt(0),
-                    }],
-                });
+                let swapData;
+
+                if (tradeType === 'exactOut') {
+                    swapData = encodeFunctionData({
+                        abi: SWAP_ROUTER_ABI,
+                        functionName: 'exactOutputSingle',
+                        args: [{
+                            tokenIn: actualTokenIn.address as Address,
+                            tokenOut: actualTokenOut.address as Address,
+                            tickSpacing,
+                            recipient: CL_CONTRACTS.SwapRouter as Address, // Send WSEI to router first
+                            deadline,
+                            amountOut: amountOutWei,
+                            amountInMaximum: amountInWei,
+                            sqrtPriceLimitX96: BigInt(0),
+                        }],
+                    });
+                } else {
+                    swapData = encodeFunctionData({
+                        abi: SWAP_ROUTER_ABI,
+                        functionName: 'exactInputSingle',
+                        args: [{
+                            tokenIn: actualTokenIn.address as Address,
+                            tokenOut: actualTokenOut.address as Address,
+                            tickSpacing,
+                            recipient: CL_CONTRACTS.SwapRouter as Address, // Send WSEI to router first
+                            deadline,
+                            amountIn: amountInWei,
+                            amountOutMinimum: amountOutWei,
+                            sqrtPriceLimitX96: BigInt(0),
+                        }],
+                    });
+                }
 
                 const unwrapData = encodeFunctionData({
                     abi: SWAP_ROUTER_ABI,
                     functionName: 'unwrapWETH9',
-                    args: [amountOutMinimum, address],
+                    args: [amountOutWei, address],
                 });
 
                 hash = await writeContractAsync({
@@ -232,22 +384,41 @@ export function useSwapV3() {
                 });
             } else {
                 // Normal swap - recipient is the user
-                hash = await writeContractAsync({
-                    address: CL_CONTRACTS.SwapRouter as Address,
-                    abi: SWAP_ROUTER_ABI,
-                    functionName: 'exactInputSingle',
-                    args: [{
-                        tokenIn: actualTokenIn.address as Address,
-                        tokenOut: actualTokenOut.address as Address,
-                        tickSpacing,
-                        recipient: address,
-                        deadline,
-                        amountIn: amountInWei,
-                        amountOutMinimum,
-                        sqrtPriceLimitX96: BigInt(0),
-                    }],
-                    value: tokenIn.isNative ? amountInWei : undefined,
-                });
+                if (tradeType === 'exactOut') {
+                    hash = await writeContractAsync({
+                        address: CL_CONTRACTS.SwapRouter as Address,
+                        abi: SWAP_ROUTER_ABI,
+                        functionName: 'exactOutputSingle',
+                        args: [{
+                            tokenIn: actualTokenIn.address as Address,
+                            tokenOut: actualTokenOut.address as Address,
+                            tickSpacing,
+                            recipient: address,
+                            deadline,
+                            amountOut: amountOutWei,
+                            amountInMaximum: amountInWei,
+                            sqrtPriceLimitX96: BigInt(0),
+                        }],
+                        value: tokenIn.isNative ? amountInWei : undefined,
+                    });
+                } else {
+                    hash = await writeContractAsync({
+                        address: CL_CONTRACTS.SwapRouter as Address,
+                        abi: SWAP_ROUTER_ABI,
+                        functionName: 'exactInputSingle',
+                        args: [{
+                            tokenIn: actualTokenIn.address as Address,
+                            tokenOut: actualTokenOut.address as Address,
+                            tickSpacing,
+                            recipient: address,
+                            deadline,
+                            amountIn: amountInWei,
+                            amountOutMinimum: amountOutWei,
+                            sqrtPriceLimitX96: BigInt(0),
+                        }],
+                        value: tokenIn.isNative ? amountInWei : undefined,
+                    });
+                }
             }
 
             setTxHash(hash);
@@ -397,6 +568,7 @@ export function useSwapV3() {
 
     return {
         getQuoteV3,
+        getQuoteExactOutputV3,
         executeSwapV3,
         executeMultiHopSwapV3,
         checkPoolExists,

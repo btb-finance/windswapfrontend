@@ -90,6 +90,25 @@ export const ROUTER_ABI = [
     },
     {
         inputs: [
+            { name: 'amountOut', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+        ],
+        name: 'getAmountsIn',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
             { name: 'tokenA', type: 'address' },
             { name: 'tokenB', type: 'address' },
             { name: 'stable', type: 'bool' },
@@ -145,6 +164,71 @@ export const ROUTER_ABI = [
         name: 'swapExactETHForTokens',
         outputs: [{ name: 'amounts', type: 'uint256[]' }],
         stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'amountOut', type: 'uint256' },
+            { name: 'amountInMax', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'swapTokensForExactTokens',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'amountOut', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'swapETHForExactTokens',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'amountOut', type: 'uint256' },
+            { name: 'amountInMax', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'swapTokensForExactETH',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'nonpayable',
         type: 'function',
     },
     {
@@ -314,6 +398,30 @@ export const QUOTER_V2_ABI = [
         name: 'quoteExactInputSingle',
         outputs: [
             { name: 'amountOut', type: 'uint256' },
+            { name: 'sqrtPriceX96After', type: 'uint160' },
+            { name: 'initializedTicksCrossed', type: 'uint32' },
+            { name: 'gasEstimate', type: 'uint256' },
+        ],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            {
+                components: [
+                    { name: 'tokenIn', type: 'address' },
+                    { name: 'tokenOut', type: 'address' },
+                    { name: 'amount', type: 'uint256' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'sqrtPriceLimitX96', type: 'uint160' },
+                ],
+                name: 'params',
+                type: 'tuple',
+            },
+        ],
+        name: 'quoteExactOutputSingle',
+        outputs: [
+            { name: 'amountIn', type: 'uint256' },
             { name: 'sqrtPriceX96After', type: 'uint160' },
             { name: 'initializedTicksCrossed', type: 'uint32' },
             { name: 'gasEstimate', type: 'uint256' },
@@ -634,6 +742,47 @@ export const SWAP_ROUTER_ABI = [
         ],
         name: 'exactInput',
         outputs: [{ name: 'amountOut', type: 'uint256' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            {
+                components: [
+                    { name: 'tokenIn', type: 'address' },
+                    { name: 'tokenOut', type: 'address' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'recipient', type: 'address' },
+                    { name: 'deadline', type: 'uint256' },
+                    { name: 'amountOut', type: 'uint256' },
+                    { name: 'amountInMaximum', type: 'uint256' },
+                    { name: 'sqrtPriceLimitX96', type: 'uint160' },
+                ],
+                name: 'params',
+                type: 'tuple',
+            },
+        ],
+        name: 'exactOutputSingle',
+        outputs: [{ name: 'amountIn', type: 'uint256' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            {
+                components: [
+                    { name: 'path', type: 'bytes' },
+                    { name: 'recipient', type: 'address' },
+                    { name: 'deadline', type: 'uint256' },
+                    { name: 'amountOut', type: 'uint256' },
+                    { name: 'amountInMaximum', type: 'uint256' },
+                ],
+                name: 'params',
+                type: 'tuple',
+            },
+        ],
+        name: 'exactOutput',
+        outputs: [{ name: 'amountIn', type: 'uint256' }],
         stateMutability: 'payable',
         type: 'function',
     },
