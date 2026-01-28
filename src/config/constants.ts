@@ -40,3 +40,14 @@ export const UI = {
   TOAST_SUCCESS_DURATION: 3000,
   TOAST_ERROR_DURATION: 6000,
 } as const;
+
+// Additional common constants
+export const ANIMATION = {
+  DURATION: 150, // ms
+  DELAY: 50, // ms
+} as const;
+
+export const ACCESSIBILITY = {
+  MIN_TOUCH_TARGET: 44, // px - WCAG 2.5.5 AAA standard
+  MAX_WIDTH: 1920, // px - Mobile breakpoint
+} as const;

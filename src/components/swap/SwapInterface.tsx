@@ -16,7 +16,7 @@ import { useTokenBalance } from '@/hooks/useToken';
 import { useMixedRouteQuoter } from '@/hooks/useMixedRouteQuoter';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { haptic } from '@/hooks/useHaptic';
-import { SLIPPAGE, DEBOUNCE_MS } from '@/config/constants';
+import { SLIPPAGE, DEBOUNCE_MS, ACCESSIBILITY } from '@/config/constants';
 import { getSwapErrorMessage, isUserRejection } from '@/utils/errors';
 import { useToast } from '@/providers/ToastProvider';
 
@@ -59,8 +59,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
     const [noRouteFound, setNoRouteFound] = useState(false);
 
     // Settings state
-    const [slippage, setSlippage] = useState(SLIPPAGE.DEFAULT);
-    const [deadline, setDeadline] = useState(30);
+    const [slippage, setSlippage] = useState<number>(SLIPPAGE.DEFAULT);
+    const [deadline, setDeadline] = useState<number>(30);
     const [slippageError, setSlippageError] = useState<string | null>(null);
 
     // UI state
@@ -632,6 +632,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 <motion.button
                     onClick={handleSwapTokens}
                     className="swap-arrow-btn"
+                    aria-label="Swap tokens direction"
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                 >
@@ -672,6 +673,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                     onClick={() => { haptic('medium'); handleApproveAndSwap(); }}
                     disabled={isApproving || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
+                    aria-label="Approve and swap"
                 >
                     {isApproving ? 'Approving...' : isLoading ? 'Swapping...' : `Approve & Swap`}
                 </button>
@@ -680,6 +682,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                     onClick={() => { haptic('medium'); handleSwap(); }}
                     disabled={!canSwap || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
+                    aria-label="Execute swap"
                 >
                     {isLoading
                         ? 'Swapping...'

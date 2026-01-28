@@ -61,6 +61,7 @@ export function TokenInput({
                             <button
                                 onClick={handleMax}
                                 className="ml-2 text-primary hover:text-primary/80 font-medium"
+                                aria-label="Set maximum amount"
                             >
                                 MAX
                             </button>
@@ -77,6 +78,7 @@ export function TokenInput({
                         placeholder="0.0"
                         disabled={disabled}
                         className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600"
+                        aria-label={`Enter ${label.toLowerCase()} amount`}
                     />
 
                     <motion.button
@@ -84,6 +86,7 @@ export function TokenInput({
                         className="token-select"
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
+                        aria-label="Select token"
                     >
                         {token ? (
                             <>
