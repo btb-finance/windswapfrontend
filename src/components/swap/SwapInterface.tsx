@@ -31,6 +31,8 @@ interface BestRoute {
     type: 'v2' | 'v3' | 'multi-hop' | 'wrap';
     amountOut: string;
     tickSpacing?: number;
+    tickSpacing1?: number;
+    tickSpacing2?: number;
     feeLabel: string;
     stable?: boolean;
     via?: string; // Intermediate token symbol for multi-hop
@@ -408,6 +410,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                                 feeLabel: v3Route.via ? `via ${v3Route.via}` : 'Multi-hop',
                                 via: v3Route.via,
                                 intermediate: v3Route.intermediate,
+                                tickSpacing1: v3Route.tickSpacing1,
+                                tickSpacing2: v3Route.tickSpacing2,
                             });
                         }
                     }
@@ -639,6 +643,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 tokenOut,
                 amountIn,
                 amountOutMin,
+                bestRoute.tickSpacing1,
+                bestRoute.tickSpacing2,
                 slippage
             );
         }

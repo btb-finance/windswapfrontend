@@ -471,6 +471,8 @@ export function useSwapV3() {
         tokenOut: Token,
         amountIn: string,
         amountOutMin: string,
+        tickSpacing1Override?: number,
+        tickSpacing2Override?: number,
         slippage: number = 0.5
     ) => {
         if (!address) {
@@ -498,21 +500,27 @@ export function useSwapV3() {
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
             // Find tick spacings for both legs
-            let tickSpacing1 = 0;
-            let tickSpacing2 = 0;
+            let tickSpacing1 = tickSpacing1Override || 0;
+            let tickSpacing2 = tickSpacing2Override || 0;
 
-            // Check first leg pools
-            for (const ts of TICK_SPACINGS) {
-                if (await checkPoolExists(actualTokenIn.address, actualIntermediate.address, ts)) {
-                    tickSpacing1 = ts;
-                    break;
+            // If caller didn't provide tick spacings (or provided 0), fall back to discovery.
+            if (!tickSpacing1) {
+                // Check first leg pools
+                for (const ts of TICK_SPACINGS) {
+                    if (await checkPoolExists(actualTokenIn.address, actualIntermediate.address, ts)) {
+                        tickSpacing1 = ts;
+                        break;
+                    }
                 }
             }
-            // Check second leg pools
-            for (const ts of TICK_SPACINGS) {
-                if (await checkPoolExists(actualIntermediate.address, actualTokenOut.address, ts)) {
-                    tickSpacing2 = ts;
-                    break;
+
+            if (!tickSpacing2) {
+                // Check second leg pools
+                for (const ts of TICK_SPACINGS) {
+                    if (await checkPoolExists(actualIntermediate.address, actualTokenOut.address, ts)) {
+                        tickSpacing2 = ts;
+                        break;
+                    }
                 }
             }
 
