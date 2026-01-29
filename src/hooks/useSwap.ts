@@ -3,10 +3,12 @@
 import { useCallback, useState } from 'react';
 import { useAccount, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
-import { parseUnits, formatUnits, Address, maxUint256 } from 'viem';
+import { parseUnits, formatUnits, Address, maxUint256, encodeFunctionData, decodeFunctionResult } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
-import { Token } from '@/config/tokens';
+import { Token, WSEI } from '@/config/tokens';
+import { getPrimaryRpc } from '@/utils/rpc';
+import { swrCache, dedupeRequest, getQuoteCacheKey } from '@/utils/cache';
 
 interface Route {
     from: Address;
@@ -22,7 +24,7 @@ export function useSwap() {
 
     const { writeContractAsync } = useWriteContract();
 
-    // Get quote for swap
+    // Get quote for swap (Exact Input) - with caching
     const getQuote = useCallback(
         async (
             tokenIn: Token,
@@ -33,24 +35,155 @@ export function useSwap() {
             try {
                 if (!amountIn || parseFloat(amountIn) === 0) return null;
 
-                const amountInWei = parseUnits(amountIn, tokenIn.decimals);
-                const route: Route[] = [
-                    {
-                        from: tokenIn.address as Address,
-                        to: tokenOut.address as Address,
-                        stable,
-                        factory: V2_CONTRACTS.PoolFactory as Address,
-                    },
-                ];
+                const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
+                const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
+                
+                // Generate cache key for this quote
+                const cacheKey = getQuoteCacheKey(
+                    'v2',
+                    actualTokenIn.address,
+                    actualTokenOut.address,
+                    amountIn,
+                    stable
+                );
 
-                // We'll calculate this on the frontend for now
-                // In production, you'd call the contract
-                return {
-                    amountOut: (parseFloat(amountIn) * 0.997).toFixed(tokenOut.decimals), // Simulated
-                    route,
-                };
+                // Use cached result or fetch fresh (3 second TTL)
+                return await swrCache(
+                    cacheKey,
+                    async () => {
+                        const amountInWei = parseUnits(amountIn, tokenIn.decimals);
+
+                        const route: Route[] = [
+                            {
+                                from: actualTokenIn.address as Address,
+                                to: actualTokenOut.address as Address,
+                                stable,
+                                factory: V2_CONTRACTS.PoolFactory as Address,
+                            },
+                        ];
+
+                        const data = encodeFunctionData({
+                            abi: ROUTER_ABI,
+                            functionName: 'getAmountsOut',
+                            args: [amountInWei, route],
+                        });
+
+                        const response = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'eth_call',
+                                params: [{ to: V2_CONTRACTS.Router, data }, 'latest'],
+                                id: 1
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.result && result.result !== '0x') {
+                            const decoded = decodeFunctionResult({
+                                abi: ROUTER_ABI,
+                                functionName: 'getAmountsOut',
+                                data: result.result,
+                            }) as bigint[];
+
+                            const amountOutWei = decoded[decoded.length - 1];
+
+                            return {
+                                amountOut: formatUnits(amountOutWei, tokenOut.decimals),
+                                route,
+                            };
+                        }
+                        return null;
+                    },
+                    3000 // 3 second cache TTL
+                );
             } catch (err) {
                 console.error('Quote error:', err);
+                return null;
+            }
+        },
+        []
+    );
+
+    // Get quote for swap (Exact Output) - with caching
+    const getQuoteExactOutput = useCallback(
+        async (
+            tokenIn: Token,
+            tokenOut: Token,
+            amountOut: string,
+            stable: boolean = false
+        ): Promise<{ amountIn: string; route: Route[] } | null> => {
+            try {
+                if (!amountOut || parseFloat(amountOut) === 0) return null;
+
+                const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
+                const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
+
+                // Generate cache key for this quote
+                const cacheKey = getQuoteCacheKey(
+                    'v2-out',
+                    actualTokenIn.address,
+                    actualTokenOut.address,
+                    amountOut,
+                    stable
+                );
+
+                // Use cached result or fetch fresh (3 second TTL)
+                return await swrCache(
+                    cacheKey,
+                    async () => {
+                        const amountOutWei = parseUnits(amountOut, tokenOut.decimals);
+
+                        const route: Route[] = [
+                            {
+                                from: actualTokenIn.address as Address,
+                                to: actualTokenOut.address as Address,
+                                stable,
+                                factory: V2_CONTRACTS.PoolFactory as Address,
+                            },
+                        ];
+
+                        const data = encodeFunctionData({
+                            abi: ROUTER_ABI,
+                            functionName: 'getAmountsIn',
+                            args: [amountOutWei, route],
+                        });
+
+                        const response = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'eth_call',
+                                params: [{ to: V2_CONTRACTS.Router, data }, 'latest'],
+                                id: 1
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.result && result.result !== '0x') {
+                            const decoded = decodeFunctionResult({
+                                abi: ROUTER_ABI,
+                                functionName: 'getAmountsIn',
+                                data: result.result,
+                            }) as bigint[];
+
+                            const amountInWei = decoded[0];
+
+                            return {
+                                amountIn: formatUnits(amountInWei, tokenIn.decimals),
+                                route,
+                            };
+                        }
+                        return null;
+                    },
+                    3000 // 3 second cache TTL
+                );
+            } catch (err) {
+                console.error('Quote exact output error:', err);
                 return null;
             }
         },
@@ -87,7 +220,8 @@ export function useSwap() {
             amountIn: string,
             amountOutMin: string,
             stable: boolean = false,
-            deadline: number = 30 // minutes
+            deadline: number = 30, // minutes
+            tradeType: 'exactIn' | 'exactOut' = 'exactIn'
         ): Promise<{ hash: string } | null> => {
             if (!address || !isConnected) {
                 setError('Wallet not connected');
@@ -99,7 +233,10 @@ export function useSwap() {
 
             try {
                 const amountInWei = parseUnits(amountIn, tokenIn.decimals);
-                const amountOutMinWei = parseUnits(amountOutMin, tokenOut.decimals);
+                const amountOutWei = parseUnits(amountOutMin, tokenOut.decimals);
+                // For exactOut, amountOutMin param is actually amountOut (exact)
+                // For exactIn, amountOutMin param is amountOutMinimum
+
                 const deadlineTimestamp = BigInt(Math.floor(Date.now() / 1000) + deadline * 60);
 
                 const route: Route[] = [
@@ -128,13 +265,23 @@ export function useSwap() {
                         },
                     ];
 
-                    hash = await writeContractAsync({
-                        address: V2_CONTRACTS.Router as Address,
-                        abi: ROUTER_ABI,
-                        functionName: 'swapExactETHForTokens',
-                        args: [amountOutMinWei, wethRoute as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
-                        value: amountInWei,
-                    });
+                    if (tradeType === 'exactOut') {
+                        hash = await writeContractAsync({
+                            address: V2_CONTRACTS.Router as Address,
+                            abi: ROUTER_ABI,
+                            functionName: 'swapETHForExactTokens',
+                            args: [amountOutWei, wethRoute as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
+                            value: amountInWei,
+                        });
+                    } else {
+                        hash = await writeContractAsync({
+                            address: V2_CONTRACTS.Router as Address,
+                            abi: ROUTER_ABI,
+                            functionName: 'swapExactETHForTokens',
+                            args: [amountOutWei, wethRoute as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
+                            value: amountInWei,
+                        });
+                    }
                 } else if (isNativeOut) {
                     // Swap Token for SEI
                     const wethRoute: Route[] = [
@@ -147,21 +294,43 @@ export function useSwap() {
                     ];
                     // NOTE: Approval is handled by SwapInterface before calling this function
 
-                    hash = await writeContractAsync({
-                        address: V2_CONTRACTS.Router as Address,
-                        abi: ROUTER_ABI,
-                        functionName: 'swapExactTokensForETH',
-                        args: [amountInWei, amountOutMinWei, wethRoute as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
-                    });
+                    // NOTE: Approval is handled by SwapInterface before calling this function
+
+                    if (tradeType === 'exactOut') {
+                        hash = await writeContractAsync({
+                            address: V2_CONTRACTS.Router as Address,
+                            abi: ROUTER_ABI,
+                            functionName: 'swapTokensForExactETH',
+                            args: [amountOutWei, amountInWei, wethRoute as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
+                        });
+                    } else {
+                        hash = await writeContractAsync({
+                            address: V2_CONTRACTS.Router as Address,
+                            abi: ROUTER_ABI,
+                            functionName: 'swapExactTokensForETH',
+                            args: [amountInWei, amountOutWei, wethRoute as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
+                        });
+                    }
                 } else {
                     // NOTE: Approval is handled by SwapInterface before calling this function
 
-                    hash = await writeContractAsync({
-                        address: V2_CONTRACTS.Router as Address,
-                        abi: ROUTER_ABI,
-                        functionName: 'swapExactTokensForTokens',
-                        args: [amountInWei, amountOutMinWei, route as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
-                    });
+                    // NOTE: Approval is handled by SwapInterface before calling this function
+
+                    if (tradeType === 'exactOut') {
+                        hash = await writeContractAsync({
+                            address: V2_CONTRACTS.Router as Address,
+                            abi: ROUTER_ABI,
+                            functionName: 'swapTokensForExactTokens',
+                            args: [amountOutWei, amountInWei, route as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
+                        });
+                    } else {
+                        hash = await writeContractAsync({
+                            address: V2_CONTRACTS.Router as Address,
+                            abi: ROUTER_ABI,
+                            functionName: 'swapExactTokensForTokens',
+                            args: [amountInWei, amountOutWei, route as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
+                        });
+                    }
                 }
 
                 return { hash };
@@ -178,6 +347,7 @@ export function useSwap() {
 
     return {
         getQuote,
+        getQuoteExactOutput,
         executeSwap,
         approveToken,
         isLoading,

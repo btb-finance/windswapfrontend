@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Token } from '@/config/tokens';
 import { TokenSelector } from '@/components/common/TokenSelector';
@@ -15,11 +15,11 @@ interface TokenInputProps {
     disabled?: boolean;
     showMaxButton?: boolean;
     balance?: string;
-    rawBalance?: string; // Full precision for MAX button
+    rawBalance?: string;
     usdValue?: string;
 }
 
-export function TokenInput({
+function TokenInputComponent({
     label,
     token,
     amount,
@@ -34,21 +34,32 @@ export function TokenInput({
 }: TokenInputProps) {
     const [isSelectorOpen, setIsSelectorOpen] = useState(false);
 
-    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAmountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
-        // Only allow numbers and decimals
         if (value === '' || /^\d*\.?\d*$/.test(value)) {
             onAmountChange(value);
         }
-    };
+    }, [onAmountChange]);
 
-    const handleMax = () => {
-        // Use rawBalance (full precision) if available, fallback to balance
+    const handleMax = useCallback(() => {
         const maxValue = rawBalance || balance;
         if (maxValue && maxValue !== '--' && maxValue !== '0') {
             onAmountChange(maxValue);
         }
-    };
+    }, [rawBalance, balance, onAmountChange]);
+
+    const handleTokenSelect = useCallback((selectedToken: Token) => {
+        onTokenSelect(selectedToken);
+        setIsSelectorOpen(false);
+    }, [onTokenSelect]);
+
+    const handleCloseSelector = useCallback(() => {
+        setIsSelectorOpen(false);
+    }, []);
+
+    const handleOpenSelector = useCallback(() => {
+        setIsSelectorOpen(true);
+    }, []);
 
     return (
         <>
@@ -61,6 +72,7 @@ export function TokenInput({
                             <button
                                 onClick={handleMax}
                                 className="ml-2 text-primary hover:text-primary/80 font-medium"
+                                aria-label="Set maximum amount"
                             >
                                 MAX
                             </button>
@@ -77,13 +89,15 @@ export function TokenInput({
                         placeholder="0.0"
                         disabled={disabled}
                         className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600"
+                        aria-label={`Enter ${label.toLowerCase()} amount`}
                     />
 
                     <motion.button
-                        onClick={() => setIsSelectorOpen(true)}
+                        onClick={handleOpenSelector}
                         className="token-select"
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
+                        aria-label="Select token"
                     >
                         {token ? (
                             <>
@@ -129,11 +143,13 @@ export function TokenInput({
 
             <TokenSelector
                 isOpen={isSelectorOpen}
-                onClose={() => setIsSelectorOpen(false)}
-                onSelect={onTokenSelect}
+                onClose={handleCloseSelector}
+                onSelect={handleTokenSelect}
                 selectedToken={token}
                 excludeToken={excludeToken}
             />
         </>
     );
 }
+
+export const TokenInput = memo(TokenInputComponent);

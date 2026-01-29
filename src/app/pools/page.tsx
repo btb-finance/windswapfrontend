@@ -16,7 +16,7 @@ const AddLiquidityModal = dynamic(
 import { Token, SEI, WSEI } from '@/config/tokens';
 import { getTokenByAddress } from '@/utils/tokens';
 import { formatTVL } from '@/utils/format';
-import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
+import { calculatePoolAPRFallback, formatAPR } from '@/utils/aprCalculator';
 
 type PoolType = 'all' | 'v2' | 'cl';
 type Category = 'all' | 'stable' | 'wind' | 'btc' | 'eth' | 'other';
@@ -59,9 +59,9 @@ export default function PoolsPage() {
     const [selectedPool, setSelectedPool] = useState<PoolConfig | undefined>(undefined);
 
     // Use globally prefetched pool data - instant load!
-    const { v2Pools, clPools, allPools, poolRewards, windPrice, seiPrice, isLoading } = usePoolData();
+    const { v2Pools, clPools, allPools, poolRewards, stakedLiquidity, windPrice, seiPrice, isLoading } = usePoolData();
 
-    // Calculate APR for a pool (uses concentration multiplier based on tick spacing)
+    // Calculate APR for a pool using staked liquidity for accurate staker APR
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {
         const rewardRate = poolRewards.get(pool.address.toLowerCase());
 
@@ -101,7 +101,12 @@ export default function PoolsPage() {
         // Better to show "1000K%+" than "—" when rewards are active
         if (tvlUsd <= 0) tvlUsd = 1;
 
-        return calculatePoolAPR(rewardRate, windPrice, tvlUsd, pool.tickSpacing);
+        // Get staked liquidity for more accurate APR calculation
+        // This represents the actual TVL earning rewards (staked in gauge)
+        const stakedLiq = stakedLiquidity.get(pool.address.toLowerCase());
+
+        // Use staked liquidity if available, otherwise fall back to total TVL
+        return calculatePoolAPRFallback(rewardRate, windPrice, tvlUsd, stakedLiq, undefined, pool.tickSpacing);
     };
 
 

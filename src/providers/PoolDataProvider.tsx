@@ -231,6 +231,8 @@ interface PoolDataContextType {
     allPools: PoolData[];
     tokenInfoMap: Map<string, TokenInfo>;
     poolRewards: Map<string, bigint>;
+    // Staked liquidity for accurate APR calculation
+    stakedLiquidity: Map<string, bigint>;
     // Prices for APR calculation (loaded with priority pool)
     windPrice: number;
     seiPrice: number;
@@ -374,6 +376,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [clPools, setClPools] = useState<PoolData[]>([]);
     const [tokenInfoMap, setTokenInfoMap] = useState<Map<string, TokenInfo>>(new Map());
     const [poolRewards, setPoolRewards] = useState<Map<string, bigint>>(new Map());
+    const [stakedLiquidity, setStakedLiquidity] = useState<Map<string, bigint>>(new Map());
     const [windPrice, setWindPrice] = useState<number>(0.005); // Default fallback
     const [seiPrice, setSeiPrice] = useState<number>(0.35); // Default fallback
     const [isLoading, setIsLoading] = useState(true);
@@ -569,12 +572,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 priorityFetchPromise.catch(() => { }); // Handle silently
 
 
-                // Fetch ALL gauge reward rates (not just priority pool)
+                // Fetch ALL gauge reward rates and staked liquidity (not just priority pool)
                 try {
                     const { GAUGE_LIST } = await import('@/config/gauges');
                     const gaugesWithAddress = GAUGE_LIST.filter(g => g.gauge && g.gauge.length > 0);
 
-                    // Batch fetch all reward rates
+                    // Batch fetch all reward rates AND totalSupply (staked liquidity)
                     const rewardCalls = gaugesWithAddress.map(g => ({
                         to: g.gauge,
                         data: '0x7b0a47ee', // rewardRate()
@@ -584,9 +587,21 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         tickSpacing: g.tickSpacing || 0
                     }));
 
+                    const supplyCalls = gaugesWithAddress.map(g => ({
+                        to: g.gauge,
+                        data: '0x18160ddd', // totalSupply() - returns staked LP tokens
+                        pool: g.pool.toLowerCase(),
+                    }));
+
                     if (rewardCalls.length > 0) {
-                        const rewardResults = await batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data })));
+                        // Fetch both reward rates and totalSupply in parallel
+                        const [rewardResults, supplyResults] = await Promise.all([
+                            batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data }))),
+                            batchRpcCall(supplyCalls.map(c => ({ to: c.to, data: c.data })))
+                        ]);
+
                         const newRewards = new Map<string, bigint>();
+                        const newStakedLiquidity = new Map<string, bigint>();
 
                         // Build token pair + tickSpacing to reward rate mapping
                         // Key: token0-token1-tickSpacing (tokens sorted alphabetically)
@@ -594,6 +609,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
                         rewardCalls.forEach((call, i) => {
                             const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
+                            const stakedSupply = supplyResults[i] !== '0x' ? BigInt(supplyResults[i]) : BigInt(0);
 
                             if (rate > BigInt(0)) {
                                 // Key by GAUGE_LIST pool address
@@ -603,6 +619,11 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 const sortedTokens = [call.token0, call.token1].sort();
                                 const pairKey = `${sortedTokens[0]}-${sortedTokens[1]}-${call.tickSpacing}`;
                                 pairRewardMap.set(pairKey, rate);
+                            }
+
+                            // Store staked liquidity (even if rate is 0, for accurate APR calc when rewards resume)
+                            if (stakedSupply > BigInt(0)) {
+                                newStakedLiquidity.set(call.pool, stakedSupply);
                             }
                         });
 
@@ -658,6 +679,9 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
                         if (newRewards.size > 0) {
                             setPoolRewards(newRewards);
+                        }
+                        if (newStakedLiquidity.size > 0) {
+                            setStakedLiquidity(newStakedLiquidity);
                         }
                     }
                 } catch (err) {
@@ -1415,6 +1439,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         allPools: [...v2Pools, ...clPools],
         tokenInfoMap,
         poolRewards,
+        stakedLiquidity,
         windPrice,
         seiPrice,
         gauges,

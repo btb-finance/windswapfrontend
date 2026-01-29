@@ -141,3 +141,143 @@ export function formatAPR(apr: number): string {
     if (apr >= 1) return `${apr.toFixed(1)}%`;
     return `${apr.toFixed(2)}%`;
 }
+
+/**
+ * Calculate staked TVL from total TVL and staked liquidity ratio
+ * 
+ * Formula: stakedTVL = (stakedLiquidity / totalLPSupply) * totalTVL
+ * 
+ * If totalLPSupply is not provided, uses a heuristic based on stakedLiquidity value alone.
+ * This is useful when the total LP supply is not readily available.
+ * 
+ * @param totalTvlUsd - Total pool TVL in USD
+ * @param stakedLiquidity - Amount of LP tokens staked in gauge (from gauge.totalSupply())
+ * @param totalLPSupply - Total supply of LP tokens (optional, from pool.liquidity() or pair totalSupply)
+ * @returns Staked TVL in USD, or null if calculation not possible
+ */
+export function calculateStakedTVL(
+    totalTvlUsd: number,
+    stakedLiquidity: bigint,
+    totalLPSupply?: bigint
+): number | null {
+    // Validate inputs
+    if (totalTvlUsd <= 0) return null;
+    if (stakedLiquidity <= BigInt(0)) return null;
+
+    // If we have total supply, calculate the precise ratio
+    if (totalLPSupply && totalLPSupply > BigInt(0)) {
+        const stakedRatio = Number(stakedLiquidity) / Number(totalLPSupply);
+
+        // If less than 0.01% is staked, consider it effectively 0
+        if (stakedRatio < 0.0001) return null;
+
+        return totalTvlUsd * stakedRatio;
+    }
+
+    // Without total supply, use a heuristic:
+    // Assume staked liquidity represents a portion of TVL based on magnitude
+    // This is a fallback that gives reasonable estimates for typical pool sizes
+    const stakedFloat = Number(stakedLiquidity) / 1e18; // Convert from wei
+
+    // Very small staked amount relative to typical pool sizes
+    if (stakedFloat < 0.001) return null;
+
+    // Estimate: assume staked liquidity is proportional to a fraction of TVL
+    // This assumes LP tokens are roughly 1:1 with USD value (not always true but reasonable fallback)
+    const estimatedStakedTvl = stakedFloat;
+
+    // Cap at total TVL (can't stake more than total)
+    return Math.min(estimatedStakedTvl, totalTvlUsd);
+}
+
+/**
+ * Calculate APR based on staked liquidity instead of total TVL
+ * 
+ * This gives the accurate APR for stakers, since rewards only go to staked LPs.
+ * Formula: APR = (annual rewards in USD) / (staked TVL) * 100
+ * 
+ * @param rewardRatePerSecond - WIND reward rate in wei per second
+ * @param windPriceUsd - Current WIND price in USD
+ * @param totalTvlUsd - Total pool TVL in USD
+ * @param stakedLiquidity - Amount of LP tokens staked in gauge
+ * @param totalLPSupply - Total supply of LP tokens (optional)
+ * @param tickSpacing - Pool's tick spacing (for CL pools, optional)
+ * @returns APR as a percentage, or null if staked TVL is insufficient
+ */
+export function calculateStakedAPR(
+    rewardRatePerSecond: bigint,
+    windPriceUsd: number,
+    totalTvlUsd: number,
+    stakedLiquidity: bigint,
+    totalLPSupply?: bigint,
+    tickSpacing?: number
+): number | null {
+    // Calculate staked TVL
+    const stakedTvlUsd = calculateStakedTVL(totalTvlUsd, stakedLiquidity, totalLPSupply);
+
+    // If we can't calculate staked TVL, fall back to total TVL calculation
+    // but return null to indicate this is a fallback
+    if (stakedTvlUsd === null) {
+        const baseApr = calculateBaseAPR(rewardRatePerSecond, windPriceUsd, totalTvlUsd);
+        if (baseApr <= 0) return null;
+
+        // Apply concentration multiplier for CL pools
+        if (tickSpacing && tickSpacing > 0) {
+            const multiplier = getConcentrationMultiplier(tickSpacing);
+            return baseApr * multiplier;
+        }
+        return baseApr;
+    }
+
+    // Calculate APR using staked TVL (more accurate for stakers)
+    const baseApr = calculateBaseAPR(rewardRatePerSecond, windPriceUsd, stakedTvlUsd);
+
+    // For CL pools, apply concentration multiplier based on tick spacing
+    if (tickSpacing && tickSpacing > 0) {
+        const multiplier = getConcentrationMultiplier(tickSpacing);
+        return baseApr * multiplier;
+    }
+
+    return baseApr;
+}
+
+/**
+ * Calculate pool APR with automatic fallback to total TVL if staked data unavailable
+ * 
+ * This is a convenience function that tries to use staked liquidity first,
+ * then falls back to total TVL if staked data is not available.
+ * 
+ * @param rewardRatePerSecond - WIND reward rate in wei per second
+ * @param windPriceUsd - Current WIND price in USD
+ * @param totalTvlUsd - Total pool TVL in USD
+ * @param stakedLiquidity - Amount of LP tokens staked in gauge (optional)
+ * @param totalLPSupply - Total supply of LP tokens (optional)
+ * @param tickSpacing - Pool's tick spacing (for CL pools, optional)
+ * @returns APR as a percentage (falls back to total TVL if staked data unavailable)
+ */
+export function calculatePoolAPRFallback(
+    rewardRatePerSecond: bigint,
+    windPriceUsd: number,
+    totalTvlUsd: number,
+    stakedLiquidity?: bigint,
+    totalLPSupply?: bigint,
+    tickSpacing?: number
+): number {
+    // Try to use staked APR calculation if we have the data
+    if (stakedLiquidity !== undefined && totalLPSupply !== undefined) {
+        const stakedApr = calculateStakedAPR(
+            rewardRatePerSecond,
+            windPriceUsd,
+            totalTvlUsd,
+            stakedLiquidity,
+            totalLPSupply,
+            tickSpacing
+        );
+        if (stakedApr !== null) {
+            return stakedApr;
+        }
+    }
+
+    // Fall back to original calculation using total TVL
+    return calculatePoolAPR(rewardRatePerSecond, windPriceUsd, totalTvlUsd, tickSpacing);
+}

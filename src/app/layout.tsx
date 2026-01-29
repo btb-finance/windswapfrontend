@@ -60,6 +60,17 @@ export default function RootLayout({
         <meta name="theme-color" content="#00d4ff" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/logo.png" />
+        
+        {/* Preload critical assets */}
+        <link rel="preload" href="/logo.png" as="image" type="image/png" />
+        
+        {/* DNS prefetch for RPC endpoints */}
+        <link rel="dns-prefetch" href="https://evm-rpc.sei-apis.com" />
+        <link rel="dns-prefetch" href="https://sei-evm-rpc.stakeme.pro" />
+        
+        {/* Preconnect to RPC endpoints */}
+        <link rel="preconnect" href="https://evm-rpc.sei-apis.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://sei-evm-rpc.stakeme.pro" crossOrigin="anonymous" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}

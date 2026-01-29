@@ -16,6 +16,9 @@ import { useTokenBalance } from '@/hooks/useToken';
 import { useMixedRouteQuoter } from '@/hooks/useMixedRouteQuoter';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { haptic } from '@/hooks/useHaptic';
+import { SLIPPAGE, DEBOUNCE_MS, ACCESSIBILITY } from '@/config/constants';
+import { getSwapErrorMessage, isUserRejection } from '@/utils/errors';
+import { useToast } from '@/providers/ToastProvider';
 
 interface Route {
     from: Address;
@@ -28,11 +31,14 @@ interface BestRoute {
     type: 'v2' | 'v3' | 'multi-hop' | 'wrap';
     amountOut: string;
     tickSpacing?: number;
+    tickSpacing1?: number;
+    tickSpacing2?: number;
     feeLabel: string;
     stable?: boolean;
     via?: string; // Intermediate token symbol for multi-hop
     intermediate?: Token; // Intermediate token object for multi-hop execution
     isWrap?: boolean; // true = SEI->WSEI (wrap), false = WSEI->SEI (unwrap)
+    amountInComputed?: string; // Calculated input amount for exact output swaps
 }
 
 interface SwapInterfaceProps {
@@ -42,6 +48,7 @@ interface SwapInterfaceProps {
 
 export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterfaceProps) {
     const { isConnected, address } = useAccount();
+    const { success, error: showError } = useToast();
 
     // Token state - use props if provided, otherwise defaults
     const [tokenIn, setTokenIn] = useState<Token | undefined>(initialTokenIn || SEI);
@@ -54,18 +61,24 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
     const [isQuoting, setIsQuoting] = useState(false);
     const [noRouteFound, setNoRouteFound] = useState(false);
 
+    // Track which field user is typing in
+    const [independentField, setIndependentField] = useState<'INPUT' | 'OUTPUT'>('INPUT');
+    const [typedValue, setTypedValue] = useState('');
+
     // Settings state
-    const [slippage, setSlippage] = useState(0.5);
-    const [deadline, setDeadline] = useState(30);
+    const [slippage, setSlippage] = useState<number>(SLIPPAGE.DEFAULT);
+    const [deadline, setDeadline] = useState<number>(30);
+    const [slippageError, setSlippageError] = useState<string | null>(null);
 
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
     const [isApproving, setIsApproving] = useState(false);
     const [routeLocked, setRouteLocked] = useState(false); // Lock route during approval/swap
+    const [error, setError] = useState<string | null>(null);
 
     // Hooks
-    const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
-    const { getQuoteV3, executeSwapV3, executeMultiHopSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
+    const { executeSwap, getQuoteExactOutput, isLoading: isLoadingV2, error: errorV2 } = useSwap();
+    const { getQuoteV3, getQuoteExactOutputV3, executeSwapV3, executeMultiHopSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
     const { findBestRoute: findMultiHopRoute, getIntermediateToken } = useMixedRouteQuoter();
     const { raw: rawBalanceIn, formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
@@ -73,7 +86,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
     const { executeBatch, encodeApproveCall, encodeContractCall, isLoading: isBatching } = useBatchTransactions();
 
     const isLoading = isLoadingV2 || isLoadingV3 || isBatching;
-    const error = errorV2 || errorV3;
+    const hookError = errorV2 || errorV3;
 
     // Get actual token addresses (use WSEI for native SEI)
     const actualTokenIn = tokenIn?.isNative ? WSEI : tokenIn;
@@ -243,6 +256,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 setBestRoute(null);
                 setIsApproving(false);
                 setRouteLocked(false);
+                success('Swap successful!');
                 return;
             }
 
@@ -259,11 +273,31 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
 
         } catch (err) {
             console.error('Approve/swap error:', err);
+            const errorMsg = getSwapErrorMessage(err);
+            setError(errorMsg);
             setIsApproving(false);
             setRouteLocked(false);
             setAutoSwapAfterApproval(false);
         }
     };
+
+    // Handle input typing
+    const handleTypeInput = useCallback((value: string) => {
+        setIndependentField('INPUT');
+        setTypedValue(value);
+        setAmountIn(value);
+        // Clear output if input is empty, otherwise keep old output (stale) until new quote
+        if (!value) setAmountOut('');
+    }, []);
+
+    // Handle output typing
+    const handleTypeOutput = useCallback((value: string) => {
+        setIndependentField('OUTPUT');
+        setTypedValue(value);
+        setAmountOut(value);
+        // Clear input if output is empty
+        if (!value) setAmountIn('');
+    }, []);
 
     // ===== V2 Volatile Quote (using wagmi hook) =====
     const v2VolatileRoute: Route[] = actualTokenIn && actualTokenOut ? [{
@@ -281,7 +315,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             ? [parseUnits(amountIn, actualTokenIn.decimals), v2VolatileRoute]
             : undefined,
         query: {
-            enabled: !!actualTokenIn && !!actualTokenOut && !!amountIn && parseFloat(amountIn) > 0,
+            enabled: !!actualTokenIn && !!actualTokenOut && !!amountIn && parseFloat(amountIn) > 0 && independentField === 'INPUT',
         },
     });
 
@@ -301,7 +335,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             ? [parseUnits(amountIn, actualTokenIn.decimals), v2StableRoute]
             : undefined,
         query: {
-            enabled: !!actualTokenIn && !!actualTokenOut && !!amountIn && parseFloat(amountIn) > 0,
+            enabled: !!actualTokenIn && !!actualTokenOut && !!amountIn && parseFloat(amountIn) > 0 && independentField === 'INPUT',
         },
     });
 
@@ -311,9 +345,16 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             // Don't update route while user is approving/swapping
             if (routeLocked) return;
 
-            if (!tokenIn || !tokenOut || !amountIn || parseFloat(amountIn) <= 0 || !actualTokenOut) {
+            // If EXACT INPUT: Check amountIn
+            // If EXACT OUTPUT: Check amountOut
+            const hasAmount = independentField === 'INPUT'
+                ? (amountIn && parseFloat(amountIn) > 0)
+                : (amountOut && parseFloat(amountOut) > 0);
+
+            if (!tokenIn || !tokenOut || !hasAmount || !actualTokenOut) {
                 setBestRoute(null);
-                setAmountOut('');
+                if (independentField === 'INPUT') setAmountOut('');
+                else setAmountIn('');
                 setNoRouteFound(false);
                 return;
             }
@@ -347,49 +388,93 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                     return;
                 }
 
-                // === Get best V3 route (direct or multi-hop) - SINGLE call handles both ===
-                const v3Route = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
+                if (independentField === 'INPUT') {
+                    // === EXACT INPUT logic (existing) ===
 
-                if (v3Route && parseFloat(v3Route.amountOut) > 0) {
-                    const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
-                    if (v3Route.routeType === 'direct') {
+                    // === Get best V3 route (direct or multi-hop) - SINGLE call handles both ===
+                    const v3Route = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
+
+                    if (v3Route && parseFloat(v3Route.amountOut) > 0) {
+                        const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
+                        if (v3Route.routeType === 'direct') {
+                            routes.push({
+                                type: 'v3',
+                                amountOut: v3Route.amountOut,
+                                tickSpacing: v3Route.tickSpacing1,
+                                feeLabel: `V3 ${feeMap[v3Route.tickSpacing1 || 10] || ''}`,
+                            });
+                        } else if (v3Route.routeType === 'multi-hop' && v3Route.intermediate) {
+                            routes.push({
+                                type: 'multi-hop',
+                                amountOut: v3Route.amountOut,
+                                feeLabel: v3Route.via ? `via ${v3Route.via}` : 'Multi-hop',
+                                via: v3Route.via,
+                                intermediate: v3Route.intermediate,
+                                tickSpacing1: v3Route.tickSpacing1,
+                                tickSpacing2: v3Route.tickSpacing2,
+                            });
+                        }
+                    }
+
+                    // === V2 Volatile Quote (instant - already fetched by wagmi hook) ===
+                    if (v2VolatileQuote && Array.isArray(v2VolatileQuote) && v2VolatileQuote.length > 1) {
+                        const outAmount = formatUnits(v2VolatileQuote[v2VolatileQuote.length - 1] as bigint, actualTokenOut.decimals);
+                        if (parseFloat(outAmount) > 0) {
+                            routes.push({
+                                type: 'v2',
+                                amountOut: outAmount,
+                                stable: false,
+                                feeLabel: 'V2 Volatile',
+                            });
+                        }
+                    }
+
+                    // === V2 Stable Quote (instant - already fetched by wagmi hook) ===
+                    if (v2StableQuote && Array.isArray(v2StableQuote) && v2StableQuote.length > 1) {
+                        const outAmount = formatUnits(v2StableQuote[v2StableQuote.length - 1] as bigint, actualTokenOut.decimals);
+                        if (parseFloat(outAmount) > 0) {
+                            routes.push({
+                                type: 'v2',
+                                amountOut: outAmount,
+                                stable: true,
+                                feeLabel: 'V2 Stable',
+                            });
+                        }
+                    }
+                } else {
+                    // === EXACT OUTPUT logic (new) ===
+
+                    // 1. V3 Exact Output
+                    const v3Quote = await getQuoteExactOutputV3(tokenIn, tokenOut, amountOut);
+                    if (v3Quote && v3Quote.poolExists && v3Quote.amountIn) {
+                        const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
                         routes.push({
                             type: 'v3',
-                            amountOut: v3Route.amountOut,
-                            tickSpacing: v3Route.tickSpacing1,
-                            feeLabel: `V3 ${feeMap[v3Route.tickSpacing1 || 10] || ''}`,
-                        });
-                    } else if (v3Route.routeType === 'multi-hop' && v3Route.intermediate) {
-                        routes.push({
-                            type: 'multi-hop',
-                            amountOut: v3Route.amountOut,
-                            feeLabel: v3Route.via ? `via ${v3Route.via}` : 'Multi-hop',
-                            via: v3Route.via,
-                            intermediate: v3Route.intermediate,
+                            amountOut: amountOut, // Targeted output
+                            amountInComputed: v3Quote.amountIn,
+                            tickSpacing: v3Quote.tickSpacing,
+                            feeLabel: `V3 ${feeMap[v3Quote.tickSpacing || 10] || ''}`,
                         });
                     }
-                }
 
-                // === V2 Volatile Quote (instant - already fetched by wagmi hook) ===
-                if (v2VolatileQuote && Array.isArray(v2VolatileQuote) && v2VolatileQuote.length > 1) {
-                    const outAmount = formatUnits(v2VolatileQuote[v2VolatileQuote.length - 1] as bigint, actualTokenOut.decimals);
-                    if (parseFloat(outAmount) > 0) {
+                    // 2. V2 Exact Output
+                    const v2Quote = await getQuoteExactOutput(tokenIn, tokenOut, amountOut, false); // Volatile
+                    if (v2Quote) {
                         routes.push({
                             type: 'v2',
-                            amountOut: outAmount,
+                            amountOut: amountOut,
+                            amountInComputed: v2Quote.amountIn,
                             stable: false,
                             feeLabel: 'V2 Volatile',
                         });
                     }
-                }
 
-                // === V2 Stable Quote (instant - already fetched by wagmi hook) ===
-                if (v2StableQuote && Array.isArray(v2StableQuote) && v2StableQuote.length > 1) {
-                    const outAmount = formatUnits(v2StableQuote[v2StableQuote.length - 1] as bigint, actualTokenOut.decimals);
-                    if (parseFloat(outAmount) > 0) {
+                    const v2StableQuoteRes = await getQuoteExactOutput(tokenIn, tokenOut, amountOut, true); // Stable
+                    if (v2StableQuoteRes) {
                         routes.push({
                             type: 'v2',
-                            amountOut: outAmount,
+                            amountOut: amountOut,
+                            amountInComputed: v2StableQuoteRes.amountIn,
                             stable: true,
                             feeLabel: 'V2 Stable',
                         });
@@ -398,14 +483,24 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
 
                 // Find best route
                 if (routes.length > 0) {
-                    const best = routes.reduce((a, b) =>
-                        parseFloat(a.amountOut) > parseFloat(b.amountOut) ? a : b
-                    );
-                    setBestRoute(best);
-                    setAmountOut(best.amountOut);
+                    if (independentField === 'INPUT') {
+                        const best = routes.reduce((a, b) =>
+                            parseFloat(a.amountOut) > parseFloat(b.amountOut) ? a : b
+                        );
+                        setBestRoute(best);
+                        setAmountOut(best.amountOut);
+                    } else {
+                        // For exact output, best is LOWEST input
+                        const best = routes.reduce((a, b) =>
+                            parseFloat(a.amountInComputed || '999999999') < parseFloat(b.amountInComputed || '999999999') ? a : b
+                        );
+                        setBestRoute(best);
+                        setAmountIn(best.amountInComputed || '');
+                    }
                 } else {
                     setBestRoute(null);
-                    setAmountOut('');
+                    if (independentField === 'INPUT') setAmountOut('');
+                    else setAmountIn('');
                     setNoRouteFound(true);
                 }
             } catch (err) {
@@ -417,18 +512,43 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             setIsQuoting(false);
         };
 
-        const debounce = setTimeout(findBestRoute, 300);
+        const debounce = setTimeout(findBestRoute, DEBOUNCE_MS.QUOTE);
         return () => clearTimeout(debounce);
-    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute, routeLocked]);
+    }, [tokenIn, tokenOut, amountIn, amountOut, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute, routeLocked, independentField, getQuoteExactOutput, getQuoteExactOutputV3]);
+
+    // Handle slippage change with validation
+    const handleSlippageChange = useCallback((value: number) => {
+        if (value < SLIPPAGE.MIN) {
+            setSlippageError(`Slippage must be at least ${SLIPPAGE.MIN}%`);
+            return;
+        }
+        if (value > SLIPPAGE.MAX) {
+            setSlippageError(`Slippage cannot exceed ${SLIPPAGE.MAX}%`);
+            return;
+        }
+        setSlippageError(null);
+        setSlippage(value);
+    }, []);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
         setTokenIn(tokenOut);
         setTokenOut(tokenIn);
-        setAmountIn(amountOut);
-        setAmountOut(amountIn);
+        if (independentField === 'INPUT') {
+            setAmountIn(amountOut);
+            setAmountOut(amountIn);
+            // After swap, we keep INPUT as independent? 
+            // Usually we switch tokens and keep amounts.
+            // If I swap, I now pay the old output token.
+            // So `amountOut` becomes `amountIn`.
+        } else {
+            setAmountIn(amountOut);
+            setAmountOut(amountIn);
+            setIndependentField('INPUT'); // Reset to input mode for simplicity logic? Or keep OUTPUT?
+            // Usually keeping amounts implies mode switch.
+        }
         setBestRoute(null);
-    }, [tokenIn, tokenOut, amountIn, amountOut]);
+    }, [tokenIn, tokenOut, amountIn, amountOut, independentField]);
 
     // Calculate min amount out with slippage
     const amountOutMin = amountOut
@@ -442,7 +562,9 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
         amountIn &&
         parseFloat(amountIn) > 0 &&
         bestRoute &&
-        parseFloat(bestRoute.amountOut) > 0;
+        parseFloat(bestRoute.amountOut) > 0 &&
+        // For exact output, check amountInComputed
+        (independentField === 'INPUT' ? true : (bestRoute.amountInComputed && parseFloat(bestRoute.amountInComputed) > 0));
 
     // Calculate rate
     const rate = amountIn && amountOut && parseFloat(amountIn) > 0
@@ -485,6 +607,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 result = { hash };
             } catch (err: any) {
                 console.error('Wrap/unwrap error:', err);
+                const errorMsg = getSwapErrorMessage(err);
+                setError(errorMsg);
                 result = null;
             }
         } else if (bestRoute.type === 'v2') {
@@ -494,7 +618,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 amountIn,
                 amountOutMin,
                 bestRoute.stable || false,
-                deadline
+                deadline,
+                independentField === 'OUTPUT' ? 'exactOut' : 'exactIn'
             );
         } else if (bestRoute.type === 'v3') {
             if (!bestRoute.tickSpacing) return;
@@ -518,6 +643,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 tokenOut,
                 amountIn,
                 amountOutMin,
+                bestRoute.tickSpacing1,
+                bestRoute.tickSpacing2,
                 slippage
             );
         }
@@ -527,9 +654,14 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             setAmountIn('');
             setAmountOut('');
             setBestRoute(null);
-            haptic('success');
+            success('Swap successful!');
         } else {
             haptic('error');
+            if (!isUserRejection(error)) {
+                const errorMsg = getSwapErrorMessage(error);
+                setError(errorMsg);
+                showError(errorMsg);
+            }
         }
         setRouteLocked(false); // Unlock after swap completes or fails
     };
@@ -565,22 +697,16 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                     <SwapSettings
                         slippage={slippage}
                         deadline={deadline}
-                        onSlippageChange={setSlippage}
+                        onSlippageChange={handleSlippageChange}
                         onDeadlineChange={setDeadline}
                     />
                 </div>
             </div>
 
             {/* Error Display - Compact */}
-            {error && (
+            {(error || hookError) && (
                 <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
-                    {error.includes('User rejected') || error.includes('user rejected')
-                        ? 'Transaction cancelled'
-                        : error.includes('insufficient')
-                            ? 'Insufficient balance'
-                            : error.length > 50
-                                ? error.slice(0, 50) + '...'
-                                : error}
+                    {error || hookError}
                 </div>
             )}
 
@@ -598,7 +724,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 amount={amountIn}
                 balance={formattedBalanceIn}
                 rawBalance={rawBalanceIn}
-                onAmountChange={setAmountIn}
+                onAmountChange={handleTypeInput}
                 onTokenSelect={setTokenIn}
                 showMaxButton
             />
@@ -608,6 +734,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 <motion.button
                     onClick={handleSwapTokens}
                     className="swap-arrow-btn"
+                    aria-label="Swap tokens direction"
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                 >
@@ -623,9 +750,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 token={tokenOut}
                 amount={amountOut}
                 balance={formattedBalanceOut}
-                onAmountChange={() => { }}
+                onAmountChange={handleTypeOutput}
                 onTokenSelect={setTokenOut}
-                disabled
             />
 
             {/* Rate Info - Compact */}
@@ -648,6 +774,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                     onClick={() => { haptic('medium'); handleApproveAndSwap(); }}
                     disabled={isApproving || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
+                    aria-label="Approve and swap"
                 >
                     {isApproving ? 'Approving...' : isLoading ? 'Swapping...' : `Approve & Swap`}
                 </button>
@@ -656,6 +783,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                     onClick={() => { haptic('medium'); handleSwap(); }}
                     disabled={!canSwap || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
+                    aria-label="Execute swap"
                 >
                     {isLoading
                         ? 'Swapping...'
@@ -667,6 +795,13 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                                     ? 'Enter Amount'
                                     : 'Swap'}
                 </button>
+            )}
+
+            {/* Slippage Error */}
+            {slippageError && (
+                <div className="mt-2 text-center text-xs text-red-400">
+                    {slippageError}
+                </div>
             )}
 
             <div className="mt-3 text-center text-[10px] text-gray-500">

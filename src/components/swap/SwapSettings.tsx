@@ -6,8 +6,8 @@ import { motion } from 'framer-motion';
 interface SwapSettingsProps {
     slippage: number;
     deadline: number;
-    onSlippageChange: (slippage: number) => void;
-    onDeadlineChange: (deadline: number) => void;
+    onSlippageChange?: (slippage: number) => void;
+    onDeadlineChange?: (deadline: number) => void;
 }
 
 export function SwapSettings({
@@ -25,7 +25,7 @@ export function SwapSettings({
         setCustomSlippage(value);
         const num = parseFloat(value);
         if (!isNaN(num) && num > 0 && num <= 50) {
-            onSlippageChange(num);
+            onSlippageChange?.(num);
         }
     };
 
@@ -34,6 +34,7 @@ export function SwapSettings({
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="p-2 rounded-lg hover:bg-white/5 transition"
+                aria-label="Open swap settings"
                 title="Settings"
             >
                 <svg
@@ -68,6 +69,7 @@ export function SwapSettings({
                         <button
                             onClick={() => setIsOpen(false)}
                             className="p-1 rounded hover:bg-white/5"
+                            aria-label="Close settings"
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -85,7 +87,7 @@ export function SwapSettings({
                                 <button
                                     key={preset}
                                     onClick={() => {
-                                        onSlippageChange(preset);
+                                        onSlippageChange?.(preset);
                                         setCustomSlippage('');
                                     }}
                                     className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${slippage === preset && !customSlippage
@@ -125,7 +127,7 @@ export function SwapSettings({
                             <input
                                 type="number"
                                 value={deadline}
-                                onChange={(e) => onDeadlineChange(parseInt(e.target.value) || 30)}
+                                onChange={(e) => onDeadlineChange?.(parseInt(e.target.value) || 30)}
                                 min={1}
                                 max={60}
                                 className="flex-1 py-2 px-3 rounded-lg bg-white/5 text-sm outline-none focus:ring-1 focus:ring-primary"
