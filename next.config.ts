@@ -2,9 +2,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-
-  // Empty turbopack config to silence warning (we're using webpack)
+  
+  // Use webpack instead of Turbopack (Turbopack has HMR issues with wagmi v3)
   turbopack: {},
+
+  // Transpile wallet SDK packages
+  transpilePackages: [
+    '@rainbow-me/rainbowkit',
+    'wagmi',
+    'viem',
+    '@tanstack/react-query',
+  ],
 
   // CORS headers for Safe Apps iframe support
   async headers() {
@@ -19,27 +27,22 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-
-  // Use webpack instead of turbopack for build
-  webpack: (config, { isServer }) => {
-    // Fix for pino and related modules
+  
+  // Webpack configuration for wallet packages
+  webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       net: false,
       tls: false,
-      child_process: false,
     };
-
-    // Alias for React Native async storage (not needed in web)
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@react-native-async-storage/async-storage': false,
+    
+    // Handle ESM modules properly
+    config.module = {
+      ...config.module,
+      exprContextCritical: false,
     };
-
-    // Ignore problematic modules
-    config.externals.push('pino-pretty', 'lokijs', 'encoding');
-
+    
     return config;
   },
 };

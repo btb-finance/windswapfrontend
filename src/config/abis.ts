@@ -548,6 +548,13 @@ export const NFT_POSITION_MANAGER_ABI = [
         type: 'function',
     },
     {
+        inputs: [],
+        name: 'totalSupply',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
         inputs: [
             { name: 'owner', type: 'address' },
             { name: 'index', type: 'uint256' },
@@ -555,6 +562,14 @@ export const NFT_POSITION_MANAGER_ABI = [
         name: 'tokenOfOwnerByIndex',
         outputs: [{ name: '', type: 'uint256' }],
         stateMutability: 'view',
+        type: 'function',
+    },
+    // Multicall for batching operations
+    {
+        inputs: [{ name: 'data', type: 'bytes[]' }],
+        name: 'multicall',
+        outputs: [{ name: 'results', type: 'bytes[]' }],
+        stateMutability: 'payable',
         type: 'function',
     },
     // Position info
