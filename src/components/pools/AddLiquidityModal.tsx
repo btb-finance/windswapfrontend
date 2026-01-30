@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
+import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { parseUnits, Address, formatUnits } from 'viem';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC, USDT0 } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
@@ -114,6 +115,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const { raw: rawBalanceA, formatted: balanceA } = useTokenBalance(tokenA);
     const { raw: rawBalanceB, formatted: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
+    const { executeBatch, encodeApproveCall, encodeContractCall } = useBatchTransactions();
     const { poolRewards, windPrice, seiPrice, allPools } = usePoolData();
     const toast = useToast();
 
@@ -643,7 +645,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             }
             // For existing pools, sqrtPriceX96 stays as 0 - the contract ignores it
 
-            // Approve tokens
+            // Check token allowances
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
                 const result = await fetch(getPrimaryRpc(), {
                     method: 'POST',
@@ -661,37 +663,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 return allowance >= amount;
             };
 
-            // Approve token0 if needed
+            // Determine which tokens need approval
             const token0IsNative = (tokenA.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase()) ||
                 (tokenB.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase());
-            if (!token0IsNative) {
-                const hasAllowance = await checkAllowance(token0.address, amount0Wei);
-                if (!hasAllowance) {
-                    setTxProgress('approving0');
-                    await writeContractAsync({
-                        address: token0.address as Address,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Wei],
-                    });
-                }
-            }
-
-            // Approve token1 if needed
             const token1IsNative = (tokenA.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase()) ||
                 (tokenB.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase());
-            if (!token1IsNative) {
-                const hasAllowance = await checkAllowance(token1.address, amount1Wei);
-                if (!hasAllowance) {
-                    setTxProgress('approving1');
-                    await writeContractAsync({
-                        address: token1.address as Address,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Wei],
-                    });
-                }
-            }
+
+            const needsToken0Approval = !token0IsNative && !(await checkAllowance(token0.address, amount0Wei));
+            const needsToken1Approval = !token1IsNative && !(await checkAllowance(token1.address, amount1Wei));
 
             // Calculate native value - simple check for native tokens
             let nativeValue = BigInt(0);
@@ -721,14 +700,35 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 sqrtPriceX96: sqrtPriceX96.toString(),
                 poolExists,
                 nativeValue: nativeValue.toString(),
+                needsToken0Approval,
+                needsToken1Approval,
             });
 
-            setTxProgress('minting');
-            const mintHash = await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: NFT_POSITION_MANAGER_ABI,
-                functionName: 'mint',
-                args: [{
+            // Build batch calls: approve token0 (if needed) + approve token1 (if needed) + mint
+            const batchCalls = [];
+
+            if (needsToken0Approval) {
+                batchCalls.push(encodeApproveCall(
+                    token0.address as Address,
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    amount0Wei
+                ));
+            }
+
+            if (needsToken1Approval) {
+                batchCalls.push(encodeApproveCall(
+                    token1.address as Address,
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    amount1Wei
+                ));
+            }
+
+            // Mint NFT call
+            const mintCall = encodeContractCall(
+                CL_CONTRACTS.NonfungiblePositionManager as Address,
+                NFT_POSITION_MANAGER_ABI,
+                'mint',
+                [{
                     token0: token0.address as Address,
                     token1: token1.address as Address,
                     tickSpacing,
@@ -742,10 +742,71 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     deadline,
                     sqrtPriceX96,
                 }],
-                value: nativeValue,
-            });
+                nativeValue
+            );
+            batchCalls.push(mintCall);
+
+            // Try EIP-5792 batch first
+            setTxProgress('minting');
+            const batchResult = await executeBatch(batchCalls);
+
+            let mintHash: string;
+
+            if (batchResult.usedBatching && batchResult.success) {
+                // Batch worked! All approvals + mint in one popup
+                mintHash = batchResult.hash || '';
+                console.log('Batch transaction successful:', mintHash);
+            } else {
+                // Batch not supported - fall back to sequential
+                console.log('EIP-5792 batch not available, using sequential transactions');
+
+                // Execute token approvals sequentially if needed
+                if (needsToken0Approval) {
+                    setTxProgress('approving0');
+                    await writeContractAsync({
+                        address: token0.address as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Wei],
+                    });
+                }
+
+                if (needsToken1Approval) {
+                    setTxProgress('approving1');
+                    await writeContractAsync({
+                        address: token1.address as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Wei],
+                    });
+                }
+
+                // Mint NFT
+                setTxProgress('minting');
+                mintHash = await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'mint',
+                    args: [{
+                        token0: token0.address as Address,
+                        token1: token1.address as Address,
+                        tickSpacing,
+                        tickLower,
+                        tickUpper,
+                        amount0Desired: amount0Wei,
+                        amount1Desired: amount1Wei,
+                        amount0Min,
+                        amount1Min,
+                        recipient: address,
+                        deadline,
+                        sqrtPriceX96,
+                    }],
+                    value: nativeValue,
+                });
+            }
 
             setTxHash(mintHash);
+            toast.success('Liquidity position created successfully!');
 
             // If auto-stake is enabled and this pool has a gauge, stake the NFT
             if (autoStake && gaugeAddress) {
@@ -779,44 +840,69 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
 
                 if (tokenId) {
-                    // Approve NFT to gauge
-                    setTxProgress('approving_nft');
-                    const approveNftHash = await writeContractAsync({
-                        address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                        abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                        functionName: 'approve',
-                        args: [gaugeAddress as Address, tokenId],
-                    });
+                    // Try to batch approve NFT + stake together
+                    const nftApproveCall = encodeContractCall(
+                        CL_CONTRACTS.NonfungiblePositionManager as Address,
+                        [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                        'approve',
+                        [gaugeAddress as Address, tokenId]
+                    );
 
-                    // Wait for NFT approval to confirm
-                    let approvalConfirmed = false;
-                    for (let i = 0; i < 30; i++) {
-                        const receipt = await fetch(getPrimaryRpc(), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                                params: [approveNftHash],
-                                id: 1
-                            })
-                        }).then(r => r.json());
+                    const stakeCall = encodeContractCall(
+                        gaugeAddress as Address,
+                        [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                        'deposit',
+                        [tokenId]
+                    );
 
-                        if (receipt.result && receipt.result.status === '0x1') {
-                            approvalConfirmed = true;
-                            break;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
+                    setTxProgress('staking');
+                    const stakeBatchResult = await executeBatch([nftApproveCall, stakeCall]);
 
-                    if (approvalConfirmed) {
-                        // Stake in gauge
-                        setTxProgress('staking');
-                        await writeContractAsync({
-                            address: gaugeAddress as Address,
-                            abi: [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                            functionName: 'deposit',
-                            args: [tokenId],
+                    if (stakeBatchResult.usedBatching && stakeBatchResult.success) {
+                        // Both approve NFT + stake in one popup!
+                        toast.success('Position staked! Earning WIND rewards');
+                    } else {
+                        // Fall back to sequential
+                        setTxProgress('approving_nft');
+                        const approveNftHash = await writeContractAsync({
+                            address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                            abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                            functionName: 'approve',
+                            args: [gaugeAddress as Address, tokenId],
                         });
+
+                        // Wait for NFT approval to confirm
+                        let approvalConfirmed = false;
+                        for (let i = 0; i < 30; i++) {
+                            const receipt = await fetch(getPrimaryRpc(), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                    params: [approveNftHash],
+                                    id: 1
+                                })
+                            }).then(r => r.json());
+
+                            if (receipt.result && receipt.result.status === '0x1') {
+                                approvalConfirmed = true;
+                                break;
+                            }
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+
+                        if (!approvalConfirmed) {
+                            toast.error('NFT approval to gauge failed. Position not staked.');
+                        } else {
+                            setTxProgress('staking');
+                            await writeContractAsync({
+                                address: gaugeAddress as Address,
+                                abi: [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                                functionName: 'deposit',
+                                args: [tokenId],
+                            });
+                            toast.success('Position staked! Earning WIND rewards');
+                        }
                     }
                 }
             }
