@@ -1004,7 +1004,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         }
     };
 
-    // Handle zap execution
+    // Handle zap execution with batch support
     const handleZap = async () => {
         if (!address || parsedZapAmount === BigInt(0)) return;
 
@@ -1012,23 +1012,100 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         haptic('medium');
 
         try {
-            await writeContractAsync({
-                address: STABLECOIN_ZAP_ADDRESS,
-                abi: STABLECOIN_ZAP_ABI,
-                functionName: 'zap',
-                args: [
-                    zapToken.address as Address,
-                    parsedZapAmount,
-                    BigInt(50), // 0.5% slippage
-                    BigInt(0),  // min liquidity (we accept any)
-                ],
-            });
+            // Check if approval is needed
+            const allowanceResult = await fetch(getPrimaryRpc(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0', id: 1,
+                    method: 'eth_call',
+                    params: [{
+                        to: zapToken.address,
+                        data: `0xdd62ed3e${address.slice(2).toLowerCase().padStart(64, '0')}${STABLECOIN_ZAP_ADDRESS.slice(2).toLowerCase().padStart(64, '0')}`
+                    }, 'latest']
+                })
+            }).then(r => r.json());
 
-            toast.info('Zap submitted! Creating LP position...');
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            const currentAllowance = allowanceResult.result ? BigInt(allowanceResult.result) : BigInt(0);
+            const needsApproval = currentAllowance < parsedZapAmount;
 
-            toast.success('LP position created! Check your portfolio.');
-            haptic('success');
+            if (needsApproval) {
+                // Try batch: approve + zap
+                const batchCalls = [
+                    encodeApproveCall(
+                        zapToken.address as Address,
+                        STABLECOIN_ZAP_ADDRESS,
+                        parsedZapAmount
+                    ),
+                    encodeContractCall(
+                        STABLECOIN_ZAP_ADDRESS,
+                        STABLECOIN_ZAP_ABI,
+                        'zap',
+                        [
+                            zapToken.address as Address,
+                            parsedZapAmount,
+                            BigInt(50), // 0.5% slippage
+                            BigInt(0),  // min liquidity
+                        ]
+                    )
+                ];
+
+                const batchResult = await executeBatch(batchCalls);
+
+                if (batchResult.usedBatching && batchResult.success) {
+                    toast.success('Zap complete! Approved & created LP position in one transaction.');
+                    haptic('success');
+                } else {
+                    // Fall back to sequential
+                    console.log('Batch not available, using sequential approve + zap');
+                    
+                    // Approve first
+                    await writeContractAsync({
+                        address: zapToken.address as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [STABLECOIN_ZAP_ADDRESS, parsedZapAmount],
+                    });
+
+                    toast.info('Approval submitted, now zapping...');
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+
+                    // Then zap
+                    await writeContractAsync({
+                        address: STABLECOIN_ZAP_ADDRESS,
+                        abi: STABLECOIN_ZAP_ABI,
+                        functionName: 'zap',
+                        args: [
+                            zapToken.address as Address,
+                            parsedZapAmount,
+                            BigInt(50),
+                            BigInt(0),
+                        ],
+                    });
+
+                    toast.success('LP position created! Check your portfolio.');
+                    haptic('success');
+                }
+            } else {
+                // No approval needed, just zap
+                await writeContractAsync({
+                    address: STABLECOIN_ZAP_ADDRESS,
+                    abi: STABLECOIN_ZAP_ABI,
+                    functionName: 'zap',
+                    args: [
+                        zapToken.address as Address,
+                        parsedZapAmount,
+                        BigInt(50),
+                        BigInt(0),
+                    ],
+                });
+
+                toast.info('Zap submitted! Creating LP position...');
+                await new Promise(resolve => setTimeout(resolve, 5000));
+
+                toast.success('LP position created! Check your portfolio.');
+                haptic('success');
+            }
 
             setZapAmount('');
             refetchZapBalance();

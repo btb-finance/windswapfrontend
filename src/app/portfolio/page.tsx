@@ -612,7 +612,7 @@ export default function PortfolioPage() {
         if (!address || position.liquidity <= BigInt(0)) return;
         setActionLoading(true);
         try {
-            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60));
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
             const maxUint128 = BigInt('340282366920938463463374607431768211455');
 
             // Build batch: decrease liquidity + collect
@@ -1044,7 +1044,7 @@ export default function PortfolioPage() {
         try {
             // Calculate amount to remove based on percentage
             const liquidityToRemove = (pos.lpBalance * BigInt(percent)) / BigInt(100);
-            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60));
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
             // Check existing allowance first
             const allowanceSelector = '0xdd62ed3e'; // allowance(address,address)
@@ -1191,7 +1191,7 @@ export default function PortfolioPage() {
         setShowIncreaseLiquidityModal(true);
     };
 
-    // Increase liquidity for CL position
+    // Increase liquidity for CL position with batch support
     const handleIncreaseLiquidity = async () => {
         // Prevent multiple submissions
         if (actionLoading) {
@@ -1238,73 +1238,39 @@ export default function PortfolioPage() {
                 return allowance >= amount;
             };
 
-            // Helper to wait for transaction confirmation
-            const waitForTxConfirmation = async (txHash: string): Promise<boolean> => {
-                for (let i = 0; i < 30; i++) {
-                    const receipt = await fetch(getPrimaryRpc(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                            params: [txHash],
-                            id: 1
-                        })
-                    }).then(r => r.json());
+            // Determine which tokens need approval
+            const needsToken0Approval = amount0Desired > BigInt(0) && !(isToken0WSEI && nativeValue > BigInt(0)) && !(await checkAllowance(selectedPosition.token0, amount0Desired));
+            const needsToken1Approval = amount1Desired > BigInt(0) && !(isToken1WSEI && nativeValue > BigInt(0)) && !(await checkAllowance(selectedPosition.token1, amount1Desired));
 
-                    if (receipt.result && receipt.result.status === '0x1') {
-                        return true;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-                return false;
-            };
+            // Build batch calls
+            const batchCalls = [];
 
-            // Approve token0 if needed (skip for WSEI when using native)
-            if (amount0Desired > BigInt(0) && !(isToken0WSEI && nativeValue > BigInt(0))) {
-                const hasAllowance = await checkAllowance(selectedPosition.token0, amount0Desired);
-                if (!hasAllowance) {
-                    const approvalTx = await writeContractAsync({
-                        address: selectedPosition.token0 as Address,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
-                    });
-                    // Wait for approval to confirm
-                    const confirmed = await waitForTxConfirmation(approvalTx);
-                    if (!confirmed) {
-                        toast.error('Token0 approval failed');
-                        setActionLoading(false);
-                        return;
-                    }
-                }
+            // Add approval for token0 if needed
+            if (needsToken0Approval) {
+                batchCalls.push(encodeContractCall(
+                    selectedPosition.token0 as Address,
+                    ERC20_ABI,
+                    'approve',
+                    [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired]
+                ));
             }
 
-            // Approve token1 if needed (skip for WSEI when using native)
-            if (amount1Desired > BigInt(0) && !(isToken1WSEI && nativeValue > BigInt(0))) {
-                const hasAllowance = await checkAllowance(selectedPosition.token1, amount1Desired);
-                if (!hasAllowance) {
-                    const approvalTx = await writeContractAsync({
-                        address: selectedPosition.token1 as Address,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
-                    });
-                    // Wait for approval to confirm
-                    const confirmed = await waitForTxConfirmation(approvalTx);
-                    if (!confirmed) {
-                        toast.error('Token1 approval failed');
-                        setActionLoading(false);
-                        return;
-                    }
-                }
+            // Add approval for token1 if needed
+            if (needsToken1Approval) {
+                batchCalls.push(encodeContractCall(
+                    selectedPosition.token1 as Address,
+                    ERC20_ABI,
+                    'approve',
+                    [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired]
+                ));
             }
 
-            // Call increaseLiquidity
-            await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: NFT_POSITION_MANAGER_ABI,
-                functionName: 'increaseLiquidity',
-                args: [{
+            // Add increaseLiquidity call
+            batchCalls.push(encodeContractCall(
+                CL_CONTRACTS.NonfungiblePositionManager as Address,
+                NFT_POSITION_MANAGER_ABI,
+                'increaseLiquidity',
+                [{
                     tokenId: selectedPosition.tokenId,
                     amount0Desired,
                     amount1Desired,
@@ -1312,10 +1278,65 @@ export default function PortfolioPage() {
                     amount1Min: BigInt(0),
                     deadline,
                 }],
-                value: nativeValue,
-            });
+                nativeValue
+            ));
 
-            toast.success('Liquidity increased!');
+            // Try batch first
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                const actions = [];
+                if (needsToken0Approval) actions.push('approved token0');
+                if (needsToken1Approval) actions.push('approved token1');
+                actions.push('increased liquidity');
+                toast.success(`Batch complete: ${actions.join(' + ')}!`);
+            } else {
+                // Fall back to sequential
+                console.log('Batch not available, using sequential transactions');
+
+                // Approve token0 if needed
+                if (needsToken0Approval) {
+                    const approvalTx = await writeContractAsync({
+                        address: selectedPosition.token0 as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
+                    });
+                    // Wait briefly
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+                // Approve token1 if needed
+                if (needsToken1Approval) {
+                    const approvalTx = await writeContractAsync({
+                        address: selectedPosition.token1 as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
+                    });
+                    // Wait briefly
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+                // Call increaseLiquidity
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'increaseLiquidity',
+                    args: [{
+                        tokenId: selectedPosition.tokenId,
+                        amount0Desired,
+                        amount1Desired,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }],
+                    value: nativeValue,
+                });
+
+                toast.success('Liquidity increased!');
+            }
+
             setShowIncreaseLiquidityModal(false);
             setSelectedPosition(null);
             refetchCL();
