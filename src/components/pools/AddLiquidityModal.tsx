@@ -704,7 +704,35 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 needsToken1Approval,
             });
 
-            // Build batch calls: approve token0 (if needed) + approve token1 (if needed) + mint
+            // Predict token ID for auto-stake batching
+            let predictedTokenId: bigint | null = null;
+            if (autoStake && gaugeAddress) {
+                try {
+                    const totalSupplyResult = await fetch(getPrimaryRpc(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_call',
+                            params: [{
+                                to: CL_CONTRACTS.NonfungiblePositionManager,
+                                data: '0x18160ddd' // totalSupply()
+                            }, 'latest'],
+                            id: 1
+                        })
+                    }).then(r => r.json());
+                    
+                    if (totalSupplyResult.result) {
+                        const totalSupply = BigInt(totalSupplyResult.result);
+                        predictedTokenId = totalSupply + 1n; // Next token will be totalSupply + 1
+                        console.log('Predicted token ID for staking:', predictedTokenId.toString());
+                    }
+                } catch (err) {
+                    console.warn('Failed to predict token ID, will use separate transaction for staking:', err);
+                }
+            }
+
+            // Build batch calls: approve token0 (if needed) + approve token1 (if needed) + mint + approve NFT + stake (if predicted)
             const batchCalls = [];
 
             if (needsToken0Approval) {
@@ -745,6 +773,23 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 nativeValue
             );
             batchCalls.push(mintCall);
+
+            // If we predicted the token ID, add approve NFT + stake to the same batch!
+            if (predictedTokenId) {
+                batchCalls.push(encodeContractCall(
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                    'approve',
+                    [gaugeAddress as Address, predictedTokenId]
+                ));
+
+                batchCalls.push(encodeContractCall(
+                    gaugeAddress as Address,
+                    [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                    'deposit',
+                    [predictedTokenId]
+                ));
+            }
 
             // Try EIP-5792 batch first
             setTxProgress('minting');
@@ -809,7 +854,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             toast.success('Liquidity position created successfully!');
 
             // If auto-stake is enabled and this pool has a gauge, stake the NFT
-            if (autoStake && gaugeAddress) {
+            // Skip if we already batched stake using predicted token ID
+            if (autoStake && gaugeAddress && !(batchResult.usedBatching && batchResult.success && predictedTokenId)) {
                 // Wait for mint transaction to confirm and get the tokenId from logs
                 let tokenId: bigint | null = null;
                 for (let i = 0; i < 30; i++) {
@@ -905,6 +951,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                         }
                     }
                 }
+            } else if (predictedTokenId && batchResult.usedBatching && batchResult.success) {
+                // Staking was already included in the batch!
+                toast.success('Position created and staked! Earning WIND rewards');
             }
 
             setAmountA('');
