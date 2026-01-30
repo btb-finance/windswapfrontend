@@ -724,7 +724,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     
                     if (totalSupplyResult.result) {
                         const totalSupply = BigInt(totalSupplyResult.result);
-                        predictedTokenId = totalSupply + 1n; // Next token will be totalSupply + 1
+                        predictedTokenId = totalSupply + BigInt(1); // Next token will be totalSupply + 1
                         console.log('Predicted token ID for staking:', predictedTokenId.toString());
                     }
                 } catch (err) {
