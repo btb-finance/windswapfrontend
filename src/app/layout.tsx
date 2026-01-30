@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { MainContent } from "@/components/layout/MainContent";
+import { PWAInstallPrompt } from "@/components/common/PWAInstallPrompt";
 
 
 const geistSans = Geist({
@@ -57,8 +58,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
         <meta name="theme-color" content="#00d4ff" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/logo.png" />
         
         {/* Preload critical assets */}
@@ -83,6 +86,11 @@ export default function RootLayout({
                   navigator.serviceWorker.register('/sw.js').catch(() => {});
                 });
               }
+              // Track visits for PWA install prompt
+              try {
+                const visits = parseInt(localStorage.getItem('windswap_visits') || '0');
+                localStorage.setItem('windswap_visits', (visits + 1).toString());
+              } catch(e) {}
             `,
           }}
         />
@@ -104,6 +112,9 @@ export default function RootLayout({
           <div className="hidden md:block">
             <Footer />
           </div>
+
+          {/* PWA Install Prompt */}
+          <PWAInstallPrompt />
         </ClientProviders>
       </body>
     </html>

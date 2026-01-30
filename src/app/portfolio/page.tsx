@@ -1,9 +1,10 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount, useReadContract } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
+import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { Address, formatUnits } from 'viem';
 import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
@@ -15,6 +16,7 @@ import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { useToast } from '@/providers/ToastProvider';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
 // VotingEscrow ABI for veNFT data
 const VOTING_ESCROW_ABI = [
@@ -203,6 +205,7 @@ export default function PortfolioPage() {
         stakedPositions: prefetchedStakedPositions,
         stakedLoading: loadingStaked,
         refetchStaked,
+        removeStakedPosition,
         veNFTs: prefetchedVeNFTs,
         veNFTsLoading: loadingVeNFTs,
         refetchVeNFTs
@@ -211,6 +214,29 @@ export default function PortfolioPage() {
     // Use prefetched data from provider
     const stakedPositions = prefetchedStakedPositions;
     const veNFTs = prefetchedVeNFTs;
+
+    // Pull-to-refresh for mobile
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        try {
+            await Promise.all([
+                refetchStaked(),
+                refetchVeNFTs(),
+                refetchCL(),
+                refetchV2(),
+            ]);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
+    const { handlers, pullProgress, isPulling } = usePullToRefresh({
+        onRefresh: handleRefresh,
+        threshold: 80,
+    });
 
     // Shadow outer getTokenInfo - uses global data first, then fallback to utility
     const getTokenInfo = (addr: string) => {
@@ -236,6 +262,7 @@ export default function PortfolioPage() {
 
     // Contract write hook
     const { writeContractAsync } = useWriteContract();
+    const { executeBatch, encodeContractCall } = useBatchTransactions();
 
     // Get CL and V2 positions
     const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
@@ -605,42 +632,80 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Remove liquidity from CL position
+    // Remove liquidity from CL position with batch support
     const handleRemoveLiquidity = async (position: typeof clPositions[0]) => {
         if (!address || position.liquidity <= BigInt(0)) return;
         setActionLoading(true);
         try {
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
-
-            // Decrease liquidity
-            await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: NFT_POSITION_MANAGER_ABI,
-                functionName: 'decreaseLiquidity',
-                args: [{
-                    tokenId: position.tokenId,
-                    liquidity: position.liquidity,
-                    amount0Min: BigInt(0),
-                    amount1Min: BigInt(0),
-                    deadline,
-                }],
-            });
-
-            // Then collect
             const maxUint128 = BigInt('340282366920938463463374607431768211455');
-            await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: NFT_POSITION_MANAGER_ABI,
-                functionName: 'collect',
-                args: [{
-                    tokenId: position.tokenId,
-                    recipient: address,
-                    amount0Max: maxUint128,
-                    amount1Max: maxUint128,
-                }],
-            });
 
-            toast.success('Liquidity removed!');
+            // Build batch: decrease liquidity + collect
+            const batchCalls = [
+                encodeContractCall(
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    NFT_POSITION_MANAGER_ABI,
+                    'decreaseLiquidity',
+                    [{
+                        tokenId: position.tokenId,
+                        liquidity: position.liquidity,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }]
+                ),
+                encodeContractCall(
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    NFT_POSITION_MANAGER_ABI,
+                    'collect',
+                    [{
+                        tokenId: position.tokenId,
+                        recipient: address,
+                        amount0Max: maxUint128,
+                        amount1Max: maxUint128,
+                    }]
+                )
+            ];
+
+            // Try batch first
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                toast.success('Liquidity removed & fees collected in one transaction!');
+            } else {
+                // Fall back to sequential
+                console.log('Batch not available, using sequential remove + collect');
+                
+                // Decrease liquidity
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'decreaseLiquidity',
+                    args: [{
+                        tokenId: position.tokenId,
+                        liquidity: position.liquidity,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }],
+                });
+
+                // Then collect
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'collect',
+                    args: [{
+                        tokenId: position.tokenId,
+                        recipient: address,
+                        amount0Max: maxUint128,
+                        amount1Max: maxUint128,
+                    }],
+                });
+
+                toast.success('Liquidity removed!');
+            }
+            
             refetchCL();
         } catch (err) {
             console.error('Remove liquidity error:', err);
@@ -774,7 +839,7 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Unstake position from gauge
+    // Unstake position from gauge - uses optimistic update, no full reload
     const handleUnstakePosition = async (pos: StakedPosition) => {
         if (!address) return;
         setActionLoading(true);
@@ -787,7 +852,9 @@ export default function PortfolioPage() {
             });
 
             toast.success('Position unstaked!');
-            refetchStaked(); // Refresh staked positions from provider
+            // Optimistically remove from UI immediately - no loading state!
+            removeStakedPosition(pos.tokenId, pos.gaugeAddress);
+            // Background refresh of CL positions to reflect the change
             refetchCL();
         } catch (err) {
             console.error('Unstake position error:', err);
@@ -823,17 +890,41 @@ export default function PortfolioPage() {
         if (!address || stakedPositions.length === 0) return;
         setActionLoading(true);
         try {
-            for (const pos of stakedPositions) {
-                if (pos.pendingRewards > BigInt(0)) {
-                    await writeContractAsync({
-                        address: pos.gaugeAddress as Address,
-                        abi: CL_GAUGE_ABI,
-                        functionName: 'getReward',
-                        args: [pos.tokenId],
-                    });
-                }
+            // Build batch calls for claiming from all gauges
+            const batchCalls = stakedPositions
+                .filter(pos => pos.pendingRewards > BigInt(0))
+                .map(pos => encodeContractCall(
+                    pos.gaugeAddress as Address,
+                    CL_GAUGE_ABI,
+                    'getReward',
+                    [pos.tokenId]
+                ));
+
+            if (batchCalls.length === 0) {
+                toast.info('No rewards to claim');
+                setActionLoading(false);
+                return;
             }
-            toast.success('All rewards claimed!');
+
+            // Try batch first
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                toast.success(`Claimed rewards from ${batchCalls.length} position(s) in one transaction!`);
+            } else {
+                // Fall back to sequential
+                for (const pos of stakedPositions) {
+                    if (pos.pendingRewards > BigInt(0)) {
+                        await writeContractAsync({
+                            address: pos.gaugeAddress as Address,
+                            abi: CL_GAUGE_ABI,
+                            functionName: 'getReward',
+                            args: [pos.tokenId],
+                        });
+                    }
+                }
+                toast.success('All rewards claimed!');
+            }
             refetchStaked(); // Refresh staked positions
         } catch (err) {
             console.error('Claim all rewards error:', err);
@@ -842,7 +933,122 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Remove V2 liquidity with percentage support
+    // Unstake and remove: Unstake (auto-claims) + Decrease + Collect in one transaction
+    const handleBatchExitPosition = async (pos: StakedPosition) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+            const maxUint128 = BigInt('340282366920938463463374607431768211455');
+            
+            const batchCalls = [];
+
+            // 1. Unstake from gauge FIRST
+            batchCalls.push(encodeContractCall(
+                pos.gaugeAddress as Address,
+                CL_GAUGE_ABI,
+                'withdraw',
+                [pos.tokenId]
+            ));
+
+            // 2. Decrease liquidity (remove all) SECOND
+            if (pos.liquidity && pos.liquidity > BigInt(0)) {
+                batchCalls.push(encodeContractCall(
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    NFT_POSITION_MANAGER_ABI,
+                    'decreaseLiquidity',
+                    [{
+                        tokenId: pos.tokenId,
+                        liquidity: pos.liquidity,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }]
+                ));
+            }
+
+            // 3. Collect fees LAST
+            batchCalls.push(encodeContractCall(
+                CL_CONTRACTS.NonfungiblePositionManager as Address,
+                NFT_POSITION_MANAGER_ABI,
+                'collect',
+                [{
+                    tokenId: pos.tokenId,
+                    recipient: address,
+                    amount0Max: maxUint128,
+                    amount1Max: maxUint128,
+                }]
+            ));
+            // Note: Rewards are auto-claimed when unstaking, no separate claim needed
+
+            // Execute batch
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                const actions = [];
+                actions.push('unstaked');
+                if (pos.liquidity && pos.liquidity > BigInt(0)) actions.push('removed liquidity');
+                actions.push('collected fees');
+                // Note: Rewards are auto-claimed when unstaking
+                
+                toast.success(`Position exited: ${actions.join(' + ')}!`);
+            } else {
+                // Fall back to sequential execution
+                toast.info('Batch not supported, using sequential transactions...');
+                
+                // 1. Unstake FIRST (auto-claims rewards)
+                await writeContractAsync({
+                    address: pos.gaugeAddress as Address,
+                    abi: CL_GAUGE_ABI,
+                    functionName: 'withdraw',
+                    args: [pos.tokenId],
+                });
+                
+                // 2. Decrease liquidity SECOND
+                if (pos.liquidity && pos.liquidity > BigInt(0)) {
+                    await writeContractAsync({
+                        address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                        abi: NFT_POSITION_MANAGER_ABI,
+                        functionName: 'decreaseLiquidity',
+                        args: [{
+                            tokenId: pos.tokenId,
+                            liquidity: pos.liquidity,
+                            amount0Min: BigInt(0),
+                            amount1Min: BigInt(0),
+                            deadline,
+                        }],
+                    });
+                }
+                
+                // 3. Collect fees LAST
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'collect',
+                    args: [{
+                        tokenId: pos.tokenId,
+                        recipient: address,
+                        amount0Max: maxUint128,
+                        amount1Max: maxUint128,
+                    }],
+                });
+                // Note: Rewards are auto-claimed when unstaking, no separate claim needed
+                
+                toast.success('Position fully exited!');
+            }
+            
+            // Optimistically remove from UI immediately - no loading state!
+            removeStakedPosition(pos.tokenId, pos.gaugeAddress);
+            // Background refresh of CL positions to reflect the change
+            refetchCL();
+        } catch (err) {
+            console.error('Unstake and remove error:', err);
+            toast.error('Failed to unstake and remove position');
+        }
+        setActionLoading(false);
+    };
+
+    // Remove V2 liquidity with percentage support and batch transactions
     const handleRemoveV2Liquidity = async (pos: typeof v2Positions[0], percent: number) => {
         if (!address || pos.lpBalance <= BigInt(0)) return;
         setActionLoading(true);
@@ -872,60 +1078,113 @@ export default function PortfolioPage() {
             const currentAllowance = allowanceResult.result ? BigInt(allowanceResult.result) : BigInt(0);
             const needsApproval = currentAllowance < liquidityToRemove;
 
-            // Only approve if needed
-            if (needsApproval) {
-                const approvalTx = await writeContractAsync({
-                    address: pos.poolAddress as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [V2_CONTRACTS.Router as Address, liquidityToRemove],
-                });
-
-                // Wait for approval to confirm before removing liquidity
-                let confirmed = false;
-                for (let i = 0; i < 30; i++) {
-                    const receipt = await fetch(getPrimaryRpc(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                            params: [approvalTx],
-                            id: 1
-                        })
-                    }).then(r => r.json());
-
-                    if (receipt.result && receipt.result.status === '0x1') {
-                        confirmed = true;
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-
-                if (!confirmed) {
-                    toast.error('Approval failed. Try again');
-                    setActionLoading(false);
-                    return;
-                }
-            }
-
-            // Then remove liquidity
-            await writeContractAsync({
-                address: V2_CONTRACTS.Router as Address,
-                abi: ROUTER_ABI,
-                functionName: 'removeLiquidity',
-                args: [
+            // Build remove liquidity call
+            const removeLiquidityCall = encodeContractCall(
+                V2_CONTRACTS.Router as Address,
+                ROUTER_ABI,
+                'removeLiquidity',
+                [
                     pos.token0 as Address,
                     pos.token1 as Address,
                     pos.stable,
                     liquidityToRemove,
-                    BigInt(0), // amountAMin - use 0 for simplicity (user accepts slippage)
+                    BigInt(0), // amountAMin
                     BigInt(0), // amountBMin
                     address,
                     deadline,
-                ],
-            });
+                ]
+            );
 
-            toast.success(`Removed ${percent}% liquidity!`);
+            if (needsApproval) {
+                // Build approval call
+                const approveCall = encodeContractCall(
+                    pos.poolAddress as Address,
+                    ERC20_ABI,
+                    'approve',
+                    [V2_CONTRACTS.Router as Address, liquidityToRemove]
+                );
+
+                // Try batch: approve + removeLiquidity
+                const batchResult = await executeBatch([approveCall, removeLiquidityCall]);
+
+                if (batchResult.usedBatching && batchResult.success) {
+                    toast.success(`Approved & removed ${percent}% liquidity in one transaction!`);
+                } else {
+                    // Fall back to sequential
+                    console.log('Batch not available for V2, using sequential approve + remove');
+                    
+                    const approvalTx = await writeContractAsync({
+                        address: pos.poolAddress as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [V2_CONTRACTS.Router as Address, liquidityToRemove],
+                    });
+
+                    // Wait for approval to confirm
+                    let confirmed = false;
+                    for (let i = 0; i < 30; i++) {
+                        const receipt = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                params: [approvalTx],
+                                id: 1
+                            })
+                        }).then(r => r.json());
+
+                        if (receipt.result && receipt.result.status === '0x1') {
+                            confirmed = true;
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+
+                    if (!confirmed) {
+                        toast.error('Approval failed. Try again');
+                        setActionLoading(false);
+                        return;
+                    }
+
+                    // Then remove liquidity
+                    await writeContractAsync({
+                        address: V2_CONTRACTS.Router as Address,
+                        abi: ROUTER_ABI,
+                        functionName: 'removeLiquidity',
+                        args: [
+                            pos.token0 as Address,
+                            pos.token1 as Address,
+                            pos.stable,
+                            liquidityToRemove,
+                            BigInt(0),
+                            BigInt(0),
+                            address,
+                            deadline,
+                        ],
+                    });
+                    
+                    toast.success(`Removed ${percent}% liquidity!`);
+                }
+            } else {
+                // No approval needed, just remove liquidity
+                await writeContractAsync({
+                    address: V2_CONTRACTS.Router as Address,
+                    abi: ROUTER_ABI,
+                    functionName: 'removeLiquidity',
+                    args: [
+                        pos.token0 as Address,
+                        pos.token1 as Address,
+                        pos.stable,
+                        liquidityToRemove,
+                        BigInt(0),
+                        BigInt(0),
+                        address,
+                        deadline,
+                    ],
+                });
+                toast.success(`Removed ${percent}% liquidity!`);
+            }
+
             refetchV2();
             setExpandedV2Position(null);
         } catch (err) {
@@ -943,7 +1202,7 @@ export default function PortfolioPage() {
         setShowIncreaseLiquidityModal(true);
     };
 
-    // Increase liquidity for CL position
+    // Increase liquidity for CL position with batch support
     const handleIncreaseLiquidity = async () => {
         // Prevent multiple submissions
         if (actionLoading) {
@@ -990,73 +1249,39 @@ export default function PortfolioPage() {
                 return allowance >= amount;
             };
 
-            // Helper to wait for transaction confirmation
-            const waitForTxConfirmation = async (txHash: string): Promise<boolean> => {
-                for (let i = 0; i < 30; i++) {
-                    const receipt = await fetch(getPrimaryRpc(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                            params: [txHash],
-                            id: 1
-                        })
-                    }).then(r => r.json());
+            // Determine which tokens need approval
+            const needsToken0Approval = amount0Desired > BigInt(0) && !(isToken0WSEI && nativeValue > BigInt(0)) && !(await checkAllowance(selectedPosition.token0, amount0Desired));
+            const needsToken1Approval = amount1Desired > BigInt(0) && !(isToken1WSEI && nativeValue > BigInt(0)) && !(await checkAllowance(selectedPosition.token1, amount1Desired));
 
-                    if (receipt.result && receipt.result.status === '0x1') {
-                        return true;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-                return false;
-            };
+            // Build batch calls
+            const batchCalls = [];
 
-            // Approve token0 if needed (skip for WSEI when using native)
-            if (amount0Desired > BigInt(0) && !(isToken0WSEI && nativeValue > BigInt(0))) {
-                const hasAllowance = await checkAllowance(selectedPosition.token0, amount0Desired);
-                if (!hasAllowance) {
-                    const approvalTx = await writeContractAsync({
-                        address: selectedPosition.token0 as Address,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
-                    });
-                    // Wait for approval to confirm
-                    const confirmed = await waitForTxConfirmation(approvalTx);
-                    if (!confirmed) {
-                        toast.error('Token0 approval failed');
-                        setActionLoading(false);
-                        return;
-                    }
-                }
+            // Add approval for token0 if needed
+            if (needsToken0Approval) {
+                batchCalls.push(encodeContractCall(
+                    selectedPosition.token0 as Address,
+                    ERC20_ABI,
+                    'approve',
+                    [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired]
+                ));
             }
 
-            // Approve token1 if needed (skip for WSEI when using native)
-            if (amount1Desired > BigInt(0) && !(isToken1WSEI && nativeValue > BigInt(0))) {
-                const hasAllowance = await checkAllowance(selectedPosition.token1, amount1Desired);
-                if (!hasAllowance) {
-                    const approvalTx = await writeContractAsync({
-                        address: selectedPosition.token1 as Address,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
-                    });
-                    // Wait for approval to confirm
-                    const confirmed = await waitForTxConfirmation(approvalTx);
-                    if (!confirmed) {
-                        toast.error('Token1 approval failed');
-                        setActionLoading(false);
-                        return;
-                    }
-                }
+            // Add approval for token1 if needed
+            if (needsToken1Approval) {
+                batchCalls.push(encodeContractCall(
+                    selectedPosition.token1 as Address,
+                    ERC20_ABI,
+                    'approve',
+                    [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired]
+                ));
             }
 
-            // Call increaseLiquidity
-            await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: NFT_POSITION_MANAGER_ABI,
-                functionName: 'increaseLiquidity',
-                args: [{
+            // Add increaseLiquidity call
+            batchCalls.push(encodeContractCall(
+                CL_CONTRACTS.NonfungiblePositionManager as Address,
+                NFT_POSITION_MANAGER_ABI,
+                'increaseLiquidity',
+                [{
                     tokenId: selectedPosition.tokenId,
                     amount0Desired,
                     amount1Desired,
@@ -1064,10 +1289,65 @@ export default function PortfolioPage() {
                     amount1Min: BigInt(0),
                     deadline,
                 }],
-                value: nativeValue,
-            });
+                nativeValue
+            ));
 
-            toast.success('Liquidity increased!');
+            // Try batch first
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                const actions = [];
+                if (needsToken0Approval) actions.push('approved token0');
+                if (needsToken1Approval) actions.push('approved token1');
+                actions.push('increased liquidity');
+                toast.success(`Batch complete: ${actions.join(' + ')}!`);
+            } else {
+                // Fall back to sequential
+                console.log('Batch not available, using sequential transactions');
+
+                // Approve token0 if needed
+                if (needsToken0Approval) {
+                    const approvalTx = await writeContractAsync({
+                        address: selectedPosition.token0 as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
+                    });
+                    // Wait briefly
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+                // Approve token1 if needed
+                if (needsToken1Approval) {
+                    const approvalTx = await writeContractAsync({
+                        address: selectedPosition.token1 as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
+                    });
+                    // Wait briefly
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+                // Call increaseLiquidity
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'increaseLiquidity',
+                    args: [{
+                        tokenId: selectedPosition.tokenId,
+                        amount0Desired,
+                        amount1Desired,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }],
+                    value: nativeValue,
+                });
+
+                toast.success('Liquidity increased!');
+            }
+
             setShowIncreaseLiquidityModal(false);
             setSelectedPosition(null);
             refetchCL();
@@ -1134,6 +1414,33 @@ export default function PortfolioPage() {
                 ))}
             </div>
 
+            {/* Pull to Refresh Indicator */}
+            <div className="md:hidden flex justify-center items-center h-0 overflow-visible relative z-10">
+                <motion.div
+                    className="absolute -top-6"
+                    style={{
+                        opacity: isPulling ? Math.min(pullProgress * 2, 1) : 0,
+                        transform: `translateY(${Math.min(pullProgress * 40, 40)}px)`,
+                    }}
+                >
+                    <div className={`w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center ${isRefreshing ? 'animate-spin' : ''}`}>
+                        <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </div>
+                </motion.div>
+            </div>
+
+            {/* Scrollable Content with Pull-to-Refresh */}
+            <div
+                ref={scrollContainerRef}
+                className="md:overflow-visible"
+                {...handlers}
+                style={{
+                    transform: isPulling ? `translateY(${pullProgress * 40}px)` : undefined,
+                    transition: isPulling ? 'none' : 'transform 0.3s ease-out',
+                }}
+            >
             {/* Overview Tab - Compact summary */}
             {activeTab === 'overview' && (
                 <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -1654,6 +1961,14 @@ export default function PortfolioPage() {
                                                 >
                                                     Unstake
                                                 </button>
+                                                <button
+                                                    onClick={() => handleBatchExitPosition(pos)}
+                                                    disabled={actionLoading}
+                                                    className="flex-1 py-1.5 text-[10px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 font-medium"
+                                                    title="Unstake (auto-claims rewards), remove liquidity & collect fees"
+                                                >
+                                                    Unstake & Remove
+                                                </button>
                                             </div>
                                         </div>
                                     );
@@ -1948,6 +2263,7 @@ export default function PortfolioPage() {
                 </div>
             )}
         </div>
+            </div>
     );
 }
 

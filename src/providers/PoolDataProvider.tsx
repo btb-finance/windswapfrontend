@@ -244,6 +244,7 @@ interface PoolDataContextType {
     stakedPositions: StakedPosition[];
     stakedLoading: boolean;
     refetchStaked: () => void;
+    removeStakedPosition: (tokenId: bigint, gaugeAddress: string) => void;
     // VeNFT data (prefetched for portfolio and vote)
     veNFTs: VeNFT[];
     veNFTsLoading: boolean;
@@ -1301,6 +1302,13 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         setStakedLoading(false);
     }, [address]);
 
+    // Remove a staked position locally (optimistic update after unstaking)
+    const removeStakedPosition = useCallback((tokenId: bigint, gaugeAddress: string) => {
+        setStakedPositions(prev => prev.filter(
+            pos => !(pos.tokenId === tokenId && pos.gaugeAddress.toLowerCase() === gaugeAddress.toLowerCase())
+        ));
+    }, []);
+
     // Fetch staked positions when address changes
     useEffect(() => {
         fetchStakedPositions();
@@ -1448,6 +1456,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         stakedPositions,
         stakedLoading,
         refetchStaked: fetchStakedPositions,
+        removeStakedPosition,
         veNFTs,
         veNFTsLoading,
         refetchVeNFTs: fetchVeNFTs,
