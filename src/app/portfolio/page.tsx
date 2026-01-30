@@ -205,6 +205,7 @@ export default function PortfolioPage() {
         stakedPositions: prefetchedStakedPositions,
         stakedLoading: loadingStaked,
         refetchStaked,
+        removeStakedPosition,
         veNFTs: prefetchedVeNFTs,
         veNFTsLoading: loadingVeNFTs,
         refetchVeNFTs
@@ -838,7 +839,7 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Unstake position from gauge
+    // Unstake position from gauge - uses optimistic update, no full reload
     const handleUnstakePosition = async (pos: StakedPosition) => {
         if (!address) return;
         setActionLoading(true);
@@ -851,7 +852,9 @@ export default function PortfolioPage() {
             });
 
             toast.success('Position unstaked!');
-            refetchStaked(); // Refresh staked positions from provider
+            // Optimistically remove from UI immediately - no loading state!
+            removeStakedPosition(pos.tokenId, pos.gaugeAddress);
+            // Background refresh of CL positions to reflect the change
             refetchCL();
         } catch (err) {
             console.error('Unstake position error:', err);
@@ -930,7 +933,7 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Batch exit: Claim + Unstake + Decrease + Collect all in one transaction
+    // Unstake and remove: Claim + Unstake + Decrease + Collect all in one transaction
     const handleBatchExitPosition = async (pos: StakedPosition, claimRewards: boolean = true) => {
         if (!address) return;
         setActionLoading(true);
@@ -1055,8 +1058,8 @@ export default function PortfolioPage() {
             refetchStaked();
             refetchCL();
         } catch (err) {
-            console.error('Batch exit error:', err);
-            toast.error('Failed to exit position');
+            console.error('Unstake and remove error:', err);
+            toast.error('Failed to unstake and remove position');
         }
         setActionLoading(false);
     };
@@ -1978,9 +1981,9 @@ export default function PortfolioPage() {
                                                     onClick={() => handleBatchExitPosition(pos, true)}
                                                     disabled={actionLoading}
                                                     className="flex-1 py-1.5 text-[10px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 font-medium"
-                                                    title="Exit: Claim rewards, unstake, remove liquidity & collect fees"
+                                                    title="Claim rewards, unstake, remove liquidity & collect fees"
                                                 >
-                                                    Batch Exit 🚀
+                                                    Unstake & Remove
                                                 </button>
                                             </div>
                                         </div>
