@@ -933,8 +933,8 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Unstake and remove: Claim + Unstake + Decrease + Collect all in one transaction
-    const handleBatchExitPosition = async (pos: StakedPosition, claimRewards: boolean = true) => {
+    // Unstake and remove: Unstake (auto-claims) + Decrease + Collect in one transaction
+    const handleBatchExitPosition = async (pos: StakedPosition) => {
         if (!address) return;
         setActionLoading(true);
         try {
@@ -943,17 +943,7 @@ export default function PortfolioPage() {
             
             const batchCalls = [];
 
-            // 1. Claim rewards if requested and available
-            if (claimRewards && pos.pendingRewards > BigInt(0)) {
-                batchCalls.push(encodeContractCall(
-                    pos.gaugeAddress as Address,
-                    CL_GAUGE_ABI,
-                    'getReward',
-                    [pos.tokenId]
-                ));
-            }
-
-            // 2. Unstake from gauge
+            // 1. Unstake from gauge FIRST
             batchCalls.push(encodeContractCall(
                 pos.gaugeAddress as Address,
                 CL_GAUGE_ABI,
@@ -961,7 +951,7 @@ export default function PortfolioPage() {
                 [pos.tokenId]
             ));
 
-            // 3. Decrease liquidity (remove all)
+            // 2. Decrease liquidity (remove all) SECOND
             if (pos.liquidity && pos.liquidity > BigInt(0)) {
                 batchCalls.push(encodeContractCall(
                     CL_CONTRACTS.NonfungiblePositionManager as Address,
@@ -977,7 +967,7 @@ export default function PortfolioPage() {
                 ));
             }
 
-            // 4. Collect fees
+            // 3. Collect fees LAST
             batchCalls.push(encodeContractCall(
                 CL_CONTRACTS.NonfungiblePositionManager as Address,
                 NFT_POSITION_MANAGER_ABI,
@@ -989,33 +979,24 @@ export default function PortfolioPage() {
                     amount1Max: maxUint128,
                 }]
             ));
+            // Note: Rewards are auto-claimed when unstaking, no separate claim needed
 
             // Execute batch
             const batchResult = await executeBatch(batchCalls);
 
             if (batchResult.usedBatching && batchResult.success) {
                 const actions = [];
-                if (claimRewards && pos.pendingRewards > BigInt(0)) actions.push('claimed rewards');
                 actions.push('unstaked');
                 if (pos.liquidity && pos.liquidity > BigInt(0)) actions.push('removed liquidity');
                 actions.push('collected fees');
+                // Note: Rewards are auto-claimed when unstaking
                 
                 toast.success(`Position exited: ${actions.join(' + ')}!`);
             } else {
                 // Fall back to sequential execution
                 toast.info('Batch not supported, using sequential transactions...');
                 
-                // Claim rewards
-                if (claimRewards && pos.pendingRewards > BigInt(0)) {
-                    await writeContractAsync({
-                        address: pos.gaugeAddress as Address,
-                        abi: CL_GAUGE_ABI,
-                        functionName: 'getReward',
-                        args: [pos.tokenId],
-                    });
-                }
-                
-                // Unstake
+                // 1. Unstake FIRST (auto-claims rewards)
                 await writeContractAsync({
                     address: pos.gaugeAddress as Address,
                     abi: CL_GAUGE_ABI,
@@ -1023,7 +1004,7 @@ export default function PortfolioPage() {
                     args: [pos.tokenId],
                 });
                 
-                // Decrease liquidity
+                // 2. Decrease liquidity SECOND
                 if (pos.liquidity && pos.liquidity > BigInt(0)) {
                     await writeContractAsync({
                         address: CL_CONTRACTS.NonfungiblePositionManager as Address,
@@ -1039,7 +1020,7 @@ export default function PortfolioPage() {
                     });
                 }
                 
-                // Collect fees
+                // 3. Collect fees LAST
                 await writeContractAsync({
                     address: CL_CONTRACTS.NonfungiblePositionManager as Address,
                     abi: NFT_POSITION_MANAGER_ABI,
@@ -1051,11 +1032,14 @@ export default function PortfolioPage() {
                         amount1Max: maxUint128,
                     }],
                 });
+                // Note: Rewards are auto-claimed when unstaking, no separate claim needed
                 
                 toast.success('Position fully exited!');
             }
             
-            refetchStaked();
+            // Optimistically remove from UI immediately - no loading state!
+            removeStakedPosition(pos.tokenId, pos.gaugeAddress);
+            // Background refresh of CL positions to reflect the change
             refetchCL();
         } catch (err) {
             console.error('Unstake and remove error:', err);
@@ -1978,10 +1962,10 @@ export default function PortfolioPage() {
                                                     Unstake
                                                 </button>
                                                 <button
-                                                    onClick={() => handleBatchExitPosition(pos, true)}
+                                                    onClick={() => handleBatchExitPosition(pos)}
                                                     disabled={actionLoading}
                                                     className="flex-1 py-1.5 text-[10px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 font-medium"
-                                                    title="Claim rewards, unstake, remove liquidity & collect fees"
+                                                    title="Unstake (auto-claims rewards), remove liquidity & collect fees"
                                                 >
                                                     Unstake & Remove
                                                 </button>
