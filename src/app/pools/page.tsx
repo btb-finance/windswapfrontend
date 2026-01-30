@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { formatUnits, Address } from 'viem';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { haptic } from '@/hooks/useHaptic';
 
 // Lazy load AddLiquidityModal - only loads when user opens it
 const AddLiquidityModal = dynamic(
@@ -59,7 +61,25 @@ export default function PoolsPage() {
     const [selectedPool, setSelectedPool] = useState<PoolConfig | undefined>(undefined);
 
     // Use globally prefetched pool data - instant load!
-    const { v2Pools, clPools, allPools, poolRewards, stakedLiquidity, windPrice, seiPrice, isLoading } = usePoolData();
+    const { v2Pools, clPools, allPools, poolRewards, stakedLiquidity, windPrice, seiPrice, isLoading, refetch } = usePoolData();
+
+    // Pull-to-refresh for mobile
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        try {
+            await refetch();
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
+    const { handlers, pullProgress, isPulling } = usePullToRefresh({
+        onRefresh: handleRefresh,
+        threshold: 80,
+    });
 
     // Calculate APR for a pool using staked liquidity for accurate staker APR
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {
@@ -325,12 +345,35 @@ export default function PoolsPage() {
             </motion.div>
 
 
-            {/* Pools Table */}
+            {/* Pull to Refresh Indicator */}
+            <div className="md:hidden flex justify-center items-center h-0 overflow-visible relative z-10">
+                <motion.div
+                    className="absolute -top-8"
+                    style={{
+                        opacity: isPulling ? Math.min(pullProgress * 2, 1) : 0,
+                        transform: `translateY(${Math.min(pullProgress * 40, 40)}px)`,
+                    }}
+                >
+                    <div className={`w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center ${isRefreshing ? 'animate-spin' : ''}`}>
+                        <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </div>
+                </motion.div>
+            </div>
+
+            {/* Pools Table with Pull-to-Refresh */}
             <motion.div
-                className="glass-card overflow-hidden"
+                ref={scrollContainerRef}
+                className="glass-card overflow-hidden md:overflow-visible"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
+                {...handlers}
+                style={{
+                    transform: isPulling ? `translateY(${pullProgress * 40}px)` : undefined,
+                    transition: isPulling ? 'none' : 'transform 0.3s ease-out',
+                }}
             >
                 {/* Table Header - Desktop only */}
                 <div className="hidden md:grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">

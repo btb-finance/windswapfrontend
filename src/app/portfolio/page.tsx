@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount, useReadContract } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
@@ -16,6 +16,7 @@ import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { useToast } from '@/providers/ToastProvider';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
 // VotingEscrow ABI for veNFT data
 const VOTING_ESCROW_ABI = [
@@ -212,6 +213,29 @@ export default function PortfolioPage() {
     // Use prefetched data from provider
     const stakedPositions = prefetchedStakedPositions;
     const veNFTs = prefetchedVeNFTs;
+
+    // Pull-to-refresh for mobile
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        try {
+            await Promise.all([
+                refetchStaked(),
+                refetchVeNFTs(),
+                refetchCL(),
+                refetchV2(),
+            ]);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
+    const { handlers, pullProgress, isPulling } = usePullToRefresh({
+        onRefresh: handleRefresh,
+        threshold: 80,
+    });
 
     // Shadow outer getTokenInfo - uses global data first, then fallback to utility
     const getTokenInfo = (addr: string) => {
@@ -1403,6 +1427,33 @@ export default function PortfolioPage() {
                 ))}
             </div>
 
+            {/* Pull to Refresh Indicator */}
+            <div className="md:hidden flex justify-center items-center h-0 overflow-visible relative z-10">
+                <motion.div
+                    className="absolute -top-6"
+                    style={{
+                        opacity: isPulling ? Math.min(pullProgress * 2, 1) : 0,
+                        transform: `translateY(${Math.min(pullProgress * 40, 40)}px)`,
+                    }}
+                >
+                    <div className={`w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center ${isRefreshing ? 'animate-spin' : ''}`}>
+                        <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </div>
+                </motion.div>
+            </div>
+
+            {/* Scrollable Content with Pull-to-Refresh */}
+            <div
+                ref={scrollContainerRef}
+                className="md:overflow-visible"
+                {...handlers}
+                style={{
+                    transform: isPulling ? `translateY(${pullProgress * 40}px)` : undefined,
+                    transition: isPulling ? 'none' : 'transform 0.3s ease-out',
+                }}
+            >
             {/* Overview Tab - Compact summary */}
             {activeTab === 'overview' && (
                 <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -2225,6 +2276,7 @@ export default function PortfolioPage() {
                 </div>
             )}
         </div>
+            </div>
     );
 }
 

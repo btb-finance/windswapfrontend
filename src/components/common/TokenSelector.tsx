@@ -7,6 +7,7 @@ import { Token, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { useUserBalances } from '@/providers/UserBalanceProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { getTokenMetadataFromCache, setTokenMetadataCache } from '@/utils/cache';
+import { useSwipeToDismiss } from '@/hooks/useSwipeToDismiss';
 
 interface TokenSelectorProps {
     isOpen: boolean;
@@ -197,6 +198,13 @@ export function TokenSelector({
         setCustomToken(null);
     };
 
+    // Swipe to dismiss for mobile
+    const { handlers: swipeHandlers, style: swipeStyle } = useSwipeToDismiss({
+        onDismiss: onClose,
+        threshold: 120,
+        direction: 'down',
+    });
+
     if (!isOpen) return null;
 
     return (
@@ -216,15 +224,21 @@ export function TokenSelector({
                     exit={{ opacity: 0 }}
                 />
 
-                {/* Modal */}
+                {/* Modal with Swipe to Dismiss */}
                 <motion.div
-                    className="relative w-full max-w-md mx-4"
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.95, opacity: 0 }}
+                    className="relative w-full max-w-md mx-4 touch-pan-y"
+                    initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.95, opacity: 0, y: 20 }}
                     transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                    {...swipeHandlers}
+                    style={swipeStyle}
                 >
-                    <div className="glass-card p-6">
+                    {/* Drag Handle for Mobile */}
+                    <div className="md:hidden w-full flex justify-center pt-2 pb-1">
+                        <div className="w-12 h-1 rounded-full bg-white/20" />
+                    </div>
+                    <div className="glass-card p-6 pt-4">
                         {/* Header */}
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xl font-semibold">Select Token</h2>
@@ -326,6 +340,7 @@ export function TokenSelector({
                                                     src={token.logoURI}
                                                     alt={token.symbol}
                                                     className="w-8 h-8 rounded-full"
+                                                    loading="lazy"
                                                     onError={(e) => {
                                                         (e.target as HTMLImageElement).style.display = 'none';
                                                     }}
