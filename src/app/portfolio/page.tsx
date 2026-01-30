@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useAccount, useReadContract } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
+import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { Address, formatUnits } from 'viem';
 import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
@@ -236,6 +237,7 @@ export default function PortfolioPage() {
 
     // Contract write hook
     const { writeContractAsync } = useWriteContract();
+    const { executeBatch, encodeContractCall } = useBatchTransactions();
 
     // Get CL and V2 positions
     const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
@@ -605,42 +607,80 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Remove liquidity from CL position
+    // Remove liquidity from CL position with batch support
     const handleRemoveLiquidity = async (position: typeof clPositions[0]) => {
         if (!address || position.liquidity <= BigInt(0)) return;
         setActionLoading(true);
         try {
-            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
-
-            // Decrease liquidity
-            await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: NFT_POSITION_MANAGER_ABI,
-                functionName: 'decreaseLiquidity',
-                args: [{
-                    tokenId: position.tokenId,
-                    liquidity: position.liquidity,
-                    amount0Min: BigInt(0),
-                    amount1Min: BigInt(0),
-                    deadline,
-                }],
-            });
-
-            // Then collect
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60));
             const maxUint128 = BigInt('340282366920938463463374607431768211455');
-            await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: NFT_POSITION_MANAGER_ABI,
-                functionName: 'collect',
-                args: [{
-                    tokenId: position.tokenId,
-                    recipient: address,
-                    amount0Max: maxUint128,
-                    amount1Max: maxUint128,
-                }],
-            });
 
-            toast.success('Liquidity removed!');
+            // Build batch: decrease liquidity + collect
+            const batchCalls = [
+                encodeContractCall(
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    NFT_POSITION_MANAGER_ABI,
+                    'decreaseLiquidity',
+                    [{
+                        tokenId: position.tokenId,
+                        liquidity: position.liquidity,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }]
+                ),
+                encodeContractCall(
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    NFT_POSITION_MANAGER_ABI,
+                    'collect',
+                    [{
+                        tokenId: position.tokenId,
+                        recipient: address,
+                        amount0Max: maxUint128,
+                        amount1Max: maxUint128,
+                    }]
+                )
+            ];
+
+            // Try batch first
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                toast.success('Liquidity removed & fees collected in one transaction!');
+            } else {
+                // Fall back to sequential
+                console.log('Batch not available, using sequential remove + collect');
+                
+                // Decrease liquidity
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'decreaseLiquidity',
+                    args: [{
+                        tokenId: position.tokenId,
+                        liquidity: position.liquidity,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }],
+                });
+
+                // Then collect
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'collect',
+                    args: [{
+                        tokenId: position.tokenId,
+                        recipient: address,
+                        amount0Max: maxUint128,
+                        amount1Max: maxUint128,
+                    }],
+                });
+
+                toast.success('Liquidity removed!');
+            }
+            
             refetchCL();
         } catch (err) {
             console.error('Remove liquidity error:', err);
@@ -823,17 +863,41 @@ export default function PortfolioPage() {
         if (!address || stakedPositions.length === 0) return;
         setActionLoading(true);
         try {
-            for (const pos of stakedPositions) {
-                if (pos.pendingRewards > BigInt(0)) {
-                    await writeContractAsync({
-                        address: pos.gaugeAddress as Address,
-                        abi: CL_GAUGE_ABI,
-                        functionName: 'getReward',
-                        args: [pos.tokenId],
-                    });
-                }
+            // Build batch calls for claiming from all gauges
+            const batchCalls = stakedPositions
+                .filter(pos => pos.pendingRewards > BigInt(0))
+                .map(pos => encodeContractCall(
+                    pos.gaugeAddress as Address,
+                    CL_GAUGE_ABI,
+                    'getReward',
+                    [pos.tokenId]
+                ));
+
+            if (batchCalls.length === 0) {
+                toast.info('No rewards to claim');
+                setActionLoading(false);
+                return;
             }
-            toast.success('All rewards claimed!');
+
+            // Try batch first
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                toast.success(`Claimed rewards from ${batchCalls.length} position(s) in one transaction!`);
+            } else {
+                // Fall back to sequential
+                for (const pos of stakedPositions) {
+                    if (pos.pendingRewards > BigInt(0)) {
+                        await writeContractAsync({
+                            address: pos.gaugeAddress as Address,
+                            abi: CL_GAUGE_ABI,
+                            functionName: 'getReward',
+                            args: [pos.tokenId],
+                        });
+                    }
+                }
+                toast.success('All rewards claimed!');
+            }
             refetchStaked(); // Refresh staked positions
         } catch (err) {
             console.error('Claim all rewards error:', err);
@@ -842,14 +906,145 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
-    // Remove V2 liquidity with percentage support
+    // Batch exit: Claim + Unstake + Decrease + Collect all in one transaction
+    const handleBatchExitPosition = async (pos: StakedPosition, claimRewards: boolean = true) => {
+        if (!address) return;
+        setActionLoading(true);
+        try {
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+            const maxUint128 = BigInt('340282366920938463463374607431768211455');
+            
+            const batchCalls = [];
+
+            // 1. Claim rewards if requested and available
+            if (claimRewards && pos.pendingRewards > BigInt(0)) {
+                batchCalls.push(encodeContractCall(
+                    pos.gaugeAddress as Address,
+                    CL_GAUGE_ABI,
+                    'getReward',
+                    [pos.tokenId]
+                ));
+            }
+
+            // 2. Unstake from gauge
+            batchCalls.push(encodeContractCall(
+                pos.gaugeAddress as Address,
+                CL_GAUGE_ABI,
+                'withdraw',
+                [pos.tokenId]
+            ));
+
+            // 3. Decrease liquidity (remove all)
+            if (pos.liquidity && pos.liquidity > BigInt(0)) {
+                batchCalls.push(encodeContractCall(
+                    CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    NFT_POSITION_MANAGER_ABI,
+                    'decreaseLiquidity',
+                    [{
+                        tokenId: pos.tokenId,
+                        liquidity: pos.liquidity,
+                        amount0Min: BigInt(0),
+                        amount1Min: BigInt(0),
+                        deadline,
+                    }]
+                ));
+            }
+
+            // 4. Collect fees
+            batchCalls.push(encodeContractCall(
+                CL_CONTRACTS.NonfungiblePositionManager as Address,
+                NFT_POSITION_MANAGER_ABI,
+                'collect',
+                [{
+                    tokenId: pos.tokenId,
+                    recipient: address,
+                    amount0Max: maxUint128,
+                    amount1Max: maxUint128,
+                }]
+            ));
+
+            // Execute batch
+            const batchResult = await executeBatch(batchCalls);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                const actions = [];
+                if (claimRewards && pos.pendingRewards > BigInt(0)) actions.push('claimed rewards');
+                actions.push('unstaked');
+                if (pos.liquidity && pos.liquidity > BigInt(0)) actions.push('removed liquidity');
+                actions.push('collected fees');
+                
+                toast.success(`Position exited: ${actions.join(' + ')}!`);
+            } else {
+                // Fall back to sequential execution
+                toast.info('Batch not supported, using sequential transactions...');
+                
+                // Claim rewards
+                if (claimRewards && pos.pendingRewards > BigInt(0)) {
+                    await writeContractAsync({
+                        address: pos.gaugeAddress as Address,
+                        abi: CL_GAUGE_ABI,
+                        functionName: 'getReward',
+                        args: [pos.tokenId],
+                    });
+                }
+                
+                // Unstake
+                await writeContractAsync({
+                    address: pos.gaugeAddress as Address,
+                    abi: CL_GAUGE_ABI,
+                    functionName: 'withdraw',
+                    args: [pos.tokenId],
+                });
+                
+                // Decrease liquidity
+                if (pos.liquidity && pos.liquidity > BigInt(0)) {
+                    await writeContractAsync({
+                        address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                        abi: NFT_POSITION_MANAGER_ABI,
+                        functionName: 'decreaseLiquidity',
+                        args: [{
+                            tokenId: pos.tokenId,
+                            liquidity: pos.liquidity,
+                            amount0Min: BigInt(0),
+                            amount1Min: BigInt(0),
+                            deadline,
+                        }],
+                    });
+                }
+                
+                // Collect fees
+                await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'collect',
+                    args: [{
+                        tokenId: pos.tokenId,
+                        recipient: address,
+                        amount0Max: maxUint128,
+                        amount1Max: maxUint128,
+                    }],
+                });
+                
+                toast.success('Position fully exited!');
+            }
+            
+            refetchStaked();
+            refetchCL();
+        } catch (err) {
+            console.error('Batch exit error:', err);
+            toast.error('Failed to exit position');
+        }
+        setActionLoading(false);
+    };
+
+    // Remove V2 liquidity with percentage support and batch transactions
     const handleRemoveV2Liquidity = async (pos: typeof v2Positions[0], percent: number) => {
         if (!address || pos.lpBalance <= BigInt(0)) return;
         setActionLoading(true);
         try {
             // Calculate amount to remove based on percentage
             const liquidityToRemove = (pos.lpBalance * BigInt(percent)) / BigInt(100);
-            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60));
 
             // Check existing allowance first
             const allowanceSelector = '0xdd62ed3e'; // allowance(address,address)
@@ -872,60 +1067,113 @@ export default function PortfolioPage() {
             const currentAllowance = allowanceResult.result ? BigInt(allowanceResult.result) : BigInt(0);
             const needsApproval = currentAllowance < liquidityToRemove;
 
-            // Only approve if needed
-            if (needsApproval) {
-                const approvalTx = await writeContractAsync({
-                    address: pos.poolAddress as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [V2_CONTRACTS.Router as Address, liquidityToRemove],
-                });
-
-                // Wait for approval to confirm before removing liquidity
-                let confirmed = false;
-                for (let i = 0; i < 30; i++) {
-                    const receipt = await fetch(getPrimaryRpc(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                            params: [approvalTx],
-                            id: 1
-                        })
-                    }).then(r => r.json());
-
-                    if (receipt.result && receipt.result.status === '0x1') {
-                        confirmed = true;
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-
-                if (!confirmed) {
-                    toast.error('Approval failed. Try again');
-                    setActionLoading(false);
-                    return;
-                }
-            }
-
-            // Then remove liquidity
-            await writeContractAsync({
-                address: V2_CONTRACTS.Router as Address,
-                abi: ROUTER_ABI,
-                functionName: 'removeLiquidity',
-                args: [
+            // Build remove liquidity call
+            const removeLiquidityCall = encodeContractCall(
+                V2_CONTRACTS.Router as Address,
+                ROUTER_ABI,
+                'removeLiquidity',
+                [
                     pos.token0 as Address,
                     pos.token1 as Address,
                     pos.stable,
                     liquidityToRemove,
-                    BigInt(0), // amountAMin - use 0 for simplicity (user accepts slippage)
+                    BigInt(0), // amountAMin
                     BigInt(0), // amountBMin
                     address,
                     deadline,
-                ],
-            });
+                ]
+            );
 
-            toast.success(`Removed ${percent}% liquidity!`);
+            if (needsApproval) {
+                // Build approval call
+                const approveCall = encodeContractCall(
+                    pos.poolAddress as Address,
+                    ERC20_ABI,
+                    'approve',
+                    [V2_CONTRACTS.Router as Address, liquidityToRemove]
+                );
+
+                // Try batch: approve + removeLiquidity
+                const batchResult = await executeBatch([approveCall, removeLiquidityCall]);
+
+                if (batchResult.usedBatching && batchResult.success) {
+                    toast.success(`Approved & removed ${percent}% liquidity in one transaction!`);
+                } else {
+                    // Fall back to sequential
+                    console.log('Batch not available for V2, using sequential approve + remove');
+                    
+                    const approvalTx = await writeContractAsync({
+                        address: pos.poolAddress as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [V2_CONTRACTS.Router as Address, liquidityToRemove],
+                    });
+
+                    // Wait for approval to confirm
+                    let confirmed = false;
+                    for (let i = 0; i < 30; i++) {
+                        const receipt = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                params: [approvalTx],
+                                id: 1
+                            })
+                        }).then(r => r.json());
+
+                        if (receipt.result && receipt.result.status === '0x1') {
+                            confirmed = true;
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+
+                    if (!confirmed) {
+                        toast.error('Approval failed. Try again');
+                        setActionLoading(false);
+                        return;
+                    }
+
+                    // Then remove liquidity
+                    await writeContractAsync({
+                        address: V2_CONTRACTS.Router as Address,
+                        abi: ROUTER_ABI,
+                        functionName: 'removeLiquidity',
+                        args: [
+                            pos.token0 as Address,
+                            pos.token1 as Address,
+                            pos.stable,
+                            liquidityToRemove,
+                            BigInt(0),
+                            BigInt(0),
+                            address,
+                            deadline,
+                        ],
+                    });
+                    
+                    toast.success(`Removed ${percent}% liquidity!`);
+                }
+            } else {
+                // No approval needed, just remove liquidity
+                await writeContractAsync({
+                    address: V2_CONTRACTS.Router as Address,
+                    abi: ROUTER_ABI,
+                    functionName: 'removeLiquidity',
+                    args: [
+                        pos.token0 as Address,
+                        pos.token1 as Address,
+                        pos.stable,
+                        liquidityToRemove,
+                        BigInt(0),
+                        BigInt(0),
+                        address,
+                        deadline,
+                    ],
+                });
+                toast.success(`Removed ${percent}% liquidity!`);
+            }
+
             refetchV2();
             setExpandedV2Position(null);
         } catch (err) {
@@ -1653,6 +1901,14 @@ export default function PortfolioPage() {
                                                     className="flex-1 py-1.5 text-[10px] rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition disabled:opacity-50 font-medium"
                                                 >
                                                     Unstake
+                                                </button>
+                                                <button
+                                                    onClick={() => handleBatchExitPosition(pos, true)}
+                                                    disabled={actionLoading}
+                                                    className="flex-1 py-1.5 text-[10px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 font-medium"
+                                                    title="Exit: Claim rewards, unstake, remove liquidity & collect fees"
+                                                >
+                                                    Batch Exit 🚀
                                                 </button>
                                             </div>
                                         </div>
