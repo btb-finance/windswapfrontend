@@ -60,7 +60,7 @@ export function SwapSettings({
 
             {isOpen && (
                 <motion.div
-                    className="absolute right-0 top-12 w-72 glass-card p-4 z-50"
+                    className="absolute right-0 top-12 w-72 p-4 z-50 bg-[#0d0d14] border border-white/10 rounded-xl shadow-2xl"
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                 >
