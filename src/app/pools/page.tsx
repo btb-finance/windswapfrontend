@@ -66,7 +66,7 @@ export default function PoolsPage() {
     // Pull-to-refresh for mobile
     const [isRefreshing, setIsRefreshing] = useState(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    
+
     const handleRefresh = async () => {
         setIsRefreshing(true);
         try {
@@ -205,10 +205,10 @@ export default function PoolsPage() {
 
     // Top pool addresses (specific pools, not just token pairs)
     const TOP_POOL_ADDRESSES = {
+        USDT_USDC: '0x3C2567b15FD9133Cf9101E043C58e2B444aF900b'.toLowerCase(),
+        WIND_USDC: '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0'.toLowerCase(),
         WIND_WSEI: '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase(),
         USDC_WSEI: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1'.toLowerCase(),
-        WETH_WSEI: '0x0B266EA5E96ec0a1B2Cd188f31EBb36774147356'.toLowerCase(),
-        WETH_WIND: '0x16722405Bb17412B84C1ad9280D41bcED322FcAB'.toLowerCase(),
     };
 
     // Sort pools - Top pools first, then by volume by default!
@@ -216,10 +216,10 @@ export default function PoolsPage() {
         // Priority order based on specific pool addresses
         const getPriority = (pool: typeof allPools[0]) => {
             const poolAddr = pool.address.toLowerCase();
-            if (poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI) return 1;
-            if (poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI) return 2;
-            if (poolAddr === TOP_POOL_ADDRESSES.WETH_WSEI) return 3;
-            if (poolAddr === TOP_POOL_ADDRESSES.WETH_WIND) return 4;
+            if (poolAddr === TOP_POOL_ADDRESSES.USDT_USDC) return 1;
+            if (poolAddr === TOP_POOL_ADDRESSES.WIND_USDC) return 2;
+            if (poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI) return 3;
+            if (poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI) return 4;
             return 999;
         };
 
@@ -313,7 +313,7 @@ export default function PoolsPage() {
                                 setSortBy(val as SortBy);
                             }
                         }}
-                        className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 text-xs sm:text-sm outline-none focus:border-primary cursor-pointer"
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 text-xs sm:text-sm outline-none focus:border-primary cursor-pointer text-white [&_option]:text-black [&_option]:bg-white [&_optgroup]:text-gray-600 [&_optgroup]:font-semibold"
                     >
                         <optgroup label="Sort">
                             <option value="default">Default Order</option>
@@ -404,10 +404,10 @@ export default function PoolsPage() {
                     sortedPools.map((pool, index) => {
                         // Check if this is one of the specific top pools (by address, not just token pair)
                         const poolAddr = pool.address.toLowerCase();
-                        const isTopPool = poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI ||
-                            poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI ||
-                            poolAddr === TOP_POOL_ADDRESSES.WETH_WSEI ||
-                            poolAddr === TOP_POOL_ADDRESSES.WETH_WIND;
+                        const isTopPool = poolAddr === TOP_POOL_ADDRESSES.USDT_USDC ||
+                            poolAddr === TOP_POOL_ADDRESSES.WIND_USDC ||
+                            poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI ||
+                            poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI;
 
                         return (
                             <motion.div
