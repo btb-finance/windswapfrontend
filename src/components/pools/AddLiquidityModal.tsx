@@ -12,7 +12,7 @@ import { TokenSelector } from '@/components/common/TokenSelector';
 import { useLiquidity } from '@/hooks/useLiquidity';
 import { useTokenBalance, useTokenAllowance } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForPoolData, getRpcForUserData } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
 import { GAUGE_LIST } from '@/config/gauges';
@@ -230,7 +230,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 const tickHex = tickSpacing.toString(16).padStart(64, '0');
                 const getPoolData = `0x${getPoolSelector}${token0Padded}${token1Padded}${tickHex}`;
 
-                const poolResponse = await fetch(getPrimaryRpc(), {
+                const poolResponse = await fetch(getRpcForPoolData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -253,7 +253,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                 // Step 2: Fetch slot0 for price
                 const slot0Selector = '3850c7bd';
-                const slot0Response = await fetch(getPrimaryRpc(), {
+                const slot0Response = await fetch(getRpcForPoolData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -408,7 +408,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                         : [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
                 });
 
-                const response = await fetch(getPrimaryRpc(), {
+                const response = await fetch(getRpcForPoolData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -606,7 +606,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
             let poolExists = false;
             try {
-                const poolResult = await fetch(getPrimaryRpc(), {
+                const poolResult = await fetch(getRpcForPoolData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -647,7 +647,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
             // Check token allowances
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
-                const result = await fetch(getPrimaryRpc(), {
+                const result = await fetch(getRpcForPoolData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -708,7 +708,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             let predictedTokenId: bigint | null = null;
             if (autoStake && gaugeAddress) {
                 try {
-                    const totalSupplyResult = await fetch(getPrimaryRpc(), {
+                    const totalSupplyResult = await fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -859,7 +859,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 // Wait for mint transaction to confirm and get the tokenId from logs
                 let tokenId: bigint | null = null;
                 for (let i = 0; i < 30; i++) {
-                    const receipt = await fetch(getPrimaryRpc(), {
+                    const receipt = await fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -920,7 +920,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                         // Wait for NFT approval to confirm
                         let approvalConfirmed = false;
                         for (let i = 0; i < 30; i++) {
-                            const receipt = await fetch(getPrimaryRpc(), {
+                            const receipt = await fetch(getRpcForPoolData(), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1013,7 +1013,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
         try {
             // Check if approval is needed
-            const allowanceResult = await fetch(getPrimaryRpc(), {
+            const allowanceResult = await fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

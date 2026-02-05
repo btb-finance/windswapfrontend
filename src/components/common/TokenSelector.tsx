@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Token, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { useUserBalances } from '@/providers/UserBalanceProvider';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForPoolData } from '@/utils/rpc';
 import { getTokenMetadataFromCache, setTokenMetadataCache } from '@/utils/cache';
 import { useSwipeToDismiss } from '@/hooks/useSwipeToDismiss';
 
@@ -55,7 +55,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
         const decimalsSelector = '0x313ce567';
 
         const [symbolResult, nameResult, decimalsResult] = await Promise.all([
-            fetch(getPrimaryRpc(), {
+            fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -65,7 +65,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
                     id: 1,
                 }),
             }).then(r => r.json()),
-            fetch(getPrimaryRpc(), {
+            fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -75,7 +75,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
                     id: 2,
                 }),
             }).then(r => r.json()),
-            fetch(getPrimaryRpc(), {
+            fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

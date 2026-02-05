@@ -5,7 +5,7 @@ import { formatUnits, Address } from 'viem';
 import { useAccount } from 'wagmi';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
-import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc } from '@/utils/rpc';
+import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc, getRpcForPoolData, getRpcForVoting, getRpcForUserData, getFallbackRpcs } from '@/utils/rpc';
 import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 
 // Goldsky Subgraph URL for pool data (v2.0.0 with user data)
@@ -282,7 +282,7 @@ const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase(
 // ============================================
 // Batch RPC Helper with retry and chunking
 // ============================================
-async function batchRpcCall(calls: { to: string; data: string }[], retries = 2): Promise<string[]> {
+async function batchRpcCall(calls: { to: string; data: string }[], retries = 2, preferredRpc?: string): Promise<string[]> {
     // Split into smaller chunks to avoid rate limits (10 calls per batch)
     const CHUNK_SIZE = 10;
 
@@ -290,7 +290,7 @@ async function batchRpcCall(calls: { to: string; data: string }[], retries = 2):
         const results: string[] = [];
         for (let i = 0; i < calls.length; i += CHUNK_SIZE) {
             const chunk = calls.slice(i, i + CHUNK_SIZE);
-            const chunkResults = await batchRpcCall(chunk, retries);
+            const chunkResults = await batchRpcCall(chunk, retries, preferredRpc);
             results.push(...chunkResults);
         }
         return results;
@@ -303,8 +303,9 @@ async function batchRpcCall(calls: { to: string; data: string }[], retries = 2):
         id: i + 1
     }));
 
-    // Use secondary RPC for batch calls, fallback to primary on retry
-    const rpcs = [getSecondaryRpc(), getPrimaryRpc()];
+    // Use preferred RPC first, then cycle through all others as fallbacks
+    const primary = preferredRpc || getSecondaryRpc();
+    const rpcs = [primary, ...getFallbackRpcs(primary)];
 
     for (let attempt = 0; attempt <= retries; attempt++) {
         const rpcUrl = rpcs[Math.min(attempt, rpcs.length - 1)];
@@ -557,7 +558,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         const priorityCalls = [
                             { to: PRIORITY_GAUGE, data: '0x7b0a47ee' }, // rewardRate()
                         ];
-                        const [rewardRateHex] = await batchRpcCall(priorityCalls);
+                        const [rewardRateHex] = await batchRpcCall(priorityCalls, 2, getRpcForVoting());
 
                         // Update reward rate for priority pool
                         const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
@@ -597,8 +598,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     if (rewardCalls.length > 0) {
                         // Fetch both reward rates and totalSupply in parallel
                         const [rewardResults, supplyResults] = await Promise.all([
-                            batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data }))),
-                            batchRpcCall(supplyCalls.map(c => ({ to: c.to, data: c.data })))
+                            batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting()),
+                            batchRpcCall(supplyCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForPoolData())
                         ]);
 
                         const newRewards = new Map<string, bigint>();
@@ -774,7 +775,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 { to: V2_CONTRACTS.PoolFactory, data: '0xefde4e64' }, // allPoolsLength()
                 { to: CL_CONTRACTS.CLFactory, data: '0xefde4e64' },
             ];
-            const [v2CountHex, clCountHex] = await batchRpcCall(countCalls);
+            const [v2CountHex, clCountHex] = await batchRpcCall(countCalls, 2, getRpcForPoolData());
             const v2Count = Math.min(parseInt(v2CountHex, 16) || 0, 30);
             const clCount = Math.min(parseInt(clCountHex, 16) || 0, 30);
 
@@ -793,7 +794,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 });
             }
 
-            const addressResults = await batchRpcCall(addressCalls);
+            const addressResults = await batchRpcCall(addressCalls, 2, getRpcForPoolData());
             const v2Addresses = addressResults.slice(0, v2Count)
                 .map(r => r.length >= 42 ? `0x${r.slice(-40)}` as Address : null)
                 .filter((addr): addr is Address => addr !== null && addr !== '0x0000000000000000000000000000000000000000');
@@ -820,7 +821,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 detailCalls.push({ to: addr, data: '0x1a686502' }); // liquidity()
             }
 
-            const detailResults = await batchRpcCall(detailCalls);
+            const detailResults = await batchRpcCall(detailCalls, 2, getRpcForPoolData());
 
             // Parse V2 pool details
             const v2Details: { addr: Address; token0: Address; token1: Address; stable: boolean; reserve0: bigint; reserve1: bigint }[] = [];
@@ -862,7 +863,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 tokenCalls.push({ to: addr, data: '0x313ce567' }); // decimals()
             }
 
-            const tokenResults = await batchRpcCall(tokenCalls);
+            const tokenResults = await batchRpcCall(tokenCalls, 2, getRpcForPoolData());
             const newTokenMap = new Map<string, TokenInfo>();
 
             for (let i = 0; i < tokenAddresses.length; i++) {
@@ -959,7 +960,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 data: `0xb9a09fd5${addr.slice(2).padStart(64, '0')}` // gauges(address)
             }));
 
-            const gaugeResults = await batchRpcCall(gaugeCalls);
+            const gaugeResults = await batchRpcCall(gaugeCalls, 2, getRpcForVoting());
             const gaugeAddresses = gaugeResults.map(r => r !== '0x' && r !== '0x' + '0'.repeat(64) ? `0x${r.slice(-40)}` : null);
 
             const rewardCalls = gaugeAddresses
@@ -967,7 +968,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 .filter((c): c is { to: string; data: string; poolAddr: Address } => c !== null);
 
             if (rewardCalls.length > 0) {
-                const rewardResults = await batchRpcCall(rewardCalls);
+                const rewardResults = await batchRpcCall(rewardCalls, 2, getRpcForVoting());
                 const newRewards = new Map<string, bigint>();
                 rewardCalls.forEach((call, i) => {
                     const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
@@ -1009,7 +1010,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 weightCalls.push({ to: V2_CONTRACTS.Voter, data: `0xa7cac846${poolPadded}` }); // weights(pool)
             }
 
-            const weightResults = await batchRpcCall(weightCalls);
+            const weightResults = await batchRpcCall(weightCalls, 2, getRpcForVoting());
             const totalWeight = weightResults[0] !== '0x' ? BigInt(weightResults[0]) : BigInt(0);
             setTotalVoteWeight(totalWeight);
 
@@ -1026,7 +1027,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
             let feeRewardAddresses: (string | null)[] = GAUGE_LIST.map(() => null);
             if (feeRewardCalls.length > 0) {
-                const feeRewardResults = await batchRpcCall(feeRewardCalls.map(c => ({ to: c.to, data: c.data })));
+                const feeRewardResults = await batchRpcCall(feeRewardCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting());
                 feeRewardCalls.forEach((call, i) => {
                     const result = feeRewardResults[i];
                     feeRewardAddresses[call.idx] = result !== '0x' && result !== '0x' + '0'.repeat(64) ? `0x${result.slice(-40)}` : null;
@@ -1076,7 +1077,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             // Fetch fee amounts
             const feeAmounts: Map<number, RewardToken[]> = new Map();
             if (feeAmountCalls.length > 0) {
-                const feeResults = await batchRpcCall(feeAmountCalls.map(c => ({ to: c.to, data: c.data })));
+                const feeResults = await batchRpcCall(feeAmountCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting());
 
                 for (let i = 0; i < feeAmountCalls.length; i++) {
                     const call = feeAmountCalls[i];
@@ -1134,7 +1135,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             data: `0xa7cac846${g.pool.slice(2).padStart(64, '0')}`
                         }))
                     ];
-                    const weightResults = await batchRpcCall(weightCalls);
+                    const weightResults = await batchRpcCall(weightCalls, 2, getRpcForVoting());
                     const totalWeight = weightResults[0] !== '0x' ? BigInt(weightResults[0]) : BigInt(0);
                     setTotalVoteWeight(totalWeight);
                     const gaugeList: GaugeInfo[] = GAUGE_LIST.map((g, i) => {
@@ -1200,8 +1201,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
             for (const g of gaugesWithAddress) {
                 try {
-                // Get staked token IDs for this user
-                const stakedResult = await fetch(getPrimaryRpc(), {
+                // Get staked token IDs for this user (user data → primary RPC)
+                const stakedResult = await fetch(getRpcForUserData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1233,9 +1234,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const tokenId = BigInt('0x' + tokenIdHex);
 
                     // Fetch position details and pending rewards in parallel
+                    // Each call hits a DIFFERENT RPC to spread load
                     const [positionResult, rewardsResult, slot0Result] = await Promise.all([
-                        // positions(tokenId) on NonfungiblePositionManager
-                        fetch(getPrimaryRpc(), {
+                        // positions(tokenId) → secondary RPC (pool data)
+                        fetch(getRpcForPoolData(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1247,8 +1249,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 }, 'latest']
                             })
                         }).then(r => r.json()),
-                        // earned(address, tokenId) on gauge
-                        fetch(getPrimaryRpc(), {
+                        // earned(address, tokenId) → primary RPC (user data)
+                        fetch(getRpcForUserData(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1260,8 +1262,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 }, 'latest']
                             })
                         }).then(r => r.json()),
-                        // slot0() on pool to get current tick
-                        fetch(getPrimaryRpc(), {
+                        // slot0() → archive RPC (pool tick data)
+                        fetch(getRpcForVoting(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1380,8 +1382,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         const nfts: VeNFT[] = [];
 
         try {
-            // Get veNFT count
-            const countResult = await fetch(getPrimaryRpc(), {
+            // Get veNFT count (user data → primary)
+            const countResult = await fetch(getRpcForUserData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1398,7 +1400,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
             for (let i = 0; i < count; i++) {
                 // Get tokenId at index using ownerToNFTokenIdList (0x8bf9d84c)
-                const tokenIdResult = await fetch(getPrimaryRpc(), {
+                const tokenIdResult = await fetch(getRpcForUserData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1414,61 +1416,21 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 if (!tokenIdResult.result) continue;
                 const tokenId = BigInt(tokenIdResult.result);
 
-                // Get locked data using locked(uint256) - selector 0xb45a3c0e
-                const lockedResult = await fetch(getPrimaryRpc(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: V2_CONTRACTS.VotingEscrow,
-                            data: `0xb45a3c0e${tokenId.toString(16).padStart(64, '0')}`
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
+                // Fetch all veNFT details in parallel across different RPCs
+                const rpcCall = (rpc: string, to: string, data: string) =>
+                    fetch(rpc, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] })
+                    }).then(r => r.json());
 
-                // Get voting power using balanceOfNFT(uint256) - selector 0xe7e242d4
-                const vpResult = await fetch(getPrimaryRpc(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: V2_CONTRACTS.VotingEscrow,
-                            data: `0xe7e242d4${tokenId.toString(16).padStart(64, '0')}`
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
-
-                // Get claimable rebases - claimable(uint256) selector 0xd1d58b25
-                const claimableResult = await fetch(getPrimaryRpc(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: V2_CONTRACTS.RewardsDistributor,
-                            data: `0xd1d58b25${tokenId.toString(16).padStart(64, '0')}`
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
-
-                // Get voted status - voted(uint256) selector 0x8fbb38ff
-                const votedResult = await fetch(getPrimaryRpc(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: V2_CONTRACTS.VotingEscrow,
-                            data: `0x8fbb38ff${tokenId.toString(16).padStart(64, '0')}`
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
+                const tokenIdHex = tokenId.toString(16).padStart(64, '0');
+                const [lockedResult, vpResult, claimableResult, votedResult] = await Promise.all([
+                    rpcCall(getRpcForUserData(), V2_CONTRACTS.VotingEscrow, `0xb45a3c0e${tokenIdHex}`),
+                    rpcCall(getRpcForPoolData(), V2_CONTRACTS.VotingEscrow, `0xe7e242d4${tokenIdHex}`),
+                    rpcCall(getRpcForVoting(), V2_CONTRACTS.RewardsDistributor, `0xd1d58b25${tokenIdHex}`),
+                    rpcCall(getRpcForVoting(), V2_CONTRACTS.VotingEscrow, `0x8fbb38ff${tokenIdHex}`),
+                ]);
 
                 if (lockedResult.result) {
                     const data = lockedResult.result.slice(2);

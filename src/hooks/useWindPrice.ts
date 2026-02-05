@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForPoolData } from '@/utils/rpc';
 
 // Pool addresses for price discovery
 const WIND_USDC_POOL = '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0'; // WIND/USDC
@@ -37,7 +37,7 @@ export function useWindPrice() {
         const fetchPrices = async () => {
             try {
                 // Batch fetch both pools' slot0
-                const response = await fetch(getPrimaryRpc(), {
+                const response = await fetch(getRpcForPoolData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify([

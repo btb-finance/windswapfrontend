@@ -7,7 +7,7 @@ import { useWriteContract } from '@/hooks/useWriteContract';
 import { Address } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, Token } from '@/config/tokens';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForVoting } from '@/utils/rpc';
 
 // Admin ABIs
 const VOTER_ABI = [
@@ -422,7 +422,7 @@ export default function AdminPage() {
         try {
             // Auto-detect the pool's factory by calling pool.factory()
             // This ensures we use the correct factory (CLFactory vs PoolFactory)
-            const factoryResult = await fetch(getPrimaryRpc(), {
+            const factoryResult = await fetch(getRpcForVoting(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -458,7 +458,7 @@ export default function AdminPage() {
         if (!poolAddress) return;
         setError(null);
         try {
-            const gaugeResult = await fetch(getPrimaryRpc(), {
+            const gaugeResult = await fetch(getRpcForVoting(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
