@@ -1123,6 +1123,42 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             setGauges(gaugeList);
         } catch (err) {
             console.error('[PoolDataProvider] Gauge fetch error:', err);
+            // Retry once after 3 seconds if gauges failed to load
+            setTimeout(async () => {
+                try {
+                    const { GAUGE_LIST } = await import('@/config/gauges');
+                    const weightCalls = [
+                        { to: V2_CONTRACTS.Voter, data: '0x96c82e57' },
+                        ...GAUGE_LIST.map(g => ({
+                            to: V2_CONTRACTS.Voter,
+                            data: `0xa7cac846${g.pool.slice(2).padStart(64, '0')}`
+                        }))
+                    ];
+                    const weightResults = await batchRpcCall(weightCalls);
+                    const totalWeight = weightResults[0] !== '0x' ? BigInt(weightResults[0]) : BigInt(0);
+                    setTotalVoteWeight(totalWeight);
+                    const gaugeList: GaugeInfo[] = GAUGE_LIST.map((g, i) => {
+                        const weight = weightResults[i + 1] !== '0x' ? BigInt(weightResults[i + 1]) : BigInt(0);
+                        const weightPercent = totalWeight > BigInt(0) ? Number((weight * BigInt(10000)) / totalWeight) / 100 : 0;
+                        return {
+                            pool: g.pool as Address, gauge: g.gauge as Address,
+                            token0: g.token0 as Address, token1: g.token1 as Address,
+                            symbol0: g.symbol0, symbol1: g.symbol1,
+                            poolType: g.type, isStable: false, weight, weightPercent,
+                            isAlive: g.isAlive,
+                            feeReward: '0x0000000000000000000000000000000000000000' as Address,
+                            bribeReward: '0x0000000000000000000000000000000000000000' as Address,
+                            rewardTokens: [],
+                        };
+                    });
+                    setGauges(gaugeList);
+                    console.log('[PoolDataProvider] Gauge retry succeeded with basic data');
+                } catch (retryErr) {
+                    console.error('[PoolDataProvider] Gauge retry also failed:', retryErr);
+                }
+                setGaugesLoading(false);
+            }, 3000);
+            return;
         }
         setGaugesLoading(false);
     }, []);
@@ -1163,6 +1199,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             const gaugesWithAddress = GAUGE_LIST.filter(g => g.gauge && g.gauge !== '');
 
             for (const g of gaugesWithAddress) {
+                try {
                 // Get staked token IDs for this user
                 const stakedResult = await fetch(getPrimaryRpc(), {
                     method: 'POST',
@@ -1191,6 +1228,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const length = parseInt(data.slice(64, 128), 16);
 
                 for (let j = 0; j < length; j++) {
+                    try {
                     const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
                     const tokenId = BigInt('0x' + tokenIdHex);
 
@@ -1274,6 +1312,16 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
                     const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
 
+                    // Safely parse pending rewards - handle "0x" and invalid results
+                    let pendingRewards = BigInt(0);
+                    try {
+                        if (rewardsResult.result && rewardsResult.result !== '0x' && rewardsResult.result.length > 2) {
+                            pendingRewards = BigInt(rewardsResult.result);
+                        }
+                    } catch {
+                        pendingRewards = BigInt(0);
+                    }
+
                     positions.push({
                         tokenId,
                         gaugeAddress: g.gauge,
@@ -1289,9 +1337,15 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         tickUpper,
                         currentTick,
                         liquidity,
-                        pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
+                        pendingRewards,
                         rewardRate: BigInt(0),
                     });
+                    } catch (posErr) {
+                        console.error(`[PoolDataProvider] Error fetching staked position in gauge ${g.gauge}:`, posErr);
+                    }
+                }
+                } catch (gaugeErr) {
+                    console.error(`[PoolDataProvider] Error processing gauge ${g.gauge}:`, gaugeErr);
                 }
             }
         } catch (err) {

@@ -1087,6 +1087,11 @@ export default function VotePage() {
                                 title="Connect Your Wallet"
                                 description="Connect your wallet to vote on pool rewards"
                             />
+                        ) : isLoadingGauges && gauges.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400 text-sm">
+                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                Loading pools...
+                            </div>
                         ) : gauges.length === 0 ? (
                             <EmptyState
                                 icon=""
