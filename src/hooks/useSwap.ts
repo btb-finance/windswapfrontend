@@ -7,7 +7,7 @@ import { parseUnits, formatUnits, Address, maxUint256, encodeFunctionData, decod
 import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 import { Token, WSEI } from '@/config/tokens';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForQuotes } from '@/utils/rpc';
 import { swrCache, dedupeRequest, getQuoteCacheKey } from '@/utils/cache';
 
 interface Route {
@@ -68,7 +68,7 @@ export function useSwap() {
                             args: [amountInWei, route],
                         });
 
-                        const response = await fetch(getPrimaryRpc(), {
+                        const response = await fetch(getRpcForQuotes(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -151,7 +151,7 @@ export function useSwap() {
                             args: [amountOutWei, route],
                         });
 
-                        const response = await fetch(getPrimaryRpc(), {
+                        const response = await fetch(getRpcForQuotes(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({

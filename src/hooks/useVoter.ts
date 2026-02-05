@@ -7,7 +7,7 @@ import { Address, parseUnits } from 'viem';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { usePoolData, GaugeInfo, RewardToken } from '@/providers/PoolDataProvider';
 import { VOTER_EXTENDED_ABI, BRIBE_VOTING_REWARD_ABI, ERC20_ABI } from '@/config/abis';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForVoting } from '@/utils/rpc';
 
 // Re-export types for backward compatibility
 export type { GaugeInfo, RewardToken };
@@ -84,7 +84,7 @@ export function useVoter() {
                 id: 'lastVoted',
             });
 
-            const response = await fetch(getPrimaryRpc(), {
+            const response = await fetch(getRpcForVoting(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(calls),
@@ -125,7 +125,7 @@ export function useVoter() {
     // Get bribe contract address for a gauge
     const getBribeAddress = useCallback(async (gaugeAddress: string): Promise<string | null> => {
         try {
-            const response = await fetch(getPrimaryRpc(), {
+            const response = await fetch(getRpcForVoting(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -159,7 +159,7 @@ export function useVoter() {
         setError(null);
         try {
             // Get gauge address for pool
-            const gaugeResponse = await fetch(getPrimaryRpc(), {
+            const gaugeResponse = await fetch(getRpcForVoting(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

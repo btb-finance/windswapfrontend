@@ -12,6 +12,7 @@ import { useVoter } from '@/hooks/useVoter';
 import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { getTokenLogo } from '@/utils/tokens';
 import { V2_CONTRACTS } from '@/config/contracts';
+import { getRpcForVoting } from '@/utils/rpc';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
@@ -226,7 +227,7 @@ export default function VotePage() {
             }));
 
             // Execute batch RPC call
-            const response = await fetch('https://evm-rpc.sei-apis.com', {
+            const response = await fetch(getRpcForVoting(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(rpcCalls.map((call, i) => ({

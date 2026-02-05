@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { parseUnits, formatUnits } from 'viem';
 import { Token, WSEI, USDC, WIND } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForQuotes } from '@/utils/rpc';
 
 // Common intermediate tokens for routing
 const INTERMEDIATE_TOKENS = [WSEI, USDC, WIND];
@@ -76,7 +76,7 @@ export function useMixedRouteQuoter() {
         }));
 
         try {
-            const response = await fetch(getPrimaryRpc(), {
+            const response = await fetch(getRpcForQuotes(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(batchBody)

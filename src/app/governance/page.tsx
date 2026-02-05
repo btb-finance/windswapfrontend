@@ -9,6 +9,7 @@ import { useVeWIND } from '@/hooks/useVeWIND';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { GAUGE_LIST } from '@/config/gauges';
+import { getRpcForVoting } from '@/utils/rpc';
 
 type ProposalType = 'whitelist' | 'gauge' | 'setGovernor';
 
@@ -103,7 +104,7 @@ export default function GovernancePage() {
 
             // Auto-detect factory from pool by calling pool.factory()
             try {
-                const response = await fetch('https://evm-rpc.sei-apis.com', {
+                const response = await fetch(getRpcForVoting(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

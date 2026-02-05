@@ -1,5 +1,5 @@
 'use client';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForQuotes } from '@/utils/rpc';
 
 import { useState, useCallback } from 'react';
 import { useAccount } from 'wagmi';
@@ -47,7 +47,7 @@ export function useSwapV3() {
                 : [tokenOut, tokenIn];
 
             // Call CLFactory.getPool
-            const response = await fetch(getPrimaryRpc(), {
+            const response = await fetch(getRpcForQuotes(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -112,7 +112,7 @@ export function useSwapV3() {
                         }],
                     });
 
-                    const response = await fetch(getPrimaryRpc(), {
+                    const response = await fetch(getRpcForQuotes(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -198,7 +198,7 @@ export function useSwapV3() {
                         }],
                     });
 
-                    const response = await fetch(getPrimaryRpc(), {
+                    const response = await fetch(getRpcForQuotes(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

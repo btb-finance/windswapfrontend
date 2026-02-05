@@ -14,7 +14,7 @@ import { formatPrice } from '@/utils/format';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForPoolData, getRpcForUserData, getRpcForVoting } from '@/utils/rpc';
 import { useToast } from '@/providers/ToastProvider';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
@@ -303,7 +303,7 @@ export default function PortfolioPage() {
                             ? pos.tickSpacing.toString(16).padStart(64, '0')
                             : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(pos.tickSpacing) + BigInt(1)).toString(16);
 
-                        const poolRes = await fetch(getPrimaryRpc(), {
+                        const poolRes = await fetch(getRpcForPoolData(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -319,7 +319,7 @@ export default function PortfolioPage() {
 
                             // Get slot0 for current tick
                             const slot0Selector = '0x3850c7bd';
-                            const slot0Res = await fetch(getPrimaryRpc(), {
+                            const slot0Res = await fetch(getRpcForPoolData(), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -382,7 +382,7 @@ export default function PortfolioPage() {
                 console.log('Fetching for position tokens:', selectedPosition.token0, selectedPosition.token1);
 
                 const [bal0Response, bal1Response, slot0Response] = await Promise.all([
-                    fetch(getPrimaryRpc(), {
+                    fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -392,7 +392,7 @@ export default function PortfolioPage() {
                             id: 1,
                         }),
                     }).then(r => r.json()),
-                    fetch(getPrimaryRpc(), {
+                    fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -415,7 +415,7 @@ export default function PortfolioPage() {
                         const token1Padded = token1.slice(2).padStart(64, '0');
                         const tickPadded = tickSpacing.toString(16).padStart(64, '0');
 
-                        const poolRes = await fetch(getPrimaryRpc(), {
+                        const poolRes = await fetch(getRpcForPoolData(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -428,7 +428,7 @@ export default function PortfolioPage() {
 
                         if (poolRes.result && poolRes.result !== '0x' + '0'.repeat(64)) {
                             const poolAddress = '0x' + poolRes.result.slice(-40);
-                            const slot0Res = await fetch(getPrimaryRpc(), {
+                            const slot0Res = await fetch(getRpcForPoolData(), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -454,7 +454,7 @@ export default function PortfolioPage() {
 
                 // For WSEI, fetch native SEI balance instead
                 if (isToken0WSEI) {
-                    const nativeBal = await fetch(getPrimaryRpc(), {
+                    const nativeBal = await fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -478,7 +478,7 @@ export default function PortfolioPage() {
                 }
 
                 if (isToken1WSEI) {
-                    const nativeBal = await fetch(getPrimaryRpc(), {
+                    const nativeBal = await fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -727,7 +727,7 @@ export default function PortfolioPage() {
                 ? position.tickSpacing.toString(16).padStart(64, '0')
                 : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(position.tickSpacing) + BigInt(1)).toString(16);
 
-            const poolResult = await fetch(getPrimaryRpc(), {
+            const poolResult = await fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -746,7 +746,7 @@ export default function PortfolioPage() {
             const poolAddress = '0x' + poolResult.result.slice(-40);
 
             // Get gauge address from Voter
-            const gaugeResult = await fetch(getPrimaryRpc(), {
+            const gaugeResult = await fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -769,7 +769,7 @@ export default function PortfolioPage() {
             const getApprovedSelector = '0x081812fc'; // getApproved(uint256)
             const tokenIdHex = position.tokenId.toString(16).padStart(64, '0');
 
-            const approvedResult = await fetch(getPrimaryRpc(), {
+            const approvedResult = await fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -798,7 +798,7 @@ export default function PortfolioPage() {
                 // Poll for tx receipt
                 let confirmed = false;
                 for (let i = 0; i < 30; i++) { // Wait up to 30 seconds
-                    const receipt = await fetch(getPrimaryRpc(), {
+                    const receipt = await fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -1062,7 +1062,7 @@ export default function PortfolioPage() {
             const ownerPadded = address.slice(2).toLowerCase().padStart(64, '0');
             const spenderPadded = V2_CONTRACTS.Router.slice(2).toLowerCase().padStart(64, '0');
 
-            const allowanceResult = await fetch(getPrimaryRpc(), {
+            const allowanceResult = await fetch(getRpcForPoolData(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1123,7 +1123,7 @@ export default function PortfolioPage() {
                     // Wait for approval to confirm
                     let confirmed = false;
                     for (let i = 0; i < 30; i++) {
-                        const receipt = await fetch(getPrimaryRpc(), {
+                        const receipt = await fetch(getRpcForPoolData(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1233,7 +1233,7 @@ export default function PortfolioPage() {
 
             // Helper to check allowance
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
-                const result = await fetch(getPrimaryRpc(), {
+                const result = await fetch(getRpcForPoolData(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

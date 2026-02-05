@@ -5,7 +5,7 @@ import { Address, formatUnits } from 'viem';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, POOL_FACTORY_ABI, POOL_ABI } from '@/config/abis';
 import { useState, useEffect, useCallback } from 'react';
-import { getPrimaryRpc } from '@/utils/rpc';
+import { getRpcForUserData } from '@/utils/rpc';
 
 export interface CLPosition {
     tokenId: bigint;
@@ -194,7 +194,7 @@ function decodeCollectResult(data: string): { amount0: bigint; amount1: bigint }
 
 // Fetch a single position by owner index (with retry logic)
 async function fetchPositionByIndex(owner: string, index: number, retries = 3): Promise<CLPosition | null> {
-    const rpcUrl = getPrimaryRpc();
+    const rpcUrl = getRpcForUserData();
 
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
