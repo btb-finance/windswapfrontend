@@ -7,7 +7,7 @@ import { Address, parseUnits } from 'viem';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { usePoolData, GaugeInfo, RewardToken } from '@/providers/PoolDataProvider';
 import { VOTER_EXTENDED_ABI, BRIBE_VOTING_REWARD_ABI, ERC20_ABI } from '@/config/abis';
-import { getRpcForVoting } from '@/utils/rpc';
+import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 
 // Re-export types for backward compatibility
 export type { GaugeInfo, RewardToken };
@@ -43,111 +43,55 @@ export function useVoter() {
     const { address, isConnected } = useAccount();
     const [error, setError] = useState<string | null>(null);
     const [existingVotes, setExistingVotes] = useState<Record<string, bigint>>({});
-    const [lastVotedTimestamp, setLastVotedTimestamp] = useState<bigint | null>(null);
 
     const { writeContractAsync } = useWriteContract();
 
     // Get gauge data from global provider (instant!)
-    const { gauges, totalVoteWeight, gaugesLoading, refetch } = usePoolData();
+    const { gauges, totalVoteWeight, epochCount, gaugesLoading, refetch } = usePoolData();
+
+    const fetchGraphQL = useCallback(async <T,>(query: string, variables: Record<string, any>): Promise<T> => {
+        const response = await fetch(SUBGRAPH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, variables }),
+        });
+        const json = await response.json();
+        if (json.errors) {
+            throw new Error(json.errors[0]?.message || 'Subgraph error');
+        }
+        return json.data;
+    }, []);
 
     // Fetch existing votes for a veNFT across all pools
     const fetchExistingVotes = useCallback(async (tokenId: bigint) => {
-        if (!tokenId || gauges.length === 0) return;
-
-        console.log('Fetching existing votes for tokenId:', tokenId.toString(), 'gauges:', gauges.length);
+        if (!tokenId) return;
+        if (epochCount === BigInt(0)) return;
 
         try {
-            // votes(uint256,address) selector = 0xd23254b4
-            const calls: Array<{
-                jsonrpc: '2.0';
-                method: 'eth_call';
-                params: [{ to: string; data: string }, 'latest'];
-                id: string | number;
-            }> = gauges.map(gauge => ({
-                jsonrpc: '2.0' as const,
-                method: 'eth_call' as const,
-                params: [{
-                    to: V2_CONTRACTS.Voter,
-                    data: `0xd23254b4${tokenId.toString(16).padStart(64, '0')}${gauge.pool.slice(2).toLowerCase().padStart(64, '0')}`
-                }, 'latest' as const],
-                id: gauge.pool,
-            }));
+            const query = `query ExistingVotes($tokenId: ID!, $epoch: BigInt!) {
+                veVotes(where: { veNFT: $tokenId, epoch: $epoch, isActive: true }, first: 500) {
+                    pool { id }
+                    weight
+                }
+            }`;
 
-            // lastVoted(uint256) selector = 0xf3594be0
-            calls.push({
-                jsonrpc: '2.0' as const,
-                method: 'eth_call' as const,
-                params: [{
-                    to: V2_CONTRACTS.Voter,
-                    data: `0xf3594be0${tokenId.toString(16).padStart(64, '0')}`
-                }, 'latest' as const],
-                id: 'lastVoted',
+            const data = await fetchGraphQL<{ veVotes: Array<{ pool: { id: string }; weight: string }> }>(query, {
+                tokenId: tokenId.toString(),
+                epoch: epochCount.toString(),
             });
-
-            const response = await fetch(getRpcForVoting(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(calls),
-            });
-
-            const results = await response.json();
-            console.log('Vote fetch results:', results);
 
             const votesMap: Record<string, bigint> = {};
-            for (const result of results) {
-                if (result.id === 'lastVoted') {
-                    if (result.result && result.result !== '0x') {
-                        setLastVotedTimestamp(BigInt(result.result));
-                        console.log('Last voted timestamp:', BigInt(result.result).toString());
-                    }
-                } else if (result.result && result.result !== '0x' && result.result !== '0x' + '0'.repeat(64)) {
-                    votesMap[result.id.toLowerCase()] = BigInt(result.result);
-                    console.log('Found vote for pool:', result.id, 'weight:', BigInt(result.result).toString());
-                }
+            for (const v of data.veVotes || []) {
+                const poolId = String(v.pool?.id || '').toLowerCase();
+                if (!poolId) continue;
+                const w = v.weight ? BigInt(v.weight) : BigInt(0);
+                if (w > BigInt(0)) votesMap[poolId] = w;
             }
-
-            console.log('Final votesMap:', votesMap);
             setExistingVotes(votesMap);
         } catch (err) {
-            console.error('Error fetching existing votes:', err);
+            console.error('Error fetching existing votes (subgraph):', err);
         }
-    }, [gauges]);
-
-    // Check if veNFT has voted this epoch
-    const hasVotedThisEpoch = useCallback((tokenId: bigint): boolean => {
-        if (!lastVotedTimestamp) return false;
-        // Epoch is 7 days, starts on Thursday 00:00 UTC
-        const WEEK = BigInt(7 * 24 * 60 * 60);
-        const currentEpochStart = (BigInt(Math.floor(Date.now() / 1000)) / WEEK) * WEEK;
-        return lastVotedTimestamp >= currentEpochStart;
-    }, [lastVotedTimestamp]);
-
-    // Get bribe contract address for a gauge
-    const getBribeAddress = useCallback(async (gaugeAddress: string): Promise<string | null> => {
-        try {
-            const response = await fetch(getRpcForVoting(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'eth_call',
-                    params: [{
-                        to: V2_CONTRACTS.Voter,
-                        data: `0x929c8dcd${gaugeAddress.slice(2).padStart(64, '0')}`
-                    }, 'latest'],
-                    id: 1,
-                }),
-            });
-            const result = await response.json();
-            if (result.result && result.result !== '0x' && result.result !== '0x' + '0'.repeat(64)) {
-                return '0x' + result.result.slice(-40);
-            }
-            return null;
-        } catch (err) {
-            console.error('Error getting bribe address:', err);
-            return null;
-        }
-    }, []);
+    }, [epochCount, fetchGraphQL]);
 
     // Add incentive (bribe) to a pool
     const addIncentive = useCallback(async (
@@ -158,28 +102,8 @@ export function useVoter() {
     ) => {
         setError(null);
         try {
-            // Get gauge address for pool
-            const gaugeResponse = await fetch(getRpcForVoting(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'eth_call',
-                    params: [{
-                        to: V2_CONTRACTS.Voter,
-                        data: `0xb9a09fd5${poolAddress.slice(2).padStart(64, '0')}`
-                    }, 'latest'],
-                    id: 1,
-                }),
-            });
-            const gaugeResult = await gaugeResponse.json();
-            if (!gaugeResult.result || gaugeResult.result === '0x' + '0'.repeat(64)) {
-                throw new Error('No gauge found for this pool');
-            }
-            const gaugeAddress = '0x' + gaugeResult.result.slice(-40);
-
-            // Get bribe address
-            const bribeAddress = await getBribeAddress(gaugeAddress);
+            const gauge = gauges.find(g => g.pool.toLowerCase() === poolAddress.toLowerCase());
+            const bribeAddress = gauge?.bribeReward;
             if (!bribeAddress) {
                 throw new Error('No bribe contract found for this gauge');
             }
@@ -210,7 +134,7 @@ export function useVoter() {
             setError(err.message || 'Failed to add incentive');
             return null;
         }
-    }, [writeContractAsync, getBribeAddress, refetch]);
+    }, [gauges, writeContractAsync, refetch]);
 
     // Vote function
     const vote = async (tokenId: bigint, poolVotes: { pool: Address; weight: number }[]) => {
@@ -257,7 +181,6 @@ export function useVoter() {
             await refetch();
             // Clear existing votes
             setExistingVotes({});
-            setLastVotedTimestamp(null);
 
             return { hash };
         } catch (err: any) {
@@ -277,11 +200,8 @@ export function useVoter() {
         refetch,
         // New functions
         existingVotes,
-        lastVotedTimestamp,
         fetchExistingVotes,
-        hasVotedThisEpoch,
         addIncentive,
-        getBribeAddress,
     };
 }
 

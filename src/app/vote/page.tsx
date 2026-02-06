@@ -12,30 +12,13 @@ import { useVoter } from '@/hooks/useVoter';
 import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { getTokenLogo } from '@/utils/tokens';
 import { V2_CONTRACTS } from '@/config/contracts';
-import { getRpcForVoting } from '@/utils/rpc';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
+import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
+import { usePoolData } from '@/providers/PoolDataProvider';
 
 
-
-// Minter ABI for epoch info
-const MINTER_ABI = [
-    {
-        inputs: [],
-        name: 'activePeriod',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'epochCount',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
 
 // Voter ABI for distribute (permissionless!)
 const VOTER_DISTRIBUTE_ABI = [
@@ -116,20 +99,9 @@ export default function VotePage() {
         addIncentive,
     } = useVoter();
 
+    const { activePeriod, epochCount } = usePoolData();
+
     const { balance: windBalance, raw: rawWindBalance, formatted: formattedWindBalance } = useTokenBalance(WIND);
-
-    // Read epoch info from Minter
-    const { data: activePeriod } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'activePeriod',
-    });
-
-    const { data: epochCount } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'epochCount',
-    });
 
     // Calculate epoch times
     const epochStartDate = activePeriod ? new Date(Number(activePeriod) * 1000) : null;
@@ -173,98 +145,53 @@ export default function VotePage() {
         },
     ] as const;
 
-    // Fetch claimable voting rewards for all veNFTs using batch RPC
+    // Fetch claimable voting rewards for all veNFTs from subgraph (VotingRewardBalance)
     const fetchVotingRewards = useCallback(async () => {
-        if (positions.length === 0 || gauges.length === 0) return;
+        if (positions.length === 0) return;
+        if (!epochCount || epochCount === BigInt(0)) return;
 
         setIsLoadingVotingRewards(true);
         try {
-            // Build all earned() calls upfront
-            interface EarnedCall {
-                tokenId: string;
-                pool: string;
-                token: string;
-                feeReward: string;
-            }
-            const calls: EarnedCall[] = [];
-
-            for (const position of positions) {
-                for (const gauge of gauges) {
-                    if (!gauge.feeReward || gauge.feeReward === '0x0000000000000000000000000000000000000000') continue;
-
-                    // Add call for token0 and token1
-                    calls.push({
-                        tokenId: position.tokenId.toString(),
-                        pool: gauge.pool,
-                        token: gauge.token0,
-                        feeReward: gauge.feeReward,
-                    });
-                    calls.push({
-                        tokenId: position.tokenId.toString(),
-                        pool: gauge.pool,
-                        token: gauge.token1,
-                        feeReward: gauge.feeReward,
-                    });
+            const tokenIds = positions.map(p => p.tokenId.toString());
+            const query = `query VotingRewards($tokenIds: [ID!], $epoch: BigInt!) {
+                votingRewardBalances(where: { veNFT_in: $tokenIds, epoch: $epoch }, first: 2000) {
+                    amount
+                    veNFT { id }
+                    gauge { pool { id } }
+                    token { id }
                 }
-            }
+            }`;
 
-            if (calls.length === 0) {
-                setVotingRewards({});
-                setIsLoadingVotingRewards(false);
-                return;
-            }
-
-            // Encode earned(token, tokenId) calls
-            const earnedSelector = '0x3e491d47'; // earned(address,uint256)
-            const rpcCalls = calls.map(call => ({
-                method: 'eth_call',
-                params: [{
-                    to: call.feeReward,
-                    data: earnedSelector +
-                        call.token.slice(2).padStart(64, '0') +
-                        BigInt(call.tokenId).toString(16).padStart(64, '0')
-                }, 'latest']
-            }));
-
-            // Execute batch RPC call
-            const response = await fetch(getRpcForVoting(), {
+            const response = await fetch(SUBGRAPH_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(rpcCalls.map((call, i) => ({
-                    jsonrpc: '2.0',
-                    method: call.method,
-                    params: call.params,
-                    id: i + 1,
-                }))),
+                body: JSON.stringify({ query, variables: { tokenIds, epoch: epochCount.toString() } }),
             });
+            const json = await response.json();
+            if (json.errors) throw new Error(json.errors[0]?.message || 'Subgraph error');
 
-            const results = await response.json();
-            const earnedResults = Array.isArray(results) ? results.map(r => r.result || '0x0') : [];
-
-            // Parse results into votingRewards structure
+            const rows: Array<any> = json.data?.votingRewardBalances || [];
             const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
 
-            earnedResults.forEach((result, idx) => {
-                const call = calls[idx];
-                if (!call) return;
+            for (const r of rows) {
+                const tokenId = String(r.veNFT?.id || '');
+                const poolId = String(r.gauge?.pool?.id || '').toLowerCase();
+                const tokenAddr = String(r.token?.id || '').toLowerCase();
+                const amt = r.amount ? BigInt(r.amount) : BigInt(0);
+                if (!tokenId || !poolId || !tokenAddr) continue;
+                if (amt <= BigInt(0)) continue;
 
-                const earned = result && result !== '0x' && result.length > 2
-                    ? BigInt(result)
-                    : BigInt(0);
-
-                if (earned > BigInt(0)) {
-                    if (!newRewards[call.tokenId]) newRewards[call.tokenId] = {};
-                    if (!newRewards[call.tokenId][call.pool]) newRewards[call.tokenId][call.pool] = {};
-                    newRewards[call.tokenId][call.pool][call.token] = earned;
-                }
-            });
+                if (!newRewards[tokenId]) newRewards[tokenId] = {};
+                if (!newRewards[tokenId][poolId]) newRewards[tokenId][poolId] = {};
+                newRewards[tokenId][poolId][tokenAddr] = amt;
+            }
 
             setVotingRewards(newRewards);
         } catch (err) {
-            console.error('Error fetching voting rewards:', err);
+            console.error('Error fetching voting rewards (subgraph):', err);
         }
         setIsLoadingVotingRewards(false);
-    }, [positions, gauges]);
+    }, [positions, epochCount]);
 
     // Fetch voting rewards when positions or gauges change
     useEffect(() => {

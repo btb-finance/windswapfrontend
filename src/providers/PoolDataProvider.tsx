@@ -156,6 +156,8 @@ interface PoolDataContextType {
     // Gauge/Voting data
     gauges: GaugeInfo[];
     totalVoteWeight: bigint;
+    epochCount: bigint;
+    activePeriod: bigint;
     gaugesLoading: boolean;
     // Staked positions (prefetched for portfolio)
     stakedPositions: StakedPosition[];
@@ -310,6 +312,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     // Gauge/Voting state
     const [gauges, setGauges] = useState<GaugeInfo[]>([]);
     const [totalVoteWeight, setTotalVoteWeight] = useState<bigint>(BigInt(0));
+    const [epochCount, setEpochCount] = useState<bigint>(BigInt(0));
+    const [activePeriod, setActivePeriod] = useState<bigint>(BigInt(0));
     const [gaugesLoading, setGaugesLoading] = useState(true);
 
     // ============================================
@@ -731,7 +735,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 .filter((c): c is { to: string; data: string; poolAddr: Address } => c !== null);
 
             if (rewardCalls.length > 0) {
-                const rewardResults = await batchRpcCall(rewardCalls, 2, getRpcForVoting());
+                const rewardResults = await batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting());
                 const newRewards = new Map<string, bigint>();
                 rewardCalls.forEach((call, i) => {
                     const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
@@ -756,215 +760,105 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Fetch gauge data using static GAUGE_LIST + live weights + fee rewards
+    // Fetch gauge/voting data from Goldsky subgraph (read-only)
     const fetchGaugeData = useCallback(async (_tokenMap: Map<string, TokenInfo>) => {
         try {
-            // Import static gauge config
-            const { GAUGE_LIST } = await import('@/config/gauges');
-
-            // Get total weight and individual weights from Voter
-            const weightCalls: { to: string; data: string }[] = [
-                { to: V2_CONTRACTS.Voter, data: '0x96c82e57' }, // totalWeight()
-            ];
-
-            // Add weight call for each gauge's pool
-            for (const g of GAUGE_LIST) {
-                const poolPadded = g.pool.slice(2).padStart(64, '0');
-                weightCalls.push({ to: V2_CONTRACTS.Voter, data: `0xa7cac846${poolPadded}` }); // weights(pool)
-            }
-
-            const weightResults = await batchRpcCall(weightCalls, 2, getRpcForVoting());
-            const totalWeight = weightResults[0] !== '0x' ? BigInt(weightResults[0]) : BigInt(0);
-            setTotalVoteWeight(totalWeight);
-
-            // Step 2: Get FeesVotingReward addresses directly from each gauge
-            // Works for both V2 and CL gauges - they have feesVotingReward() getter
-            // Skip pools without gauges
-            const gaugesWithAddress = GAUGE_LIST.map((g, i) => ({ ...g, idx: i })).filter(g => g.gauge && g.gauge.length > 0);
-
-            const feeRewardCalls = gaugesWithAddress.map(g => ({
-                to: g.gauge,
-                data: '0x0fe2f711', // feesVotingReward() selector
-                idx: g.idx
-            }));
-
-            let feeRewardAddresses: (string | null)[] = GAUGE_LIST.map(() => null);
-            if (feeRewardCalls.length > 0) {
-                const feeRewardResults = await batchRpcCall(feeRewardCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting());
-                feeRewardCalls.forEach((call, i) => {
-                    const result = feeRewardResults[i];
-                    feeRewardAddresses[call.idx] = result !== '0x' && result !== '0x' + '0'.repeat(64) ? `0x${result.slice(-40)}` : null;
-                });
-            }
-
-            // Fee reward addresses loaded
-
-            // Step 3: Calculate current epoch start (Thursday 00:00 UTC)
-            const EPOCH_DURATION = 604800; // 7 days in seconds
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const currentEpochStart = Math.floor(currentTimestamp / EPOCH_DURATION) * EPOCH_DURATION;
-            const previousEpochStart = currentEpochStart - EPOCH_DURATION;
-            const currentEpochHex = currentEpochStart.toString(16).padStart(64, '0');
-            const previousEpochHex = previousEpochStart.toString(16).padStart(64, '0');
-
-            // Step 4: For each fee reward contract, get the reward amounts for token0 and token1
-            // Query BOTH current and previous epoch - show current if fees exist, otherwise show previous
-            const feeAmountCalls: { to: string; data: string; gaugeIdx: number; tokenAddr: string; symbol: string; decimals: number; epoch: 'current' | 'previous' }[] = [];
-
-            for (let i = 0; i < GAUGE_LIST.length; i++) {
-                const feeRewardAddr = feeRewardAddresses[i];
-                if (!feeRewardAddr) continue;
-
-                const g = GAUGE_LIST[i];
-                const token0Padded = g.token0.slice(2).padStart(64, '0');
-                const token1Padded = g.token1.slice(2).padStart(64, '0');
-                const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
-                const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
-
-                // tokenRewardsPerEpoch(token, epochStart) - selector: 0x92777b29
-                // Query current epoch
-                feeAmountCalls.push({
-                    to: feeRewardAddr,
-                    data: `0x92777b29${token0Padded}${currentEpochHex}`,
-                    gaugeIdx: i,
-                    tokenAddr: g.token0,
-                    symbol: known0?.symbol || g.symbol0,
-                    decimals: known0?.decimals || 18,
-                    epoch: 'current',
-                });
-                feeAmountCalls.push({
-                    to: feeRewardAddr,
-                    data: `0x92777b29${token1Padded}${currentEpochHex}`,
-                    gaugeIdx: i,
-                    tokenAddr: g.token1,
-                    symbol: known1?.symbol || g.symbol1,
-                    decimals: known1?.decimals || 18,
-                    epoch: 'current',
-                });
-                // Query previous epoch (fallback if current has no fees yet)
-                feeAmountCalls.push({
-                    to: feeRewardAddr,
-                    data: `0x92777b29${token0Padded}${previousEpochHex}`,
-                    gaugeIdx: i,
-                    tokenAddr: g.token0,
-                    symbol: known0?.symbol || g.symbol0,
-                    decimals: known0?.decimals || 18,
-                    epoch: 'previous',
-                });
-                feeAmountCalls.push({
-                    to: feeRewardAddr,
-                    data: `0x92777b29${token1Padded}${previousEpochHex}`,
-                    gaugeIdx: i,
-                    tokenAddr: g.token1,
-                    symbol: known1?.symbol || g.symbol1,
-                    decimals: known1?.decimals || 18,
-                    epoch: 'previous',
-                });
-            }
-
-            // Fetch fee amounts for both epochs
-            const feeAmounts: Map<number, RewardToken[]> = new Map();
-            const currentEpochFees: Map<number, RewardToken[]> = new Map();
-            const previousEpochFees: Map<number, RewardToken[]> = new Map();
-
-            if (feeAmountCalls.length > 0) {
-                const feeResults = await batchRpcCall(feeAmountCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting());
-
-                for (let i = 0; i < feeAmountCalls.length; i++) {
-                    const call = feeAmountCalls[i];
-                    const amount = feeResults[i] !== '0x' ? BigInt(feeResults[i]) : BigInt(0);
-
-                    if (amount > BigInt(0)) {
-                        const targetMap = call.epoch === 'current' ? currentEpochFees : previousEpochFees;
-                        const existing = targetMap.get(call.gaugeIdx) || [];
-                        existing.push({
-                            address: call.tokenAddr as Address,
-                            symbol: call.symbol,
-                            amount,
-                            decimals: call.decimals,
-                        });
-                        targetMap.set(call.gaugeIdx, existing);
+            const query = `query VoteData {
+                protocol(id: "windswap") {
+                    totalVotingWeight
+                    epochCount
+                    activePeriod
+                }
+                gauges(first: 200, where: { isActive: true }) {
+                    id
+                    pool { id token0 { id symbol decimals } token1 { id symbol decimals } }
+                    gaugeType
+                    weight
+                    isActive
+                    feeVotingReward
+                    bribeVotingReward
+                    epochData(first: 1, orderBy: epoch, orderDirection: desc) {
+                        epoch
+                        feeRewardToken0
+                        feeRewardToken1
                     }
                 }
+            }`;
 
-                // For each gauge, prefer current epoch fees if any exist, otherwise use previous epoch
-                for (let i = 0; i < GAUGE_LIST.length; i++) {
-                    const currentFees = currentEpochFees.get(i) || [];
-                    const previousFees = previousEpochFees.get(i) || [];
-
-                    // Use current epoch if it has any fees, otherwise fall back to previous
-                    if (currentFees.length > 0) {
-                        feeAmounts.set(i, currentFees);
-                    } else if (previousFees.length > 0) {
-                        feeAmounts.set(i, previousFees);
-                    }
-                }
+            const response = await fetch(SUBGRAPH_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query }),
+            });
+            const json = await response.json();
+            if (json.errors) {
+                throw new Error(json.errors[0]?.message || 'Subgraph error');
             }
 
-            // Build gauge list from static config with live weights and fee rewards
-            const gaugeList: GaugeInfo[] = GAUGE_LIST.map((g, i) => {
-                const weight = weightResults[i + 1] !== '0x' ? BigInt(weightResults[i + 1]) : BigInt(0);
+            const protocol = json.data?.protocol;
+            if (protocol) {
+                const total = protocol.totalVotingWeight ? BigInt(protocol.totalVotingWeight) : BigInt(0);
+                setTotalVoteWeight(total);
+                setEpochCount(protocol.epochCount ? BigInt(protocol.epochCount) : BigInt(0));
+                setActivePeriod(protocol.activePeriod ? BigInt(protocol.activePeriod) : BigInt(0));
+            }
+
+            const decimalToBigInt = (value: string | null | undefined, decimals: number): bigint => {
+                if (!value) return BigInt(0);
+                const num = parseFloat(value);
+                if (!isFinite(num) || num <= 0) return BigInt(0);
+                return BigInt(Math.floor(num * Math.pow(10, decimals)));
+            };
+
+            const gaugeRows: any[] = json.data?.gauges || [];
+            const totalWeight = protocol?.totalVotingWeight ? BigInt(protocol.totalVotingWeight) : BigInt(0);
+
+            const gaugeList: GaugeInfo[] = gaugeRows.map((g: any) => {
+                const poolId = String(g.pool?.id || '').toLowerCase();
+                const token0 = String(g.pool?.token0?.id || '0x0000000000000000000000000000000000000000');
+                const token1 = String(g.pool?.token1?.id || '0x0000000000000000000000000000000000000000');
+                const symbol0 = String(g.pool?.token0?.symbol || 'UNK');
+                const symbol1 = String(g.pool?.token1?.symbol || 'UNK');
+                const decimals0 = Number(g.pool?.token0?.decimals ?? 18);
+                const decimals1 = Number(g.pool?.token1?.decimals ?? 18);
+
+                const weight = g.weight ? BigInt(g.weight) : BigInt(0);
                 const weightPercent = totalWeight > BigInt(0)
                     ? Number((weight * BigInt(10000)) / totalWeight) / 100
                     : 0;
 
+                const epochData = Array.isArray(g.epochData) && g.epochData.length > 0 ? g.epochData[0] : null;
+                const fee0 = decimalToBigInt(epochData?.feeRewardToken0, decimals0);
+                const fee1 = decimalToBigInt(epochData?.feeRewardToken1, decimals1);
+                const rewardTokens: RewardToken[] = [];
+                if (fee0 > BigInt(0)) {
+                    rewardTokens.push({ address: token0 as Address, symbol: symbol0, amount: fee0, decimals: decimals0 });
+                }
+                if (fee1 > BigInt(0)) {
+                    rewardTokens.push({ address: token1 as Address, symbol: symbol1, amount: fee1, decimals: decimals1 });
+                }
+
                 return {
-                    pool: g.pool as Address,
-                    gauge: g.gauge as Address,
-                    token0: g.token0 as Address,
-                    token1: g.token1 as Address,
-                    symbol0: g.symbol0,
-                    symbol1: g.symbol1,
-                    poolType: g.type,
+                    pool: poolId as Address,
+                    gauge: String(g.id) as Address,
+                    token0: token0 as Address,
+                    token1: token1 as Address,
+                    symbol0,
+                    symbol1,
+                    poolType: (String(g.gaugeType || 'CL') === 'V2' ? 'V2' : 'CL') as 'V2' | 'CL',
                     isStable: false,
                     weight,
                     weightPercent,
-                    isAlive: g.isAlive,
-                    feeReward: (feeRewardAddresses[i] || '0x0000000000000000000000000000000000000000') as Address,
-                    bribeReward: '0x0000000000000000000000000000000000000000' as Address,
-                    rewardTokens: feeAmounts.get(i) || [],
+                    isAlive: !!g.isActive,
+                    feeReward: (String(g.feeVotingReward || '0x0000000000000000000000000000000000000000')) as Address,
+                    bribeReward: (String(g.bribeVotingReward || '0x0000000000000000000000000000000000000000')) as Address,
+                    rewardTokens,
                 };
             });
 
             setGauges(gaugeList);
         } catch (err) {
             console.error('[PoolDataProvider] Gauge fetch error:', err);
-            // Retry once after 3 seconds if gauges failed to load
-            setTimeout(async () => {
-                try {
-                    const { GAUGE_LIST } = await import('@/config/gauges');
-                    const weightCalls = [
-                        { to: V2_CONTRACTS.Voter, data: '0x96c82e57' },
-                        ...GAUGE_LIST.map(g => ({
-                            to: V2_CONTRACTS.Voter,
-                            data: `0xa7cac846${g.pool.slice(2).padStart(64, '0')}`
-                        }))
-                    ];
-                    const weightResults = await batchRpcCall(weightCalls, 2, getRpcForVoting());
-                    const totalWeight = weightResults[0] !== '0x' ? BigInt(weightResults[0]) : BigInt(0);
-                    setTotalVoteWeight(totalWeight);
-                    const gaugeList: GaugeInfo[] = GAUGE_LIST.map((g, i) => {
-                        const weight = weightResults[i + 1] !== '0x' ? BigInt(weightResults[i + 1]) : BigInt(0);
-                        const weightPercent = totalWeight > BigInt(0) ? Number((weight * BigInt(10000)) / totalWeight) / 100 : 0;
-                        return {
-                            pool: g.pool as Address, gauge: g.gauge as Address,
-                            token0: g.token0 as Address, token1: g.token1 as Address,
-                            symbol0: g.symbol0, symbol1: g.symbol1,
-                            poolType: g.type, isStable: false, weight, weightPercent,
-                            isAlive: g.isAlive,
-                            feeReward: '0x0000000000000000000000000000000000000000' as Address,
-                            bribeReward: '0x0000000000000000000000000000000000000000' as Address,
-                            rewardTokens: [],
-                        };
-                    });
-                    setGauges(gaugeList);
-                    console.log('[PoolDataProvider] Gauge retry succeeded with basic data');
-                } catch (retryErr) {
-                    console.error('[PoolDataProvider] Gauge retry also failed:', retryErr);
-                }
-                setGaugesLoading(false);
-            }, 3000);
-            return;
         }
         setGaugesLoading(false);
     }, []);
@@ -1013,6 +907,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         seiPrice,
         gauges,
         totalVoteWeight,
+        epochCount,
+        activePeriod,
         gaugesLoading,
         stakedPositions,
         stakedLoading,
