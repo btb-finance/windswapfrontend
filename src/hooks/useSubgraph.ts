@@ -307,6 +307,19 @@ export interface SubgraphUser {
     id: string;
     positions: SubgraphPosition[];
     veNFTs: SubgraphVeNFT[];
+    profile?: {
+        id: string;
+        totalPositionsValueUSD: string;
+        totalStakedValueUSD: string;
+        totalVeNFTValueUSD: string;
+        totalRewardsClaimedUSD: string;
+        totalFeesEarnedUSD: string;
+        totalSwaps: number;
+        totalProvides: number;
+        totalWithdraws: number;
+        firstActivityTimestamp: string;
+        lastActivityTimestamp: string;
+    } | null;
 }
 
 // Comprehensive user data query - replaces all RPC calls for user data
@@ -314,6 +327,19 @@ const USER_DATA_QUERY = `
     query GetUserData($userId: ID!) {
         user(id: $userId) {
             id
+            profile {
+                id
+                totalPositionsValueUSD
+                totalStakedValueUSD
+                totalVeNFTValueUSD
+                totalRewardsClaimedUSD
+                totalFeesEarnedUSD
+                totalSwaps
+                totalProvides
+                totalWithdraws
+                firstActivityTimestamp
+                lastActivityTimestamp
+            }
             positions(first: 100) {
                 id
                 tokenId
@@ -388,6 +414,7 @@ export function useUserPositions(userAddress: string | undefined) {
     const [positions, setPositions] = useState<SubgraphPosition[]>([]);
     const [veNFTs, setVeNFTs] = useState<SubgraphVeNFT[]>([]);
     const [stakedPositions, setStakedPositions] = useState<SubgraphStakedPosition[]>([]);
+    const [profile, setProfile] = useState<SubgraphUser['profile']>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -396,6 +423,7 @@ export function useUserPositions(userAddress: string | undefined) {
             setPositions([]);
             setVeNFTs([]);
             setStakedPositions([]);
+            setProfile(null);
             return;
         }
 
@@ -414,9 +442,11 @@ export function useUserPositions(userAddress: string | undefined) {
             if (data.user) {
                 setPositions(data.user.positions || []);
                 setVeNFTs(data.user.veNFTs || []);
+                setProfile(data.user.profile || null);
             } else {
                 setPositions([]);
                 setVeNFTs([]);
+                setProfile(null);
             }
 
             // Staked positions are a top-level query result
@@ -439,6 +469,7 @@ export function useUserPositions(userAddress: string | undefined) {
         positions,
         veNFTs,
         stakedPositions,
+        profile,
         isLoading,
         error,
         refetch: fetchUserData,

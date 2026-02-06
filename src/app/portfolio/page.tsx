@@ -234,7 +234,8 @@ export default function PortfolioPage() {
         removeStakedPosition,
         veNFTs: prefetchedVeNFTs,
         veNFTsLoading: loadingVeNFTs,
-        refetchVeNFTs
+        refetchVeNFTs,
+        userProfile
     } = usePoolData();
 
     // Use prefetched data from provider
@@ -1368,6 +1369,28 @@ export default function PortfolioPage() {
                                 <div className="text-[10px] text-gray-500">WIND × price</div>
                             </div>
                         </div>
+
+                        {userProfile && (
+                            <div className="glass-card p-3">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-[10px] text-gray-400">Profile Analytics</div>
+                                        <div className="text-sm font-bold">{formatPrice(userProfile.totalRewardsClaimedUSD)} claimed</div>
+                                        <div className="text-[10px] text-gray-500">
+                                            Swaps {userProfile.totalSwaps} · Provides {userProfile.totalProvides} · Withdraws {userProfile.totalWithdraws}
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[10px] text-gray-400">First activity</div>
+                                        <div className="text-xs font-medium">
+                                            {userProfile.firstActivityTimestamp > BigInt(0)
+                                                ? new Date(Number(userProfile.firstActivityTimestamp) * 1000).toLocaleDateString()
+                                                : '—'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Quick Actions */}
                         {totalPendingRewards > BigInt(0) && (

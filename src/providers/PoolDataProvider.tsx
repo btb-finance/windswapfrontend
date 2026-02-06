@@ -140,6 +140,20 @@ export interface VeNFT {
     hasVoted: boolean;       // whether veNFT has voted this epoch (blocks unlock/merge)
 }
 
+export interface UserProfileAnalytics {
+    id: string;
+    totalPositionsValueUSD: number;
+    totalStakedValueUSD: number;
+    totalVeNFTValueUSD: number;
+    totalRewardsClaimedUSD: number;
+    totalFeesEarnedUSD: number;
+    totalSwaps: number;
+    totalProvides: number;
+    totalWithdraws: number;
+    firstActivityTimestamp: bigint;
+    lastActivityTimestamp: bigint;
+}
+
 interface PoolDataContextType {
     v2Pools: PoolData[];
     clPools: PoolData[];
@@ -166,6 +180,7 @@ interface PoolDataContextType {
     veNFTs: VeNFT[];
     veNFTsLoading: boolean;
     refetchVeNFTs: () => void;
+    userProfile: UserProfileAnalytics | null;
     isLoading: boolean;
     refetch: () => void;
     getTokenInfo: (address: string) => TokenInfo | undefined;
@@ -255,9 +270,24 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const {
         veNFTs: subgraphVeNFTs,
         stakedPositions: subgraphStaked,
+        profile: subgraphProfile,
         isLoading: userDataLoading,
         refetch: refetchUserData
     } = useUserPositions(address);
+
+    const userProfile: UserProfileAnalytics | null = subgraphProfile ? {
+        id: String(subgraphProfile.id),
+        totalPositionsValueUSD: parseFloat(subgraphProfile.totalPositionsValueUSD || '0') || 0,
+        totalStakedValueUSD: parseFloat(subgraphProfile.totalStakedValueUSD || '0') || 0,
+        totalVeNFTValueUSD: parseFloat(subgraphProfile.totalVeNFTValueUSD || '0') || 0,
+        totalRewardsClaimedUSD: parseFloat(subgraphProfile.totalRewardsClaimedUSD || '0') || 0,
+        totalFeesEarnedUSD: parseFloat(subgraphProfile.totalFeesEarnedUSD || '0') || 0,
+        totalSwaps: Number(subgraphProfile.totalSwaps || 0),
+        totalProvides: Number(subgraphProfile.totalProvides || 0),
+        totalWithdraws: Number(subgraphProfile.totalWithdraws || 0),
+        firstActivityTimestamp: BigInt(subgraphProfile.firstActivityTimestamp || '0'),
+        lastActivityTimestamp: BigInt(subgraphProfile.lastActivityTimestamp || '0'),
+    } : null;
 
     // Helper to convert decimal string to wei (BigInt)
     const toWei = (value: string | undefined): bigint => {
@@ -580,6 +610,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         veNFTs,
         veNFTsLoading,
         refetchVeNFTs,
+        userProfile,
         isLoading,
         refetch: fetchAllData,
         getTokenInfo,
