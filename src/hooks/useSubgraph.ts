@@ -184,8 +184,8 @@ export function useSubgraph(): UseSubgraphResult {
     useEffect(() => {
         fetchData();
 
-        // Refresh every 30 seconds
-        const interval = setInterval(fetchData, 30000);
+        // Refresh every 5 minutes
+        const interval = setInterval(fetchData, 5 * 60 * 1000);
         return () => clearInterval(interval);
     }, [fetchData]);
 
