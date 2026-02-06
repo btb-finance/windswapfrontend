@@ -1479,6 +1479,12 @@ export default function PortfolioPage() {
                                             const t0 = getTokenInfo(pos.token0);
                                             const t1 = getTokenInfo(pos.token1);
                                             const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
+
+                                            const depositedUsd = (pos.depositedToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.depositedToken1 || 0) * (pos.token1PriceUSD || 0);
+                                            const withdrawnUsd = (pos.withdrawnToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.withdrawnToken1 || 0) * (pos.token1PriceUSD || 0);
+                                            const collectedUsd = (pos.collectedToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.collectedToken1 || 0) * (pos.token1PriceUSD || 0);
+                                            const pnlUsd = (pos.amountUSD || 0) + withdrawnUsd + collectedUsd - depositedUsd;
+                                            const pnlPct = depositedUsd > 0 ? (pnlUsd / depositedUsd) * 100 : 0;
                                             return (
                                                 <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/10">
                                                     <div className="flex items-center justify-between mb-2">
@@ -1592,6 +1598,29 @@ export default function PortfolioPage() {
                                                                         <div className="font-medium text-green-400">
                                                                             {parseFloat(formatUnits(pos.tokensOwed1, t1.decimals)).toFixed(6)}
                                                                         </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/10">
+                                                                    <div className="p-2 rounded-lg bg-white/5">
+                                                                        <div className="text-[10px] text-gray-400 mb-0.5">Cost Basis (USD)</div>
+                                                                        <div className="font-semibold text-sm">{formatPrice(depositedUsd)}</div>
+                                                                        <div className="text-[10px] text-gray-500">deposited</div>
+                                                                    </div>
+                                                                    <div className="p-2 rounded-lg bg-white/5">
+                                                                        <div className="text-[10px] text-gray-400 mb-0.5">PnL (USD)</div>
+                                                                        <div className={`font-semibold text-sm ${pnlUsd >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatPrice(pnlUsd)}</div>
+                                                                        <div className={`text-[10px] ${pnlUsd >= 0 ? 'text-green-400/70' : 'text-red-400/70'}`}>{pnlUsd >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</div>
+                                                                    </div>
+                                                                    <div className="p-2 rounded-lg bg-white/5">
+                                                                        <div className="text-[10px] text-gray-400 mb-0.5">Fees Collected (USD)</div>
+                                                                        <div className="font-semibold text-sm text-green-400">{formatPrice(collectedUsd)}</div>
+                                                                        <div className="text-[10px] text-gray-500">collected</div>
+                                                                    </div>
+                                                                    <div className="p-2 rounded-lg bg-white/5">
+                                                                        <div className="text-[10px] text-gray-400 mb-0.5">Withdrawn (USD)</div>
+                                                                        <div className="font-semibold text-sm">{formatPrice(withdrawnUsd)}</div>
+                                                                        <div className="text-[10px] text-gray-500">withdrawn</div>
                                                                     </div>
                                                                 </div>
                                                             </>

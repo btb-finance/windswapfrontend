@@ -261,6 +261,13 @@ export interface SubgraphPosition {
     tokensOwed0: string;  // Uncollected fees in token0
     tokensOwed1: string;  // Uncollected fees in token1
     staked: boolean;
+
+    depositedToken0?: string;
+    depositedToken1?: string;
+    withdrawnToken0?: string;
+    withdrawnToken1?: string;
+    collectedToken0?: string;
+    collectedToken1?: string;
 }
 
 export interface SubgraphVeNFT {
@@ -359,6 +366,12 @@ const USER_DATA_QUERY = `
                 tokensOwed0
                 tokensOwed1
                 staked
+                depositedToken0
+                depositedToken1
+                withdrawnToken0
+                withdrawnToken1
+                collectedToken0
+                collectedToken1
             }
             veNFTs(first: 50) {
                 id

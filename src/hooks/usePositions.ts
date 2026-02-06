@@ -23,6 +23,12 @@ export interface CLPosition {
     tokensOwed0: bigint;
     tokensOwed1: bigint;
     amountUSD: number;
+    depositedToken0: number;
+    depositedToken1: number;
+    withdrawnToken0: number;
+    withdrawnToken1: number;
+    collectedToken0: number;
+    collectedToken1: number;
     token0Symbol?: string;
     token1Symbol?: string;
 }
@@ -70,6 +76,12 @@ export function useCLPositionsFromSubgraph() {
             tokensOwed0: p.tokensOwed0 ? parseUnits(p.tokensOwed0, Number(p.pool.token0.decimals ?? 18)) : BigInt(0),
             tokensOwed1: p.tokensOwed1 ? parseUnits(p.tokensOwed1, Number(p.pool.token1.decimals ?? 18)) : BigInt(0),
             amountUSD: p.amountUSD ? parseFloat(p.amountUSD) : 0,
+            depositedToken0: p.depositedToken0 ? parseFloat(p.depositedToken0) : 0,
+            depositedToken1: p.depositedToken1 ? parseFloat(p.depositedToken1) : 0,
+            withdrawnToken0: p.withdrawnToken0 ? parseFloat(p.withdrawnToken0) : 0,
+            withdrawnToken1: p.withdrawnToken1 ? parseFloat(p.withdrawnToken1) : 0,
+            collectedToken0: p.collectedToken0 ? parseFloat(p.collectedToken0) : 0,
+            collectedToken1: p.collectedToken1 ? parseFloat(p.collectedToken1) : 0,
             token0Symbol: p.pool.token0.symbol,
             token1Symbol: p.pool.token1.symbol,
         }))
