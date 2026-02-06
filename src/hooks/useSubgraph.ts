@@ -249,6 +249,8 @@ export interface SubgraphPosition {
     liquidity: string;
     depositedToken0: string;
     depositedToken1: string;
+    tokensOwed0: string;
+    tokensOwed1: string;
     staked: boolean;
     stakedGauge: string | null;
     createdAtTimestamp: string;
@@ -262,7 +264,38 @@ export interface SubgraphVeNFT {
     lockEnd: string;
     votingPower: string;
     isPermanent: boolean;
+    claimableRewards: string;
+    totalClaimed: string;
+    hasVoted: boolean;
+    lastVoted: string;
     createdAtTimestamp: string;
+}
+
+export interface SubgraphStakedPosition {
+    id: string;
+    userId: string;
+    gauge: {
+        id: string;
+        pool: {
+            id: string;
+            token0: SubgraphToken;
+            token1: SubgraphToken;
+            tickSpacing: number;
+            tick: number;
+        };
+    };
+    position: {
+        tokenId: string;
+        tickLower: number;
+        tickUpper: number;
+        liquidity: string;
+    } | null;
+    tokenId: string;
+    amount: string;
+    tickLower: number | null;
+    tickUpper: number | null;
+    earned: string;
+    lastUpdateTimestamp: string;
 }
 
 export interface SubgraphUser {
@@ -273,9 +306,9 @@ export interface SubgraphUser {
     totalVeNFTs: string;
 }
 
-// User positions query
-const USER_POSITIONS_QUERY = `
-    query GetUserPositions($userId: ID!) {
+// Comprehensive user data query - replaces all RPC calls for user data
+const USER_DATA_QUERY = `
+    query GetUserData($userId: ID!) {
         user(id: $userId) {
             id
             totalPositions
@@ -288,13 +321,17 @@ const USER_POSITIONS_QUERY = `
                     token0 { id symbol name decimals }
                     token1 { id symbol name decimals }
                     tickSpacing
+                    tick
                     liquidity
+                    sqrtPriceX96
                 }
                 tickLower
                 tickUpper
                 liquidity
                 depositedToken0
                 depositedToken1
+                tokensOwed0
+                tokensOwed1
                 staked
                 stakedGauge
                 createdAtTimestamp
@@ -306,19 +343,54 @@ const USER_POSITIONS_QUERY = `
                 lockEnd
                 votingPower
                 isPermanent
+                claimableRewards
+                totalClaimed
+                hasVoted
+                lastVoted
                 createdAtTimestamp
             }
+        }
+        gaugeStakedPositions(where: { userId: $userId }, first: 100) {
+            id
+            userId
+            gauge {
+                id
+                pool {
+                    id
+                    token0 { id symbol name decimals }
+                    token1 { id symbol name decimals }
+                    tickSpacing
+                    tick
+                }
+            }
+            position {
+                tokenId
+                tickLower
+                tickUpper
+                liquidity
+            }
+            tokenId
+            amount
+            tickLower
+            tickUpper
+            earned
+            lastUpdateTimestamp
         }
     }
 `;
 
+// Legacy query for backwards compatibility
+const USER_POSITIONS_QUERY = USER_DATA_QUERY;
+
 /**
- * Hook to fetch user positions and veNFTs from subgraph
+ * Hook to fetch all user data from subgraph
  * Replaces multiple RPC calls with a single GraphQL query
+ * Returns: positions, veNFTs, stakedPositions
  */
 export function useUserPositions(userAddress: string | undefined) {
     const [positions, setPositions] = useState<SubgraphPosition[]>([]);
     const [veNFTs, setVeNFTs] = useState<SubgraphVeNFT[]>([]);
+    const [stakedPositions, setStakedPositions] = useState<SubgraphStakedPosition[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -326,6 +398,7 @@ export function useUserPositions(userAddress: string | undefined) {
         if (!userAddress) {
             setPositions([]);
             setVeNFTs([]);
+            setStakedPositions([]);
             return;
         }
 
@@ -333,19 +406,26 @@ export function useUserPositions(userAddress: string | undefined) {
         setError(null);
 
         try {
-            const data = await fetchGraphQL<{ user: SubgraphUser | null }>(
-                USER_POSITIONS_QUERY,
+            const data = await fetchGraphQL<{
+                user: SubgraphUser | null;
+                gaugeStakedPositions: SubgraphStakedPosition[];
+            }>(
+                USER_DATA_QUERY,
                 { userId: userAddress.toLowerCase() }
             );
 
             if (data.user) {
                 setPositions(data.user.positions || []);
                 setVeNFTs(data.user.veNFTs || []);
-                console.log(`[useUserPositions] Found ${data.user.positions?.length || 0} positions, ${data.user.veNFTs?.length || 0} veNFTs`);
             } else {
                 setPositions([]);
                 setVeNFTs([]);
             }
+
+            // Staked positions are a top-level query result
+            setStakedPositions(data.gaugeStakedPositions || []);
+
+            console.log(`[useUserPositions] Found ${data.user?.positions?.length || 0} positions, ${data.user?.veNFTs?.length || 0} veNFTs, ${data.gaugeStakedPositions?.length || 0} staked`);
         } catch (err) {
             console.error('[useUserPositions] Error:', err);
             setError(err instanceof Error ? err.message : 'Failed to fetch user data');
@@ -361,6 +441,7 @@ export function useUserPositions(userAddress: string | undefined) {
     return {
         positions,
         veNFTs,
+        stakedPositions,
         isLoading,
         error,
         refetch: fetchUserData,
@@ -369,3 +450,4 @@ export function useUserPositions(userAddress: string | undefined) {
 
 // Export the subgraph URL for direct use
 export { SUBGRAPH_URL };
+

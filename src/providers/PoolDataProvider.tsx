@@ -5,8 +5,9 @@ import { formatUnits, Address } from 'viem';
 import { useAccount } from 'wagmi';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
-import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc, getRpcForPoolData, getRpcForVoting, getRpcForUserData, getFallbackRpcs } from '@/utils/rpc';
+import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc, getRpcForPoolData, getRpcForVoting, getFallbackRpcs } from '@/utils/rpc';
 import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
+import { useUserPositions, SubgraphVeNFT, SubgraphStakedPosition } from '@/hooks/useSubgraph';
 
 // Goldsky Subgraph URL for pool data (v2.0.0 with user data)
 const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
@@ -401,13 +402,57 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [totalVoteWeight, setTotalVoteWeight] = useState<bigint>(BigInt(0));
     const [gaugesLoading, setGaugesLoading] = useState(true);
 
-    // Staked positions state (prefetched for portfolio)
-    const [stakedPositions, setStakedPositions] = useState<StakedPosition[]>([]);
-    const [stakedLoading, setStakedLoading] = useState(true);
+    // ============================================
+    // SUBGRAPH-BASED USER DATA (replaces RPC fetching)
+    // ============================================
+    const {
+        veNFTs: subgraphVeNFTs,
+        stakedPositions: subgraphStaked,
+        isLoading: userDataLoading,
+        refetch: refetchUserData
+    } = useUserPositions(address);
 
-    // VeNFT state (prefetched for portfolio and vote)
-    const [veNFTs, setVeNFTs] = useState<VeNFT[]>([]);
-    const [veNFTsLoading, setVeNFTsLoading] = useState(true);
+    // Transform subgraph veNFT data to provider format
+    const veNFTs: VeNFT[] = subgraphVeNFTs.map(nft => ({
+        tokenId: BigInt(nft.tokenId),
+        amount: BigInt(nft.lockedAmount || '0'),
+        end: BigInt(nft.lockEnd || '0'),
+        isPermanent: nft.isPermanent,
+        votingPower: BigInt(nft.votingPower || '0'),
+        claimable: BigInt(nft.claimableRewards || '0'),
+        hasVoted: nft.hasVoted,
+    }));
+
+    // Transform subgraph staked position data to provider format
+    const stakedPositions: StakedPosition[] = subgraphStaked.map(sp => {
+        const gauge = sp.gauge;
+        const pool = gauge?.pool;
+        const known0 = pool?.token0 ? KNOWN_TOKENS[pool.token0.id.toLowerCase()] : null;
+        const known1 = pool?.token1 ? KNOWN_TOKENS[pool.token1.id.toLowerCase()] : null;
+
+        return {
+            tokenId: BigInt(sp.tokenId || '0'),
+            gaugeAddress: gauge?.id as Address || '' as Address,
+            poolAddress: pool?.id as Address || '' as Address,
+            token0: pool?.token0?.id as Address || '' as Address,
+            token1: pool?.token1?.id as Address || '' as Address,
+            token0Symbol: known0?.symbol || pool?.token0?.symbol || 'UNK',
+            token1Symbol: known1?.symbol || pool?.token1?.symbol || 'UNK',
+            token0Decimals: known0?.decimals || pool?.token0?.decimals || 18,
+            token1Decimals: known1?.decimals || pool?.token1?.decimals || 18,
+            tickSpacing: pool?.tickSpacing || 0,
+            tickLower: sp.tickLower ?? sp.position?.tickLower ?? 0,
+            tickUpper: sp.tickUpper ?? sp.position?.tickUpper ?? 0,
+            currentTick: pool?.tick || 0,
+            liquidity: BigInt(sp.position?.liquidity || sp.amount || '0'),
+            pendingRewards: BigInt(sp.earned || '0'),
+            rewardRate: BigInt(0),
+        };
+    });
+
+    // Sync loading states
+    const stakedLoading = userDataLoading;
+    const veNFTsLoading = userDataLoading;
 
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
@@ -1224,280 +1269,22 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         return tokenInfoMap.get(address.toLowerCase());
     }, [tokenInfoMap]);
 
-    // Fetch staked positions for current user
-    const fetchStakedPositions = useCallback(async () => {
-        if (!address) {
-            setStakedPositions([]);
-            setStakedLoading(false);
-            return;
-        }
 
-        setStakedLoading(true);
-        const positions: StakedPosition[] = [];
+    // Refetch functions for staked positions and veNFTs (triggers subgraph refetch)
+    const refetchStaked = useCallback(() => {
+        refetchUserData();
+    }, [refetchUserData]);
 
-        try {
-            const { GAUGE_LIST } = await import('@/config/gauges');
+    const refetchVeNFTs = useCallback(() => {
+        refetchUserData();
+    }, [refetchUserData]);
 
-            // Only check gauges that have gauge addresses
-            const gaugesWithAddress = GAUGE_LIST.filter(g => g.gauge && g.gauge !== '');
-
-            for (const g of gaugesWithAddress) {
-                try {
-                // Get staked token IDs for this user (user data → primary RPC)
-                const stakedResult = await fetch(getRpcForUserData(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: g.gauge,
-                            data: `0x4b937763${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
-
-                if (!stakedResult.result || stakedResult.result === '0x') continue;
-
-                // Check if result is an empty array
-                if (stakedResult.result.length <= 130) {
-                    const data = stakedResult.result.slice(2);
-                    const length = parseInt(data.slice(64, 128), 16) || 0;
-                    if (length === 0) continue;
-                }
-
-                // Parse the array of token IDs
-                const data = stakedResult.result.slice(2);
-                const length = parseInt(data.slice(64, 128), 16);
-
-                for (let j = 0; j < length; j++) {
-                    try {
-                    const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
-                    const tokenId = BigInt('0x' + tokenIdHex);
-
-                    // Fetch position details and pending rewards in parallel
-                    // positions() MUST use primary RPC - secondary doesn't have NFT manager data
-                    const [positionResult, rewardsResult, slot0Result] = await Promise.all([
-                        // positions(tokenId) → primary RPC (REQUIRED - secondary RPC returns empty)
-                        fetch(getRpcForUserData(), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', id: 1,
-                                method: 'eth_call',
-                                params: [{
-                                    to: CL_CONTRACTS.NonfungiblePositionManager,
-                                    data: `0x99fbab88${tokenId.toString(16).padStart(64, '0')}` // positions(uint256)
-                                }, 'latest']
-                            })
-                        }).then(r => r.json()),
-                        // earned(address, tokenId) → voting RPC (gauge data)
-                        fetch(getRpcForVoting(), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', id: 1,
-                                method: 'eth_call',
-                                params: [{
-                                    to: g.gauge,
-                                    data: `0x3e491d47${address.slice(2).toLowerCase().padStart(64, '0')}${tokenId.toString(16).padStart(64, '0')}`
-                                }, 'latest']
-                            })
-                        }).then(r => r.json()),
-                        // slot0() → pool data RPC
-                        fetch(getRpcForPoolData(), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', id: 1,
-                                method: 'eth_call',
-                                params: [{
-                                    to: g.pool,
-                                    data: '0x3850c7bd' // slot0()
-                                }, 'latest']
-                            })
-                        }).then(r => r.json()),
-                    ]);
-
-                    // Parse position data:
-                    // positions(tokenId) returns: (nonce, operator, token0, token1, tickSpacing, tickLower, tickUpper, liquidity, ...)
-                    let liquidity = BigInt(0);
-                    let tickLower = 0;
-                    let tickUpper = 0;
-
-                    if (positionResult.result && positionResult.result.length >= 514) {
-                        const posData = positionResult.result.slice(2);
-                        // tickLower is at slot 5 (320-384 hex chars)
-                        // int24 is only 3 bytes (6 hex chars), take last 6 chars
-                        const tickLowerHex = posData.slice(320, 384).slice(-6);
-                        const tickLowerVal = parseInt(tickLowerHex, 16);
-                        tickLower = tickLowerVal > 0x7fffff ? tickLowerVal - 0x1000000 : tickLowerVal;
-
-                        // tickUpper is at slot 6 (384-448 hex chars)
-                        const tickUpperHex = posData.slice(384, 448).slice(-6);
-                        const tickUpperVal = parseInt(tickUpperHex, 16);
-                        tickUpper = tickUpperVal > 0x7fffff ? tickUpperVal - 0x1000000 : tickUpperVal;
-
-                        // liquidity is at slot 7 (448-512 hex chars)
-                        const liquidityHex = posData.slice(448, 512);
-                        liquidity = BigInt('0x' + liquidityHex);
-                    }
-
-                    // Parse current tick from slot0
-                    // slot0 returns: sqrtPriceX96 (32 bytes), tick (32 bytes), ...
-                    let currentTick = 0;
-                    if (slot0Result.result && slot0Result.result.length >= 130) {
-                        const tickSlot = slot0Result.result.slice(66, 130);
-                        const tickHex = tickSlot.slice(-6);
-                        const tickVal = parseInt(tickHex, 16);
-                        currentTick = tickVal > 0x7fffff ? tickVal - 0x1000000 : tickVal;
-                    }
-
-                    const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
-                    const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
-
-                    // Safely parse pending rewards - handle "0x" and invalid results
-                    let pendingRewards = BigInt(0);
-                    try {
-                        if (rewardsResult.result && rewardsResult.result !== '0x' && rewardsResult.result.length > 2) {
-                            pendingRewards = BigInt(rewardsResult.result);
-                        }
-                    } catch {
-                        pendingRewards = BigInt(0);
-                    }
-
-                    positions.push({
-                        tokenId,
-                        gaugeAddress: g.gauge,
-                        poolAddress: g.pool,
-                        token0: g.token0,
-                        token1: g.token1,
-                        token0Symbol: known0?.symbol || g.symbol0,
-                        token1Symbol: known1?.symbol || g.symbol1,
-                        token0Decimals: known0?.decimals || 18,
-                        token1Decimals: known1?.decimals || 18,
-                        tickSpacing: g.tickSpacing || 0,
-                        tickLower,
-                        tickUpper,
-                        currentTick,
-                        liquidity,
-                        pendingRewards,
-                        rewardRate: BigInt(0),
-                    });
-                    } catch (posErr) {
-                        console.error(`[PoolDataProvider] Error fetching staked position in gauge ${g.gauge}:`, posErr);
-                    }
-                }
-                } catch (gaugeErr) {
-                    console.error(`[PoolDataProvider] Error processing gauge ${g.gauge}:`, gaugeErr);
-                }
-            }
-        } catch (err) {
-            console.error('[PoolDataProvider] Error fetching staked positions:', err);
-        }
-
-        setStakedPositions(positions);
-        setStakedLoading(false);
-    }, [address]);
-
-    // Remove a staked position locally (optimistic update after unstaking)
-    const removeStakedPosition = useCallback((tokenId: bigint, gaugeAddress: string) => {
-        setStakedPositions(prev => prev.filter(
-            pos => !(pos.tokenId === tokenId && pos.gaugeAddress.toLowerCase() === gaugeAddress.toLowerCase())
-        ));
-    }, []);
-
-    // Fetch staked positions when address changes
-    useEffect(() => {
-        fetchStakedPositions();
-    }, [fetchStakedPositions]);
-
-    // Fetch veNFT data for current user
-    const fetchVeNFTs = useCallback(async () => {
-        if (!address) {
-            setVeNFTs([]);
-            setVeNFTsLoading(false);
-            return;
-        }
-
-        setVeNFTsLoading(true);
-        const nfts: VeNFT[] = [];
-
-        try {
-            // Get veNFT count (user data → primary)
-            const countResult = await fetch(getRpcForUserData(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0', id: 1,
-                    method: 'eth_call',
-                    params: [{
-                        to: V2_CONTRACTS.VotingEscrow,
-                        data: `0x70a08231${address.slice(2).toLowerCase().padStart(64, '0')}`
-                    }, 'latest']
-                })
-            }).then(r => r.json());
-
-            const count = countResult.result ? parseInt(countResult.result, 16) : 0;
-
-            for (let i = 0; i < count; i++) {
-                // Get tokenId at index using ownerToNFTokenIdList (0x8bf9d84c)
-                const tokenIdResult = await fetch(getRpcForUserData(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: V2_CONTRACTS.VotingEscrow,
-                            data: `0x8bf9d84c${address.slice(2).toLowerCase().padStart(64, '0')}${i.toString(16).padStart(64, '0')}`
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
-
-                if (!tokenIdResult.result) continue;
-                const tokenId = BigInt(tokenIdResult.result);
-
-                // Fetch all veNFT details in parallel across different RPCs
-                const rpcCall = (rpc: string, to: string, data: string) =>
-                    fetch(rpc, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] })
-                    }).then(r => r.json());
-
-                const tokenIdHex = tokenId.toString(16).padStart(64, '0');
-                const [lockedResult, vpResult, claimableResult, votedResult] = await Promise.all([
-                    rpcCall(getRpcForUserData(), V2_CONTRACTS.VotingEscrow, `0xb45a3c0e${tokenIdHex}`),
-                    rpcCall(getRpcForPoolData(), V2_CONTRACTS.VotingEscrow, `0xe7e242d4${tokenIdHex}`),
-                    rpcCall(getRpcForVoting(), V2_CONTRACTS.RewardsDistributor, `0xd1d58b25${tokenIdHex}`),
-                    rpcCall(getRpcForVoting(), V2_CONTRACTS.VotingEscrow, `0x8fbb38ff${tokenIdHex}`),
-                ]);
-
-                if (lockedResult.result) {
-                    const data = lockedResult.result.slice(2);
-                    const amount = BigInt('0x' + data.slice(0, 64));
-                    const end = BigInt('0x' + data.slice(64, 128));
-                    const isPermanent = (data.slice(128, 192) || '0') !== '0'.repeat(64);
-                    const votingPower = vpResult.result ? BigInt(vpResult.result) : BigInt(0);
-                    const claimable = claimableResult.result ? BigInt(claimableResult.result) : BigInt(0);
-                    const hasVoted = votedResult.result ? BigInt(votedResult.result) !== BigInt(0) : false;
-
-                    nfts.push({ tokenId, amount, end, isPermanent, votingPower, claimable, hasVoted });
-                }
-            }
-        } catch (err) {
-            console.error('[PoolDataProvider] Error fetching veNFTs:', err);
-        }
-
-        setVeNFTs(nfts);
-        setVeNFTsLoading(false);
-    }, [address]);
-
-    // Fetch veNFTs when address changes
-    useEffect(() => {
-        fetchVeNFTs();
-    }, [fetchVeNFTs]);
+    // Optimistic removal of staked position (won't persist after refetch)
+    // This is a no-op now since data comes from subgraph - just trigger refetch
+    const removeStakedPosition = useCallback((_tokenId: bigint, _gaugeAddress: string) => {
+        // Trigger a refetch to get fresh data from subgraph
+        refetchUserData();
+    }, [refetchUserData]);
 
     const value: PoolDataContextType = {
         v2Pools,
@@ -1513,11 +1300,11 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         gaugesLoading,
         stakedPositions,
         stakedLoading,
-        refetchStaked: fetchStakedPositions,
+        refetchStaked,
         removeStakedPosition,
         veNFTs,
         veNFTsLoading,
-        refetchVeNFTs: fetchVeNFTs,
+        refetchVeNFTs,
         isLoading,
         refetch: fetchAllData,
         getTokenInfo,
