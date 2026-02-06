@@ -420,7 +420,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         isPermanent: nft.isPermanent,
         votingPower: BigInt(nft.votingPower || '0'),
         claimable: BigInt(nft.claimableRewards || '0'),
-        hasVoted: nft.hasVoted,
+        hasVoted: false,  // Note: VeVotes must be queried separately if needed
     }));
 
     // Transform subgraph staked position data to provider format
@@ -438,8 +438,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             token1: pool?.token1?.id as Address || '' as Address,
             token0Symbol: known0?.symbol || pool?.token0?.symbol || 'UNK',
             token1Symbol: known1?.symbol || pool?.token1?.symbol || 'UNK',
-            token0Decimals: known0?.decimals || pool?.token0?.decimals || 18,
-            token1Decimals: known1?.decimals || pool?.token1?.decimals || 18,
+            token0Decimals: known0?.decimals || 18,
+            token1Decimals: known1?.decimals || 18,
             tickSpacing: pool?.tickSpacing || 0,
             tickLower: sp.tickLower ?? sp.position?.tickLower ?? 0,
             tickUpper: sp.tickUpper ?? sp.position?.tickUpper ?? 0,

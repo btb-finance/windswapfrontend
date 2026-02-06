@@ -13,6 +13,7 @@ export interface CLPosition {
     tickSpacing: number;
     tickLower: number;
     tickUpper: number;
+    currentTick: number;  // Pool's current tick from subgraph
     liquidity: bigint;
     tokensOwed0: bigint;
     tokensOwed1: bigint;
@@ -52,6 +53,7 @@ export function useCLPositionsFromSubgraph() {
             tickSpacing: p.pool.tickSpacing,
             tickLower: p.tickLower,
             tickUpper: p.tickUpper,
+            currentTick: p.pool.tick ?? 0,  // Pool's current tick from subgraph
             liquidity: BigInt(p.liquidity),
             // Use tokensOwed from subgraph (snapshot from last interaction)
             tokensOwed0: p.tokensOwed0 ? BigInt(Math.floor(parseFloat(p.tokensOwed0) * 1e18)) : BigInt(0),

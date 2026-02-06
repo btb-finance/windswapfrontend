@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-// Goldsky GraphQL endpoint (v2.0.0 with user data)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
+// Goldsky GraphQL endpoint (v3.0.6 with user data)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.6/gn';
 
 // Types matching subgraph schema
 export interface SubgraphToken {
@@ -18,7 +18,9 @@ export interface SubgraphPool {
     token0: SubgraphToken;
     token1: SubgraphToken;
     tickSpacing: number;
+    tick: number;  // Current pool tick from subgraph
     liquidity: string;
+    sqrtPriceX96?: string;
     totalValueLockedToken0: string;
     totalValueLockedToken1: string;
     totalValueLockedUSD: string;
@@ -236,50 +238,45 @@ export function usePoolDayData(poolId: string) {
 }
 
 // ============================================
-// USER DATA TYPES (from subgraph schema)
+// USER DATA TYPES (from subgraph schema v3.0.6)
 // ============================================
 
 export interface SubgraphPosition {
     id: string;
     tokenId: string;
-    owner: { id: string };
-    pool: SubgraphPool;
+    pool: {
+        id: string;
+        token0: { id: string; symbol: string };
+        token1: { id: string; symbol: string };
+        tickSpacing: number;
+        tick: number;  // Current pool tick
+    };
     tickLower: number;
     tickUpper: number;
     liquidity: string;
-    depositedToken0: string;
-    depositedToken1: string;
-    tokensOwed0: string;
-    tokensOwed1: string;
+    tokensOwed0: string;  // Uncollected fees in token0
+    tokensOwed1: string;  // Uncollected fees in token1
     staked: boolean;
-    stakedGauge: string | null;
-    createdAtTimestamp: string;
 }
 
 export interface SubgraphVeNFT {
     id: string;
     tokenId: string;
-    owner: { id: string };
     lockedAmount: string;
     lockEnd: string;
     votingPower: string;
     isPermanent: boolean;
     claimableRewards: string;
-    totalClaimed: string;
-    hasVoted: boolean;
-    lastVoted: string;
-    createdAtTimestamp: string;
 }
 
 export interface SubgraphStakedPosition {
     id: string;
-    userId: string;
     gauge: {
         id: string;
         pool: {
             id: string;
-            token0: SubgraphToken;
-            token1: SubgraphToken;
+            token0: { id: string; symbol: string };
+            token1: { id: string; symbol: string };
             tickSpacing: number;
             tick: number;
         };
@@ -295,15 +292,12 @@ export interface SubgraphStakedPosition {
     tickLower: number | null;
     tickUpper: number | null;
     earned: string;
-    lastUpdateTimestamp: string;
 }
 
 export interface SubgraphUser {
     id: string;
     positions: SubgraphPosition[];
     veNFTs: SubgraphVeNFT[];
-    totalPositions: string;
-    totalVeNFTs: string;
 }
 
 // Comprehensive user data query - replaces all RPC calls for user data
@@ -311,30 +305,22 @@ const USER_DATA_QUERY = `
     query GetUserData($userId: ID!) {
         user(id: $userId) {
             id
-            totalPositions
-            totalVeNFTs
             positions(first: 100) {
                 id
                 tokenId
                 pool {
                     id
-                    token0 { id symbol name decimals }
-                    token1 { id symbol name decimals }
+                    token0 { id symbol }
+                    token1 { id symbol }
                     tickSpacing
                     tick
-                    liquidity
-                    sqrtPriceX96
                 }
                 tickLower
                 tickUpper
                 liquidity
-                depositedToken0
-                depositedToken1
                 tokensOwed0
                 tokensOwed1
                 staked
-                stakedGauge
-                createdAtTimestamp
             }
             veNFTs(first: 50) {
                 id
@@ -344,21 +330,16 @@ const USER_DATA_QUERY = `
                 votingPower
                 isPermanent
                 claimableRewards
-                totalClaimed
-                hasVoted
-                lastVoted
-                createdAtTimestamp
             }
         }
         gaugeStakedPositions(where: { userId: $userId }, first: 100) {
             id
-            userId
             gauge {
                 id
                 pool {
                     id
-                    token0 { id symbol name decimals }
-                    token1 { id symbol name decimals }
+                    token0 { id symbol }
+                    token1 { id symbol }
                     tickSpacing
                     tick
                 }
@@ -374,7 +355,6 @@ const USER_DATA_QUERY = `
             tickLower
             tickUpper
             earned
-            lastUpdateTimestamp
         }
     }
 `;
