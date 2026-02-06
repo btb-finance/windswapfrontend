@@ -86,6 +86,7 @@ const POOLS_QUERY = `
                 decimals
             }
             tickSpacing
+            tick
             liquidity
             totalValueLockedToken0
             totalValueLockedToken1

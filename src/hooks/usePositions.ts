@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 export interface CLPosition {
     tokenId: bigint;
+    poolId: Address;
     token0: Address;
     token1: Address;
     tickSpacing: number;
@@ -48,6 +49,7 @@ export function useCLPositionsFromSubgraph() {
     const positions: CLPosition[] = subgraphPositions
         .map((p: SubgraphPosition) => ({
             tokenId: BigInt(p.tokenId),
+            poolId: p.pool.id as Address,
             token0: p.pool.token0.id as Address,
             token1: p.pool.token1.id as Address,
             tickSpacing: p.pool.tickSpacing,

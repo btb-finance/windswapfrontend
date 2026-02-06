@@ -9,104 +9,8 @@ import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc, getRpcForPoolData, getRp
 import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 import { useUserPositions, SubgraphVeNFT, SubgraphStakedPosition } from '@/hooks/useSubgraph';
 
-// Goldsky Subgraph URL for pool data (v2.0.0 with user data)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
-
-// DexScreener API for accurate 24h volume data
-const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex/pairs/seiv2';
-const DEXSCREENER_CACHE_KEY = 'windswap_dexscreener_volumes';
-const DEXSCREENER_CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
-
-// Load cached DexScreener volumes
-function loadCachedDexScreenerVolumes(): Map<string, number> | null {
-    try {
-        const cached = localStorage.getItem(DEXSCREENER_CACHE_KEY);
-        if (!cached) return null;
-
-        const { timestamp, data } = JSON.parse(cached);
-        if (Date.now() - timestamp > DEXSCREENER_CACHE_TTL) {
-            // Cache expired
-            return null;
-        }
-
-
-        return new Map(Object.entries(data));
-    } catch {
-        return null;
-    }
-}
-
-// Save DexScreener volumes to cache
-function saveDexScreenerVolumes(volumeMap: Map<string, number>): void {
-    try {
-        const data: Record<string, number> = {};
-        volumeMap.forEach((vol, addr) => { data[addr] = vol; });
-        localStorage.setItem(DEXSCREENER_CACHE_KEY, JSON.stringify({
-            timestamp: Date.now(),
-            data
-        }));
-    } catch {
-        // Ignore storage errors
-    }
-}
-
-// DexScreener pool data interface
-interface DexScreenerPoolData {
-    volume24h: number;
-    tvlUsd: number;
-    reserve0: number; // base token
-    reserve1: number; // quote token
-    priceUsd: number; // base token price in USD
-    baseTokenSymbol: string;
-    quoteTokenSymbol: string;
-}
-
-// Fetch pool data from DexScreener for multiple pools (with caching)
-async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string, DexScreenerPoolData>> {
-    // Try cache first
-    // Always fetch fresh data (cache is just for volume backup)
-
-    const dataMap = new Map<string, DexScreenerPoolData>();
-    if (poolAddresses.length === 0) return dataMap;
-
-    try {
-        // DexScreener allows multiple addresses comma-separated (max 30)
-        const addresses = poolAddresses.slice(0, 30).join(',');
-        const response = await fetch(`${DEXSCREENER_API}/${addresses}`);
-        const data = await response.json();
-
-        if (data.pairs && Array.isArray(data.pairs)) {
-            for (const pair of data.pairs) {
-                const addr = pair.pairAddress?.toLowerCase();
-                if (addr) {
-                    dataMap.set(addr, {
-                        volume24h: pair.volume?.h24 || 0,
-                        tvlUsd: pair.liquidity?.usd || 0,
-                        reserve0: pair.liquidity?.base || 0,
-                        reserve1: pair.liquidity?.quote || 0,
-                        priceUsd: parseFloat(pair.priceUsd || '0'),
-                        baseTokenSymbol: pair.baseToken?.symbol || '',
-                        quoteTokenSymbol: pair.quoteToken?.symbol || '',
-                    });
-                }
-            }
-        }
-
-        // Save volume to cache (for backwards compatibility)
-        if (dataMap.size > 0) {
-            const volumeMap = new Map<string, number>();
-            dataMap.forEach((d, addr) => volumeMap.set(addr, d.volume24h));
-            saveDexScreenerVolumes(volumeMap);
-        }
-
-        // Successfully fetched DexScreener data
-    } catch (err) {
-        console.warn('[DexScreener] Failed to fetch data:', err);
-    }
-
-    return dataMap;
-}
-
+// Goldsky Subgraph URL for pool data
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.6/gn';
 
 // Fetch pools from subgraph
 async function fetchPoolsFromSubgraph(): Promise<{
@@ -117,6 +21,10 @@ async function fetchPoolsFromSubgraph(): Promise<{
         tickSpacing: number;
         totalValueLockedUSD: string;
         volumeUSD: string;
+        poolDayData: Array<{
+            date: number;
+            volumeUSD: string;
+        }>;
     }>;
 } | null> {
     try {
@@ -132,6 +40,10 @@ async function fetchPoolsFromSubgraph(): Promise<{
                         tickSpacing
                         totalValueLockedUSD
                         volumeUSD
+                        poolDayData(first: 1, orderBy: date, orderDirection: desc) {
+                            date
+                            volumeUSD
+                        }
                     }
                 }`
             }),
@@ -147,6 +59,10 @@ async function fetchPoolsFromSubgraph(): Promise<{
         return null;
     }
 }
+
+// Priority pool address - WIND/WSEI pool loads first with its APR
+const PRIORITY_POOL = '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase();
+const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase();
 
 // ============================================
 // Types
@@ -168,7 +84,7 @@ interface PoolData {
     reserve0: string;
     reserve1: string;
     tvl: string;
-    volume24h?: string; // 24h volume from DexScreener
+    volume24h?: string;
     rewardRate?: bigint;
 }
 
@@ -273,12 +189,6 @@ KNOWN_TOKENS[WSEI.address.toLowerCase()] = {
     decimals: WSEI.decimals,
     logoURI: WSEI.logoURI,
 };
-
-// Priority pool address - WIND/WSEI pool loads first with its APR
-const PRIORITY_POOL = '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase();
-const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase();
-
-
 
 // ============================================
 // Batch RPC Helper with retry and chunking
@@ -491,6 +401,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     // Parse TVL (subgraph gives us USD value directly)
                     const tvl = parseFloat(p.totalValueLockedUSD || '0');
 
+                    // Approx. 24h volume from latest PoolDayData (UTC day bucket)
+                    const latestDay = p.poolDayData && p.poolDayData.length > 0 ? p.poolDayData[0] : undefined;
+                    const volume24h = latestDay ? parseFloat(latestDay.volumeUSD || '0') : 0;
+
                     return {
                         address: p.id as Address,
                         token0: {
@@ -511,6 +425,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         reserve0: '0', // Subgraph doesn't give individual reserves
                         reserve1: '0',
                         tvl: tvl > 0 ? tvl.toFixed(2) : '0',
+                        volume24h: volume24h > 0 ? volume24h.toFixed(2) : undefined,
                     };
                 });
 
@@ -528,74 +443,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setIsLoading(false);
                 // Showing pools from subgraph
 
-                // Fetch volume + TVL + PRICES from DexScreener (non-blocking) - replaces ALL RPC fetching!
-                const poolAddresses = subgraphPools.map(p => p.address);
-                fetchDexScreenerData(poolAddresses).then((dataMap: Map<string, DexScreenerPoolData>) => {
-                    if (dataMap.size > 0) {
-                        let detectedWindPrice = 0;
-                        let detectedSeiPrice = 0;
-
-                        // First, get SEI price from USDC/WSEI pool
-                        const usdcWseiPool = '0x587b82b8ed109d8587a58f9476a8d4268ae945b1'.toLowerCase();
-                        const usdcWseiData = dataMap.get(usdcWseiPool);
-                        if (usdcWseiData && usdcWseiData.reserve0 > 0 && usdcWseiData.reserve1 > 0) {
-                            // USDC is token0, WSEI is token1
-                            // SEI price = USDC reserve / WSEI reserve (since USDC = $1)
-                            detectedSeiPrice = usdcWseiData.reserve0 / usdcWseiData.reserve1;
-                            if (detectedSeiPrice > 0 && detectedSeiPrice < 100) {
-                                setSeiPrice(detectedSeiPrice);
-                            }
-                        }
-
-                        // Try to get WIND price from WIND/USDC pool first (most reliable)
-                        const windUsdcPool = '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0'.toLowerCase();
-                        const windUsdcData = dataMap.get(windUsdcPool);
-                        if (windUsdcData) {
-                            // First try priceUsd from DexScreener
-                            if (windUsdcData.priceUsd > 0) {
-                                detectedWindPrice = windUsdcData.priceUsd;
-                            } else if (windUsdcData.reserve0 > 0 && windUsdcData.reserve1 > 0) {
-                                // WIND is token0, USDC is token1
-                                // WIND price = USDC reserve / WIND reserve
-                                detectedWindPrice = windUsdcData.reserve1 / windUsdcData.reserve0;
-                            }
-                        }
-
-                        // If still no WIND price, try WIND/WSEI pool
-                        if (detectedWindPrice <= 0) {
-                            const windWseiData = dataMap.get(PRIORITY_POOL);
-                            if (windWseiData) {
-                                if (windWseiData.priceUsd > 0) {
-                                    detectedWindPrice = windWseiData.priceUsd;
-                                } else if (windWseiData.reserve0 > 0 && windWseiData.reserve1 > 0 && detectedSeiPrice > 0) {
-                                    // WIND is token0, WSEI is token1
-                                    // WIND in WSEI = WSEI reserve / WIND reserve
-                                    // WIND in USD = (WSEI reserve / WIND reserve) * seiPrice
-                                    const windInWsei = windWseiData.reserve1 / windWseiData.reserve0;
-                                    detectedWindPrice = windInWsei * detectedSeiPrice;
-                                }
-                            }
-                        }
-
-                        if (detectedWindPrice > 0 && detectedWindPrice < 1000) {
-                            setWindPrice(detectedWindPrice);
-                        }
-
-                        // Update pool data
-                        setClPools(prev => prev.map(pool => {
-                            const dexData = dataMap.get(pool.address.toLowerCase());
-                            if (!dexData) return pool;
-                            return {
-                                ...pool,
-                                volume24h: dexData.volume24h.toFixed(2),
-                                tvl: dexData.tvlUsd > 0 ? dexData.tvlUsd.toFixed(2) : pool.tvl,
-                                reserve0: dexData.reserve0 > 0 ? dexData.reserve0.toString() : pool.reserve0,
-                                reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
-                            };
-                        }));
-                    }
-                });
-
                 // Build token map from subgraph data
                 const newTokenMap = new Map<string, TokenInfo>();
                 subgraphPools.forEach(p => {
@@ -604,11 +451,11 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 });
                 setTokenInfoMap(newTokenMap);
 
-                // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
+                // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR IMMEDIATELY (don't await)
                 const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
                 const priorityFetchPromise = priorityPool ? (async () => {
                     try {
-                        // Only fetch reward rate (prices come from DexScreener now!)
+                        // Only fetch reward rate
                         const priorityCalls = [
                             { to: PRIORITY_GAUGE, data: '0x7b0a47ee' }, // rewardRate()
                         ];
@@ -627,128 +474,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // Start priority fetch immediately (non-blocking)
                 priorityFetchPromise.catch(() => { }); // Handle silently
 
-
-                // Fetch ALL gauge reward rates and staked liquidity (not just priority pool)
-                try {
-                    const { GAUGE_LIST } = await import('@/config/gauges');
-                    const gaugesWithAddress = GAUGE_LIST.filter(g => g.gauge && g.gauge.length > 0);
-
-                    // Batch fetch all reward rates AND totalSupply (staked liquidity)
-                    const rewardCalls = gaugesWithAddress.map(g => ({
-                        to: g.gauge,
-                        data: '0x7b0a47ee', // rewardRate()
-                        pool: g.pool.toLowerCase(),
-                        token0: g.token0.toLowerCase(),
-                        token1: g.token1.toLowerCase(),
-                        tickSpacing: g.tickSpacing || 0
-                    }));
-
-                    const supplyCalls = gaugesWithAddress.map(g => ({
-                        to: g.gauge,
-                        data: '0x18160ddd', // totalSupply() - returns staked LP tokens
-                        pool: g.pool.toLowerCase(),
-                    }));
-
-                    if (rewardCalls.length > 0) {
-                        // Fetch both reward rates and totalSupply in parallel
-                        const [rewardResults, supplyResults] = await Promise.all([
-                            batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting()),
-                            batchRpcCall(supplyCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForPoolData())
-                        ]);
-
-                        const newRewards = new Map<string, bigint>();
-                        const newStakedLiquidity = new Map<string, bigint>();
-
-                        // Build token pair + tickSpacing to reward rate mapping
-                        // Key: token0-token1-tickSpacing (tokens sorted alphabetically)
-                        const pairRewardMap = new Map<string, bigint>();
-
-                        rewardCalls.forEach((call, i) => {
-                            const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
-                            const stakedSupply = supplyResults[i] !== '0x' ? BigInt(supplyResults[i]) : BigInt(0);
-
-                            if (rate > BigInt(0)) {
-                                // Key by GAUGE_LIST pool address
-                                newRewards.set(call.pool, rate);
-
-                                // Also key by token pair + tickSpacing (for subgraph pool address matching)
-                                const sortedTokens = [call.token0, call.token1].sort();
-                                const pairKey = `${sortedTokens[0]}-${sortedTokens[1]}-${call.tickSpacing}`;
-                                pairRewardMap.set(pairKey, rate);
-                            }
-
-                            // Store staked liquidity (even if rate is 0, for accurate APR calc when rewards resume)
-                            if (stakedSupply > BigInt(0)) {
-                                newStakedLiquidity.set(call.pool, stakedSupply);
-                            }
-                        });
-
-                        // Also add rewards for subgraph pools that match by token pair + tickSpacing
-                        // Also store the correct tickSpacing from gauge for APR calculation
-                        let matchedCount = 0;
-                        let unmatchedPools: string[] = [];
-
-                        // Store tickSpacing corrections for pools that matched with different tickSpacing
-                        const tickSpacingCorrections = new Map<string, number>();
-
-                        subgraphPools.forEach(pool => {
-                            const t0 = pool.token0.address.toLowerCase();
-                            const t1 = pool.token1.address.toLowerCase();
-                            const sortedTokens = [t0, t1].sort();
-                            const pairKey = `${sortedTokens[0]}-${sortedTokens[1]}-${pool.tickSpacing || 0}`;
-                            const rate = pairRewardMap.get(pairKey);
-                            if (rate && rate > BigInt(0)) {
-                                newRewards.set(pool.address.toLowerCase(), rate);
-                                matchedCount++;
-                            } else {
-                                // Check if there's a rate for same tokens but different tickSpacing
-                                let foundAlternate = false;
-                                pairRewardMap.forEach((altRate, altKey) => {
-                                    if (altKey.startsWith(`${sortedTokens[0]}-${sortedTokens[1]}-`) && !foundAlternate) {
-                                        foundAlternate = true;
-                                        const altTickSpacing = parseInt(altKey.split('-')[2]) || 0;
-                                        // Use the alternate rate
-                                        newRewards.set(pool.address.toLowerCase(), altRate);
-                                        // Store the correct tickSpacing from gauge
-                                        tickSpacingCorrections.set(pool.address.toLowerCase(), altTickSpacing);
-                                        matchedCount++;
-                                    }
-                                });
-                                if (!foundAlternate) {
-                                    unmatchedPools.push(`${pool.token0.symbol}/${pool.token1.symbol}`);
-                                }
-                            }
-                        });
-
-                        // Apply tickSpacing corrections to pools
-                        if (tickSpacingCorrections.size > 0) {
-                            setClPools(prev => prev.map(pool => {
-                                const correctedTs = tickSpacingCorrections.get(pool.address.toLowerCase());
-                                if (correctedTs !== undefined) {
-                                    return { ...pool, tickSpacing: correctedTs };
-                                }
-                                return pool;
-                            }));
-                        }
-
-                        // unmatchedPools are pools without gauges, APR will show as "—"
-
-                        if (newRewards.size > 0) {
-                            setPoolRewards(newRewards);
-                        }
-                        if (newStakedLiquidity.size > 0) {
-                            setStakedLiquidity(newStakedLiquidity);
-                        }
-                    }
-                } catch (err) {
-                    console.warn('[PoolDataProvider] Failed to fetch gauge reward rates:', err);
-                }
-
-
                 // Fetch gauge data for voting (in parallel with priority fetch)
                 await fetchGaugeData(newTokenMap);
 
-                // TVL and reserves are now fetched from DexScreener (above), no RPC needed!
+                // Save subgraph pools to cache
                 saveCachePools(subgraphPools, []);
 
                 return; // Done!
@@ -798,25 +527,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             });
                             setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
                             setIsLoading(false); // Show pools immediately!
-
-                            // Fetch volume + TVL from DexScreener for GAUGE_LIST pools
-                            const clPoolAddresses = quickClPools.filter(p => p.poolType === 'CL').map(p => p.address);
-                            fetchDexScreenerData(clPoolAddresses).then((dataMap: Map<string, DexScreenerPoolData>) => {
-                                if (dataMap.size > 0) {
-                                    setClPools(prev => prev.map(pool => {
-                                        const dexData = dataMap.get(pool.address.toLowerCase());
-                                        if (!dexData) return pool;
-                                        return {
-                                            ...pool,
-                                            volume24h: dexData.volume24h.toFixed(2),
-                                            tvl: dexData.tvlUsd > 0 ? dexData.tvlUsd.toFixed(2) : pool.tvl,
-                                            reserve0: dexData.reserve0 > 0 ? dexData.reserve0.toString() : pool.reserve0,
-                                            reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
-                                        };
-                                    }));
-                                    // Updated GAUGE_LIST pools with DexScreener data
-                                }
-                            });
                         }
                     } catch (e) {
                         console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
@@ -987,7 +697,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 };
             });
 
-            // TVL and reserves now come from DexScreener - no RPC balance fetching needed!
             // Save to cache after pools are set
             setClPools(currentPools => {
                 saveCachePools(currentPools, v2Pools);
@@ -1264,8 +973,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
-
-    // Removed: Retry logic for RPC balance fetching - DexScreener provides TVL now
 
     // Auto-refresh every 10 minutes (only if page is still open)
     useEffect(() => {

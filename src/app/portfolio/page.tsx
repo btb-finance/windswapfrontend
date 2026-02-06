@@ -14,9 +14,34 @@ import { formatPrice } from '@/utils/format';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
-import { getRpcForPoolData, getRpcForVoting } from '@/utils/rpc';
+import { getRpcForPoolData } from '@/utils/rpc';
 import { useToast } from '@/providers/ToastProvider';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+
+// Goldsky GraphQL endpoint (v3.0.6)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.6/gn';
+
+async function fetchGaugeAddressByPool(poolId: string): Promise<string | null> {
+    try {
+        const query = `query GaugeByPool($pool: String!) {
+            gauges(first: 1, where: { pool: $pool }) {
+                id
+            }
+        }`;
+
+        const response = await fetch(SUBGRAPH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, variables: { pool: poolId.toLowerCase() } }),
+        });
+
+        const json = await response.json();
+        const id = json?.data?.gauges?.[0]?.id;
+        return typeof id === 'string' && id.length > 0 ? id : null;
+    } catch {
+        return null;
+    }
+}
 
 // VotingEscrow ABI for veNFT data
 const VOTING_ESCROW_ABI = [
@@ -300,12 +325,9 @@ export default function PortfolioPage() {
                 const balanceSelector = '0x70a08231';
                 const addressPadded = address.slice(2).toLowerCase().padStart(64, '0');
 
-                // Fetch balances and pool slot0 (for current tick)
-                const slot0Selector = '0x3850c7bd'; // slot0()
-
                 console.log('Fetching for position tokens:', selectedPosition.token0, selectedPosition.token1);
 
-                const [bal0Response, bal1Response, slot0Response] = await Promise.all([
+                const [bal0Response, bal1Response] = await Promise.all([
                     fetch(getRpcForPoolData(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -326,47 +348,6 @@ export default function PortfolioPage() {
                             id: 2,
                         }),
                     }).then(r => r.json()),
-                    // Fetch pool address and slot0
-                    (async () => {
-                        // Get pool address from CLFactory
-                        const t0 = selectedPosition.token0.toLowerCase();
-                        const t1 = selectedPosition.token1.toLowerCase();
-                        const [token0, token1] = t0 < t1 ? [t0, t1] : [t1, t0];
-                        const tickSpacing = selectedPosition.tickSpacing || 100;
-
-                        const getPoolSelector = '0x28af8d0b';
-                        const token0Padded = token0.slice(2).padStart(64, '0');
-                        const token1Padded = token1.slice(2).padStart(64, '0');
-                        const tickPadded = tickSpacing.toString(16).padStart(64, '0');
-
-                        const poolRes = await fetch(getRpcForPoolData(), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0',
-                                method: 'eth_call',
-                                params: [{ to: CL_CONTRACTS.CLFactory, data: `${getPoolSelector}${token0Padded}${token1Padded}${tickPadded}` }, 'latest'],
-                                id: 3,
-                            }),
-                        }).then(r => r.json());
-
-                        if (poolRes.result && poolRes.result !== '0x' + '0'.repeat(64)) {
-                            const poolAddress = '0x' + poolRes.result.slice(-40);
-                            const slot0Res = await fetch(getRpcForPoolData(), {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    jsonrpc: '2.0',
-                                    method: 'eth_call',
-                                    params: [{ to: poolAddress, data: slot0Selector }, 'latest'],
-                                    id: 4,
-                                }),
-                            }).then(r => r.json());
-                            return slot0Res;
-                        }
-                        console.error('Pool not found for', { token0, token1, tickSpacing });
-                        return null;
-                    })(),
                 ]);
 
                 const t0 = getTokenInfo(selectedPosition.token0);
@@ -425,14 +406,8 @@ export default function PortfolioPage() {
                     setBalance1(fullValue.toFixed(6));
                 }
 
-                // Parse slot0 to get current tick
-                if (slot0Response?.result && slot0Response.result.length >= 130) {
-                    const tickSlot = slot0Response.result.slice(66, 130);
-                    const tickHex = tickSlot.slice(-6);
-                    const tickBigInt = BigInt('0x' + tickHex);
-                    const tick = tickBigInt > BigInt(0x7FFFFF) ? Number(tickBigInt) - 0x1000000 : Number(tickBigInt);
-                    setCurrentTick(tick);
-                }
+                // Use current tick from subgraph position (no RPC slot0 needed)
+                setCurrentTick(selectedPosition.currentTick);
             } catch (err) {
                 console.error('Error fetching balances:', err);
             }
@@ -643,50 +618,15 @@ export default function PortfolioPage() {
         if (!address) return;
         setActionLoading(true);
         try {
-            // Get pool address from CLFactory
-            const getPoolSelector = '0x28af8d0b';
-            const token0Padded = position.token0.slice(2).toLowerCase().padStart(64, '0');
-            const token1Padded = position.token1.slice(2).toLowerCase().padStart(64, '0');
-            const tickSpacingHex = position.tickSpacing >= 0
-                ? position.tickSpacing.toString(16).padStart(64, '0')
-                : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(position.tickSpacing) + BigInt(1)).toString(16);
-
-            const poolResult = await fetch(getRpcForPoolData(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0', method: 'eth_call',
-                    params: [{ to: CL_CONTRACTS.CLFactory, data: `${getPoolSelector}${token0Padded}${token1Padded}${tickSpacingHex}` }, 'latest'],
-                    id: 1
-                })
-            }).then(r => r.json());
-
-            if (!poolResult.result || poolResult.result === '0x' + '0'.repeat(64)) {
-                toast.error('Pool not found');
-                setActionLoading(false);
-                return;
-            }
-
-            const poolAddress = '0x' + poolResult.result.slice(-40);
-
-            // Get gauge address from Voter
-            const gaugeResult = await fetch(getRpcForPoolData(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0', method: 'eth_call',
-                    params: [{ to: V2_CONTRACTS.Voter, data: `0xb9a09fd5${poolAddress.slice(2).toLowerCase().padStart(64, '0')}` }, 'latest'],
-                    id: 1
-                })
-            }).then(r => r.json());
-
-            if (!gaugeResult.result || gaugeResult.result === '0x' + '0'.repeat(64)) {
+            // Get gauge address from Goldsky subgraph (no RPC Voter.gauges call)
+            const gaugeAddress = await fetchGaugeAddressByPool(position.poolId);
+            if (!gaugeAddress) {
                 toast.warning('No gauge found for this pool');
                 setActionLoading(false);
                 return;
             }
 
-            const gaugeAddress = ('0x' + gaugeResult.result.slice(-40)).toLowerCase();
+            const gaugeAddressLower = gaugeAddress.toLowerCase();
 
             // Check if NFT is already approved for this gauge
             // getApproved(tokenId) returns the approved address for the token
@@ -707,7 +647,7 @@ export default function PortfolioPage() {
             }).then(r => r.json());
 
             const approvedAddress = approvedResult.result ? ('0x' + approvedResult.result.slice(-40)).toLowerCase() : '';
-            const needsApproval = approvedAddress !== gaugeAddress;
+            const needsApproval = approvedAddress !== gaugeAddressLower;
 
             // Only request approval if not already approved
             if (needsApproval) {
@@ -715,7 +655,7 @@ export default function PortfolioPage() {
                     address: CL_CONTRACTS.NonfungiblePositionManager as Address,
                     abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
                     functionName: 'approve',
-                    args: [gaugeAddress as Address, position.tokenId],
+                    args: [gaugeAddressLower as Address, position.tokenId],
                 });
 
                 // Wait for approval to be confirmed before depositing
@@ -748,7 +688,7 @@ export default function PortfolioPage() {
 
             // Deposit to gauge
             await writeContractAsync({
-                address: gaugeAddress as Address,
+                address: gaugeAddressLower as Address,
                 abi: CL_GAUGE_ABI,
                 functionName: 'deposit',
                 args: [position.tokenId],
