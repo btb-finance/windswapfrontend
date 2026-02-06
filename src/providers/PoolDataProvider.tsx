@@ -412,14 +412,23 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         refetch: refetchUserData
     } = useUserPositions(address);
 
+    // Helper to convert decimal string to wei (BigInt)
+    const toWei = (value: string | undefined): bigint => {
+        if (!value) return BigInt(0);
+        const num = parseFloat(value);
+        if (isNaN(num)) return BigInt(0);
+        // Convert to wei (18 decimals)
+        return BigInt(Math.floor(num * 1e18));
+    };
+
     // Transform subgraph veNFT data to provider format
     const veNFTs: VeNFT[] = subgraphVeNFTs.map(nft => ({
         tokenId: BigInt(nft.tokenId),
-        amount: BigInt(nft.lockedAmount || '0'),
+        amount: toWei(nft.lockedAmount),
         end: BigInt(nft.lockEnd || '0'),
         isPermanent: nft.isPermanent,
-        votingPower: BigInt(nft.votingPower || '0'),
-        claimable: BigInt(nft.claimableRewards || '0'),
+        votingPower: toWei(nft.votingPower),
+        claimable: toWei(nft.claimableRewards),
         hasVoted: false,  // Note: VeVotes must be queried separately if needed
     }));
 
