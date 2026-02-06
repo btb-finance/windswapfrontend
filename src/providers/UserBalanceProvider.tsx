@@ -3,8 +3,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { formatUnits, Address } from 'viem';
 import { useAccount } from 'wagmi';
-import { DEFAULT_TOKEN_LIST, Token } from '@/config/tokens';
+import { DEFAULT_TOKEN_LIST, Token, WSEI } from '@/config/tokens';
 import { getRpcForUserData } from '@/utils/rpc';
+
+// Goldsky GraphQL endpoint (v3.0.6)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.6/gn';
 
 // ============================================
 // Types
@@ -13,6 +16,7 @@ interface TokenBalance {
     token: Token;
     balance: bigint;
     formatted: string;
+    usdValue?: number;
 }
 
 interface UserBalanceContextType {
@@ -21,6 +25,38 @@ interface UserBalanceContextType {
     sortedTokens: Token[]; // Tokens sorted by balance (highest first)
     isLoading: boolean;
     refetch: () => void;
+}
+
+async function fetchTokenPricesUsd(tokenAddresses: string[]): Promise<Map<string, number>> {
+    const priceMap = new Map<string, number>();
+    if (tokenAddresses.length === 0) return priceMap;
+
+    try {
+        const query = `query Prices($ids: [String!]) {
+            tokens(where: { id_in: $ids }) {
+                id
+                priceUSD
+            }
+        }`;
+
+        const response = await fetch(SUBGRAPH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, variables: { ids: tokenAddresses.map(a => a.toLowerCase()) } }),
+        });
+        const json = await response.json();
+        const rows: Array<{ id: string; priceUSD: string }> = json?.data?.tokens || [];
+        for (const r of rows) {
+            const p = r?.priceUSD ? parseFloat(r.priceUSD) : 0;
+            if (r?.id && isFinite(p) && p > 0) {
+                priceMap.set(String(r.id).toLowerCase(), p);
+            }
+        }
+    } catch {
+        // ignore
+    }
+
+    return priceMap;
 }
 
 const UserBalanceContext = createContext<UserBalanceContextType | undefined>(undefined);
@@ -70,6 +106,15 @@ export function UserBalanceProvider({ children }: { children: ReactNode }) {
         try {
             const addressPadded = address.slice(2).toLowerCase().padStart(64, '0');
 
+            // Fetch prices (subgraph) once per refresh
+            const tokensForPrice = DEFAULT_TOKEN_LIST
+                .filter(t => !t.isNative)
+                .map(t => t.address);
+            // Add WSEI so native SEI can be valued
+            tokensForPrice.push(WSEI.address);
+            const priceUsdMap = await fetchTokenPricesUsd(tokensForPrice);
+            const wseiUsd = priceUsdMap.get(WSEI.address.toLowerCase()) || 0;
+
             // Get native SEI balance
             const nativeBalanceRes = await fetch(getRpcForUserData(), {
                 method: 'POST',
@@ -99,10 +144,14 @@ export function UserBalanceProvider({ children }: { children: ReactNode }) {
             // Add native SEI balance
             const seiToken = DEFAULT_TOKEN_LIST.find(t => t.isNative);
             if (seiToken) {
+                const seiFormatted = formatUnits(nativeBalance, seiToken.decimals);
+                const seiAmount = parseFloat(seiFormatted);
+                const seiUsdValue = wseiUsd > 0 && isFinite(seiAmount) ? seiAmount * wseiUsd : undefined;
                 newBalances.set(seiToken.address.toLowerCase(), {
                     token: seiToken,
                     balance: nativeBalance,
-                    formatted: formatUnits(nativeBalance, seiToken.decimals),
+                    formatted: seiFormatted,
+                    usdValue: seiUsdValue,
                 });
             }
 
@@ -111,27 +160,39 @@ export function UserBalanceProvider({ children }: { children: ReactNode }) {
                 const balance = balanceResults[i] !== '0x' && balanceResults[i].length > 2
                     ? BigInt(balanceResults[i])
                     : BigInt(0);
+
+                const formatted = formatUnits(balance, token.decimals);
+                const amount = parseFloat(formatted);
+                const priceUsd = priceUsdMap.get(token.address.toLowerCase()) || 0;
+                const usdValue = priceUsd > 0 && isFinite(amount) ? amount * priceUsd : undefined;
                 newBalances.set(token.address.toLowerCase(), {
                     token,
                     balance,
-                    formatted: formatUnits(balance, token.decimals),
+                    formatted,
+                    usdValue,
                 });
             });
 
             setBalances(newBalances);
 
-            // Sort tokens: those with balance first, then alphabetically
+            // Sort tokens by USD value (desc). Fall back to raw balance.
             const sorted = [...DEFAULT_TOKEN_LIST].sort((a, b) => {
-                const balA = newBalances.get(a.address.toLowerCase())?.balance || BigInt(0);
-                const balB = newBalances.get(b.address.toLowerCase())?.balance || BigInt(0);
+                const aRow = newBalances.get(a.address.toLowerCase());
+                const bRow = newBalances.get(b.address.toLowerCase());
 
+                const aUsd = aRow?.usdValue;
+                const bUsd = bRow?.usdValue;
+
+                if (aUsd !== undefined && bUsd !== undefined && aUsd !== bUsd) return bUsd - aUsd;
+                if (aUsd !== undefined && (bUsd === undefined)) return -1;
+                if (bUsd !== undefined && (aUsd === undefined)) return 1;
+
+                const balA = aRow?.balance || BigInt(0);
+                const balB = bRow?.balance || BigInt(0);
                 if (balA > BigInt(0) && balB === BigInt(0)) return -1;
                 if (balB > BigInt(0) && balA === BigInt(0)) return 1;
-                if (balA > BigInt(0) && balB > BigInt(0)) {
-                    // Both have balance - sort by relative value (higher first)
-                    return balB > balA ? 1 : -1;
-                }
-                return 0; // Keep original order for tokens without balance
+                if (balA > BigInt(0) && balB > BigInt(0)) return balB > balA ? 1 : -1;
+                return 0;
             });
 
             setSortedTokens(sorted);
