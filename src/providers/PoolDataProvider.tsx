@@ -1234,10 +1234,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const tokenId = BigInt('0x' + tokenIdHex);
 
                     // Fetch position details and pending rewards in parallel
-                    // Each call hits a DIFFERENT RPC to spread load
+                    // positions() MUST use primary RPC - secondary doesn't have NFT manager data
                     const [positionResult, rewardsResult, slot0Result] = await Promise.all([
-                        // positions(tokenId) → secondary RPC (pool data)
-                        fetch(getRpcForPoolData(), {
+                        // positions(tokenId) → primary RPC (REQUIRED - secondary RPC returns empty)
+                        fetch(getRpcForUserData(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1249,8 +1249,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 }, 'latest']
                             })
                         }).then(r => r.json()),
-                        // earned(address, tokenId) → primary RPC (user data)
-                        fetch(getRpcForUserData(), {
+                        // earned(address, tokenId) → voting RPC (gauge data)
+                        fetch(getRpcForVoting(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1262,8 +1262,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 }, 'latest']
                             })
                         }).then(r => r.json()),
-                        // slot0() → archive RPC (pool tick data)
-                        fetch(getRpcForVoting(), {
+                        // slot0() → pool data RPC
+                        fetch(getRpcForPoolData(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
