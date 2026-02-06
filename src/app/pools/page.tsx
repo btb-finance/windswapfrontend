@@ -90,7 +90,7 @@ export default function PoolsPage() {
         const s0 = pool.token0.symbol.toUpperCase();
         const s1 = pool.token1.symbol.toUpperCase();
 
-        // PREFER pool.tvl from DexScreener/subgraph - it's more reliable
+        // PREFER pool.tvl from subgraph - it's more reliable
         // Reserve-based calculation has token order mismatch issues
         let tvlUsd = parseFloat(pool.tvl) || 0;
 
@@ -494,7 +494,7 @@ export default function PoolsPage() {
                                     })()}
                                 </div>
 
-                                {/* Desktop: 24h Volume (from DexScreener) */}
+                                {/* Desktop: 24h Volume (from subgraph) */}
                                 <div className="hidden md:flex md:col-span-2 items-center justify-center">
                                     {pool.volume24h && parseFloat(pool.volume24h) > 0.01 ? (
                                         <span className="text-sm font-medium">

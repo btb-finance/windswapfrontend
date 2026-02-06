@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { Address, isAddress, getAddress } from 'viem';
 import { useReadContract } from 'wagmi';
 import { Token, SEI, WSEI } from '@/config/tokens';
 import { getTokenByAddress } from '@/utils/tokens';
 import { GAUGE_LIST, GaugeConfig } from '@/config/gauges';
 import { usePoolData } from '@/providers/PoolDataProvider';
+import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 
 // Minimal ERC20 ABI for fetching token info
 const ERC20_ABI = [
@@ -70,34 +71,98 @@ export function useTokenPage(address: string | undefined): UseTokenPageResult {
 
     const isKnownToken = knownToken !== null;
 
-    // If token not in list, fetch from chain
+    // If token not in list, try subgraph first
+    const [subgraphToken, setSubgraphToken] = useState<Token | null>(null);
+    const [subgraphLoading, setSubgraphLoading] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchFromSubgraph = async () => {
+            if (!checksumAddr) {
+                setSubgraphToken(null);
+                return;
+            }
+            if (knownToken) {
+                setSubgraphToken(null);
+                return;
+            }
+
+            setSubgraphLoading(true);
+            try {
+                const query = `query TokenById($id: ID!) {
+                    token(id: $id) {
+                        id
+                        symbol
+                        name
+                        decimals
+                    }
+                }`;
+
+                const response = await fetch(SUBGRAPH_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, variables: { id: checksumAddr.toLowerCase() } }),
+                });
+                const json = await response.json();
+                const t = json?.data?.token;
+
+                if (cancelled) return;
+                if (t?.id && t?.symbol && t?.decimals !== undefined) {
+                    setSubgraphToken({
+                        address: checksumAddr,
+                        symbol: String(t.symbol),
+                        name: String(t.name || t.symbol),
+                        decimals: Number(t.decimals),
+                    });
+                } else {
+                    setSubgraphToken(null);
+                }
+            } catch {
+                if (!cancelled) setSubgraphToken(null);
+            } finally {
+                if (!cancelled) setSubgraphLoading(false);
+            }
+        };
+
+        fetchFromSubgraph();
+        return () => {
+            cancelled = true;
+        };
+    }, [checksumAddr, knownToken]);
+
+    // If token not in list and not in subgraph, fetch from chain
     const { data: onChainName, isLoading: loadingName } = useReadContract({
         address: checksumAddr as Address,
         abi: ERC20_ABI,
         functionName: 'name',
-        query: { enabled: isValidAddress && !knownToken },
+        query: { enabled: isValidAddress && !knownToken && !subgraphToken },
     });
 
     const { data: onChainSymbol, isLoading: loadingSymbol } = useReadContract({
         address: checksumAddr as Address,
         abi: ERC20_ABI,
         functionName: 'symbol',
-        query: { enabled: isValidAddress && !knownToken },
+        query: { enabled: isValidAddress && !knownToken && !subgraphToken },
     });
 
     const { data: onChainDecimals, isLoading: loadingDecimals } = useReadContract({
         address: checksumAddr as Address,
         abi: ERC20_ABI,
         functionName: 'decimals',
-        query: { enabled: isValidAddress && !knownToken },
+        query: { enabled: isValidAddress && !knownToken && !subgraphToken },
     });
 
-    const isLoading = !isValidAddress ? false : (!knownToken && (loadingName || loadingSymbol || loadingDecimals));
+    const isLoading = !isValidAddress
+        ? false
+        : (!knownToken && (subgraphLoading || (!subgraphToken && (loadingName || loadingSymbol || loadingDecimals))));
 
     // Build token object
     const token = useMemo(() => {
         if (!checksumAddr) return null;
         if (knownToken) return knownToken;
+
+        if (subgraphToken) return subgraphToken;
 
         // Build from on-chain data
         if (onChainName && onChainSymbol && onChainDecimals !== undefined) {
@@ -110,7 +175,7 @@ export function useTokenPage(address: string | undefined): UseTokenPageResult {
         }
 
         return null;
-    }, [checksumAddr, knownToken, onChainName, onChainSymbol, onChainDecimals]);
+    }, [checksumAddr, knownToken, subgraphToken, onChainName, onChainSymbol, onChainDecimals]);
 
     // Get pool data from provider
     const { allPools } = usePoolData();
