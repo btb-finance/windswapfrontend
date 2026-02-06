@@ -1039,11 +1039,14 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             // Step 3: Calculate current epoch start (Thursday 00:00 UTC)
             const EPOCH_DURATION = 604800; // 7 days in seconds
             const currentTimestamp = Math.floor(Date.now() / 1000);
-            const epochStart = Math.floor(currentTimestamp / EPOCH_DURATION) * EPOCH_DURATION;
-            const epochStartHex = epochStart.toString(16).padStart(64, '0');
+            const currentEpochStart = Math.floor(currentTimestamp / EPOCH_DURATION) * EPOCH_DURATION;
+            const previousEpochStart = currentEpochStart - EPOCH_DURATION;
+            const currentEpochHex = currentEpochStart.toString(16).padStart(64, '0');
+            const previousEpochHex = previousEpochStart.toString(16).padStart(64, '0');
 
             // Step 4: For each fee reward contract, get the reward amounts for token0 and token1
-            const feeAmountCalls: { to: string; data: string; gaugeIdx: number; tokenAddr: string; symbol: string; decimals: number }[] = [];
+            // Query BOTH current and previous epoch - show current if fees exist, otherwise show previous
+            const feeAmountCalls: { to: string; data: string; gaugeIdx: number; tokenAddr: string; symbol: string; decimals: number; epoch: 'current' | 'previous' }[] = [];
 
             for (let i = 0; i < GAUGE_LIST.length; i++) {
                 const feeRewardAddr = feeRewardAddresses[i];
@@ -1056,26 +1059,51 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
 
                 // tokenRewardsPerEpoch(token, epochStart) - selector: 0x92777b29
+                // Query current epoch
                 feeAmountCalls.push({
                     to: feeRewardAddr,
-                    data: `0x92777b29${token0Padded}${epochStartHex}`,
+                    data: `0x92777b29${token0Padded}${currentEpochHex}`,
                     gaugeIdx: i,
                     tokenAddr: g.token0,
                     symbol: known0?.symbol || g.symbol0,
                     decimals: known0?.decimals || 18,
+                    epoch: 'current',
                 });
                 feeAmountCalls.push({
                     to: feeRewardAddr,
-                    data: `0x92777b29${token1Padded}${epochStartHex}`,
+                    data: `0x92777b29${token1Padded}${currentEpochHex}`,
                     gaugeIdx: i,
                     tokenAddr: g.token1,
                     symbol: known1?.symbol || g.symbol1,
                     decimals: known1?.decimals || 18,
+                    epoch: 'current',
+                });
+                // Query previous epoch (fallback if current has no fees yet)
+                feeAmountCalls.push({
+                    to: feeRewardAddr,
+                    data: `0x92777b29${token0Padded}${previousEpochHex}`,
+                    gaugeIdx: i,
+                    tokenAddr: g.token0,
+                    symbol: known0?.symbol || g.symbol0,
+                    decimals: known0?.decimals || 18,
+                    epoch: 'previous',
+                });
+                feeAmountCalls.push({
+                    to: feeRewardAddr,
+                    data: `0x92777b29${token1Padded}${previousEpochHex}`,
+                    gaugeIdx: i,
+                    tokenAddr: g.token1,
+                    symbol: known1?.symbol || g.symbol1,
+                    decimals: known1?.decimals || 18,
+                    epoch: 'previous',
                 });
             }
 
-            // Fetch fee amounts
+            // Fetch fee amounts for both epochs
             const feeAmounts: Map<number, RewardToken[]> = new Map();
+            const currentEpochFees: Map<number, RewardToken[]> = new Map();
+            const previousEpochFees: Map<number, RewardToken[]> = new Map();
+
             if (feeAmountCalls.length > 0) {
                 const feeResults = await batchRpcCall(feeAmountCalls.map(c => ({ to: c.to, data: c.data })), 2, getRpcForVoting());
 
@@ -1084,14 +1112,28 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const amount = feeResults[i] !== '0x' ? BigInt(feeResults[i]) : BigInt(0);
 
                     if (amount > BigInt(0)) {
-                        const existing = feeAmounts.get(call.gaugeIdx) || [];
+                        const targetMap = call.epoch === 'current' ? currentEpochFees : previousEpochFees;
+                        const existing = targetMap.get(call.gaugeIdx) || [];
                         existing.push({
                             address: call.tokenAddr as Address,
                             symbol: call.symbol,
                             amount,
                             decimals: call.decimals,
                         });
-                        feeAmounts.set(call.gaugeIdx, existing);
+                        targetMap.set(call.gaugeIdx, existing);
+                    }
+                }
+
+                // For each gauge, prefer current epoch fees if any exist, otherwise use previous epoch
+                for (let i = 0; i < GAUGE_LIST.length; i++) {
+                    const currentFees = currentEpochFees.get(i) || [];
+                    const previousFees = previousEpochFees.get(i) || [];
+
+                    // Use current epoch if it has any fees, otherwise fall back to previous
+                    if (currentFees.length > 0) {
+                        feeAmounts.set(i, currentFees);
+                    } else if (previousFees.length > 0) {
+                        feeAmounts.set(i, previousFees);
                     }
                 }
             }
