@@ -246,14 +246,17 @@ export interface SubgraphPosition {
     tokenId: string;
     pool: {
         id: string;
-        token0: { id: string; symbol: string };
-        token1: { id: string; symbol: string };
+        token0: { id: string; symbol: string; decimals: number; priceUSD: string };
+        token1: { id: string; symbol: string; decimals: number; priceUSD: string };
         tickSpacing: number;
         tick: number;  // Current pool tick
     };
     tickLower: number;
     tickUpper: number;
     liquidity: string;
+    amount0: string;  // Token0 balance in position
+    amount1: string;  // Token1 balance in position
+    amountUSD: string;  // Total USD value of position
     tokensOwed0: string;  // Uncollected fees in token0
     tokensOwed1: string;  // Uncollected fees in token1
     staked: boolean;
@@ -267,6 +270,8 @@ export interface SubgraphVeNFT {
     votingPower: string;
     isPermanent: boolean;
     claimableRewards: string;
+    hasVoted: boolean;
+    lastVoted: string;
 }
 
 export interface SubgraphStakedPosition {
@@ -275,8 +280,8 @@ export interface SubgraphStakedPosition {
         id: string;
         pool: {
             id: string;
-            token0: { id: string; symbol: string };
-            token1: { id: string; symbol: string };
+            token0: { id: string; symbol: string; decimals: number; priceUSD: string };
+            token1: { id: string; symbol: string; decimals: number; priceUSD: string };
             tickSpacing: number;
             tick: number;
         };
@@ -286,6 +291,9 @@ export interface SubgraphStakedPosition {
         tickLower: number;
         tickUpper: number;
         liquidity: string;
+        amount0: string;
+        amount1: string;
+        amountUSD: string;
     } | null;
     tokenId: string;
     amount: string;
@@ -310,14 +318,17 @@ const USER_DATA_QUERY = `
                 tokenId
                 pool {
                     id
-                    token0 { id symbol }
-                    token1 { id symbol }
+                    token0 { id symbol decimals priceUSD }
+                    token1 { id symbol decimals priceUSD }
                     tickSpacing
                     tick
                 }
                 tickLower
                 tickUpper
                 liquidity
+                amount0
+                amount1
+                amountUSD
                 tokensOwed0
                 tokensOwed1
                 staked
@@ -330,6 +341,8 @@ const USER_DATA_QUERY = `
                 votingPower
                 isPermanent
                 claimableRewards
+                hasVoted
+                lastVoted
             }
         }
         gaugeStakedPositions(where: { userId: $userId }, first: 100) {
@@ -338,8 +351,8 @@ const USER_DATA_QUERY = `
                 id
                 pool {
                     id
-                    token0 { id symbol }
-                    token1 { id symbol }
+                    token0 { id symbol decimals priceUSD }
+                    token1 { id symbol decimals priceUSD }
                     tickSpacing
                     tick
                 }
@@ -349,6 +362,9 @@ const USER_DATA_QUERY = `
                 tickLower
                 tickUpper
                 liquidity
+                amount0
+                amount1
+                amountUSD
             }
             tokenId
             amount
