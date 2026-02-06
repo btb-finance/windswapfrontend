@@ -56,10 +56,10 @@ export function getRpcForUserData(): string {
 
 /**
  * RPC for pool/liquidity data: reserves, TVL, pool lookups, slot0
- * Uses secondary to keep primary free for user calls
+ * Uses archive RPC (secondary stakeme.pro returns empty for contract calls)
  */
 export function getRpcForPoolData(): string {
-    return RPC_ENDPOINTS.secondary;
+    return RPC_ENDPOINTS.archive;
 }
 
 /**
@@ -72,14 +72,10 @@ export function getRpcForVoting(): string {
 
 /**
  * RPC for swap quotes: router quotes, quoter calls
- * Round-robins across secondary + archive to spread quote load
+ * Uses Alchemy for fastest response (paid tier) - only for user-facing swap quotes
  */
-let quoteRpcIndex = 0;
-const quoteRpcs = [RPC_ENDPOINTS.secondary, RPC_ENDPOINTS.archive];
 export function getRpcForQuotes(): string {
-    const rpc = quoteRpcs[quoteRpcIndex % quoteRpcs.length];
-    quoteRpcIndex++;
-    return rpc;
+    return 'https://sei-mainnet.g.alchemy.com/v2/INhvk7-hUrgf5niZBGbae';
 }
 
 /**
