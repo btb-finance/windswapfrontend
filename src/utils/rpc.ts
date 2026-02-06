@@ -64,10 +64,10 @@ export function getRpcForPoolData(): string {
 
 /**
  * RPC for voting/gauge data: weights, votes, epoch rewards, gauge lookups
- * Uses archive RPC to spread load off primary+secondary
+ * Uses primary RPC (archive RPC returns 0 for fee rewards)
  */
 export function getRpcForVoting(): string {
-    return RPC_ENDPOINTS.archive;
+    return RPC_ENDPOINTS.primary;
 }
 
 /**
