@@ -268,6 +268,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         return BigInt(Math.floor(num * 1e18));
     };
 
+    const toBigIntSafe = (value: string | undefined): bigint => {
+        if (!value) return BigInt(0);
+        // Subgraph sometimes returns BigDecimal strings; BigInt("0.1") throws.
+        return value.includes('.') ? toWei(value) : BigInt(value);
+    };
+
     // Transform subgraph veNFT data to provider format
     const veNFTs: VeNFT[] = subgraphVeNFTs.map(nft => ({
         tokenId: BigInt(nft.tokenId),
@@ -300,8 +306,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             tickLower: sp.tickLower ?? sp.position?.tickLower ?? 0,
             tickUpper: sp.tickUpper ?? sp.position?.tickUpper ?? 0,
             currentTick: pool?.tick || 0,
-            liquidity: BigInt(sp.position?.liquidity || sp.amount || '0'),
-            pendingRewards: BigInt(sp.earned || '0'),
+            liquidity: toBigIntSafe(sp.position?.liquidity || sp.amount || '0'),
+            pendingRewards: toBigIntSafe(sp.earned || '0'),
             rewardRate: BigInt(0),
         };
     });
