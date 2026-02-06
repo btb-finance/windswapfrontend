@@ -1,7 +1,7 @@
 'use client';
 
 import { useAccount, useReadContract } from 'wagmi';
-import { Address, formatUnits } from 'viem';
+import { Address, formatUnits, parseUnits } from 'viem';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, POOL_FACTORY_ABI, POOL_ABI } from '@/config/abis';
 import { useState, useEffect, useCallback } from 'react';
@@ -11,6 +11,10 @@ export interface CLPosition {
     poolId: Address;
     token0: Address;
     token1: Address;
+    token0Decimals: number;
+    token1Decimals: number;
+    token0PriceUSD: number;
+    token1PriceUSD: number;
     tickSpacing: number;
     tickLower: number;
     tickUpper: number;
@@ -18,6 +22,7 @@ export interface CLPosition {
     liquidity: bigint;
     tokensOwed0: bigint;
     tokensOwed1: bigint;
+    amountUSD: number;
     token0Symbol?: string;
     token1Symbol?: string;
 }
@@ -52,14 +57,19 @@ export function useCLPositionsFromSubgraph() {
             poolId: p.pool.id as Address,
             token0: p.pool.token0.id as Address,
             token1: p.pool.token1.id as Address,
+            token0Decimals: Number(p.pool.token0.decimals ?? 18),
+            token1Decimals: Number(p.pool.token1.decimals ?? 18),
+            token0PriceUSD: p.pool.token0.priceUSD ? parseFloat(p.pool.token0.priceUSD) : 0,
+            token1PriceUSD: p.pool.token1.priceUSD ? parseFloat(p.pool.token1.priceUSD) : 0,
             tickSpacing: p.pool.tickSpacing,
             tickLower: p.tickLower,
             tickUpper: p.tickUpper,
             currentTick: p.pool.tick ?? 0,  // Pool's current tick from subgraph
             liquidity: BigInt(p.liquidity),
             // Use tokensOwed from subgraph (snapshot from last interaction)
-            tokensOwed0: p.tokensOwed0 ? BigInt(Math.floor(parseFloat(p.tokensOwed0) * 1e18)) : BigInt(0),
-            tokensOwed1: p.tokensOwed1 ? BigInt(Math.floor(parseFloat(p.tokensOwed1) * 1e18)) : BigInt(0),
+            tokensOwed0: p.tokensOwed0 ? parseUnits(p.tokensOwed0, Number(p.pool.token0.decimals ?? 18)) : BigInt(0),
+            tokensOwed1: p.tokensOwed1 ? parseUnits(p.tokensOwed1, Number(p.pool.token1.decimals ?? 18)) : BigInt(0),
+            amountUSD: p.amountUSD ? parseFloat(p.amountUSD) : 0,
             token0Symbol: p.pool.token0.symbol,
             token1Symbol: p.pool.token1.symbol,
         }))

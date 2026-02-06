@@ -227,6 +227,7 @@ export default function PortfolioPage() {
     const {
         getTokenInfo: getGlobalTokenInfo,
         isLoading: globalLoading,
+        windPrice,
         stakedPositions: prefetchedStakedPositions,
         stakedLoading: loadingStaked,
         refetchStaked,
@@ -504,6 +505,20 @@ export default function PortfolioPage() {
     const totalVotingPower = veNFTs.reduce((sum, nft) => sum + nft.votingPower, BigInt(0));
     const totalPendingRewards = stakedPositions.reduce((sum, pos) => sum + pos.pendingRewards, BigInt(0));
     const totalUncollectedFees = clPositions.reduce((sum, pos) => sum + pos.tokensOwed0 + pos.tokensOwed1, BigInt(0));
+
+    const totalClValueUsd = clPositions.reduce((sum, pos) => sum + (pos.amountUSD || 0), 0);
+
+    const totalUncollectedFeesUsd = clPositions.reduce((sum, pos) => {
+        const owed0 = pos.token0PriceUSD > 0
+            ? parseFloat(formatUnits(pos.tokensOwed0, pos.token0Decimals)) * pos.token0PriceUSD
+            : 0;
+        const owed1 = pos.token1PriceUSD > 0
+            ? parseFloat(formatUnits(pos.tokensOwed1, pos.token1Decimals)) * pos.token1PriceUSD
+            : 0;
+        return sum + owed0 + owed1;
+    }, 0);
+
+    const pendingRewardsUsd = (windPrice || 0) * parseFloat(formatUnits(totalPendingRewards, 18));
 
     // Collect fees from CL position
     const handleCollectFees = async (position: typeof clPositions[0]) => {
@@ -1333,6 +1348,24 @@ export default function PortfolioPage() {
                                     {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(2)}
                                 </div>
                                 <div className="text-[10px] text-gray-500">WIND rewards</div>
+                            </div>
+
+                            <div className="glass-card p-3">
+                                <div className="text-[10px] text-gray-400">CL Value</div>
+                                <div className="text-lg font-bold gradient-text">{formatPrice(totalClValueUsd)}</div>
+                                <div className="text-[10px] text-gray-500">estimated</div>
+                            </div>
+
+                            <div className="glass-card p-3">
+                                <div className="text-[10px] text-gray-400">Uncollected Fees</div>
+                                <div className="text-lg font-bold text-green-400">{formatPrice(totalUncollectedFeesUsd)}</div>
+                                <div className="text-[10px] text-gray-500">estimated</div>
+                            </div>
+
+                            <div className="glass-card p-3">
+                                <div className="text-[10px] text-gray-400">Rewards (USD)</div>
+                                <div className="text-lg font-bold text-yellow-400">{formatPrice(pendingRewardsUsd)}</div>
+                                <div className="text-[10px] text-gray-500">WIND × price</div>
                             </div>
                         </div>
 
