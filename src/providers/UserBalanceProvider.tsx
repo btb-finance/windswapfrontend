@@ -7,7 +7,7 @@ import { DEFAULT_TOKEN_LIST, Token, WSEI } from '@/config/tokens';
 import { getRpcForUserData } from '@/utils/rpc';
 
 // Goldsky GraphQL endpoint (v3.0.6)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.6/gn';
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.7/gn';
 
 // ============================================
 // Types
