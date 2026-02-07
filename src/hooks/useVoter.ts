@@ -65,23 +65,26 @@ export function useVoter() {
     // Fetch existing votes for a veNFT across all pools
     const fetchExistingVotes = useCallback(async (tokenId: bigint) => {
         if (!tokenId) return;
-        if (epochCount === BigInt(0)) return;
 
         try {
-            const query = `query ExistingVotes($tokenId: ID!, $epoch: BigInt!) {
-                veVotes(where: { veNFT: $tokenId, epoch: $epoch, isActive: true }, first: 500) {
+            const query = `query ExistingVotes($tokenId: ID!) {
+                veVotes(where: { veNFT: $tokenId, isActive: true }, orderBy: epoch, orderDirection: desc, first: 500) {
+                    epoch
                     pool { id }
                     weight
                 }
             }`;
 
-            const data = await fetchGraphQL<{ veVotes: Array<{ pool: { id: string }; weight: string }> }>(query, {
+            const data = await fetchGraphQL<{ veVotes: Array<{ epoch: string; pool: { id: string }; weight: string }> }>(query, {
                 tokenId: tokenId.toString(),
-                epoch: epochCount.toString(),
             });
 
+            const rows = data.veVotes || [];
+            const latestEpoch = rows.length > 0 ? String(rows[0].epoch) : null;
+
             const votesMap: Record<string, bigint> = {};
-            for (const v of data.veVotes || []) {
+            for (const v of rows) {
+                if (latestEpoch && String(v.epoch) !== latestEpoch) continue;
                 const poolId = String(v.pool?.id || '').toLowerCase();
                 if (!poolId) continue;
                 const w = v.weight ? BigInt(v.weight) : BigInt(0);
@@ -91,7 +94,7 @@ export function useVoter() {
         } catch (err) {
             console.error('Error fetching existing votes (subgraph):', err);
         }
-    }, [epochCount, fetchGraphQL]);
+    }, [fetchGraphQL]);
 
     // Add incentive (bribe) to a pool
     const addIncentive = useCallback(async (
