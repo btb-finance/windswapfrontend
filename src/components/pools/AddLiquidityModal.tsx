@@ -1566,7 +1566,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 onClick={() => {
                                                                     // Set range ABOVE current price - only deposit token0
                                                                     // Use larger buffer (1% minimum) to ensure tick is truly above current
-                                                                    const minBuffer = Math.max(rangePercent * 0.2, 0.01); // At least 1% buffer
+                                                                    const minBuffer = rangePercent * 0.2; // Small buffer to ensure tick is above current
                                                                     const lower = currentPrice * (1 + minBuffer);
                                                                     const upper = currentPrice * (1 + rangePercent + minBuffer);
                                                                     setPriceLower(lower.toFixed(6));
@@ -1588,8 +1588,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             <button
                                                                 onClick={() => {
                                                                     // Set range BELOW current price - only deposit token1
-                                                                    // Use larger buffer (1% minimum) to ensure tick is truly below current
-                                                                    const minBuffer = Math.max(rangePercent * 0.2, 0.01); // At least 1% buffer
+                                                                    const minBuffer = rangePercent * 0.2; // Small buffer to ensure tick is below current
                                                                     const lower = currentPrice * (1 - rangePercent - minBuffer);
                                                                     const upper = currentPrice * (1 - minBuffer);
                                                                     setPriceLower(lower.toFixed(6));
@@ -1751,9 +1750,19 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 0.95).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
-                                                            <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceLower ? parseFloat(priceLower).toFixed(4) : '0'}
-                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={priceLower || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                                                        setPriceLower(val);
+                                                                    }
+                                                                }}
+                                                                className="font-bold text-lg min-w-[80px] max-w-[120px] text-center bg-transparent border border-white/10 rounded-lg px-1 py-0.5 focus:border-primary/50 focus:outline-none"
+                                                                placeholder="0"
+                                                            />
                                                             <button
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 1.05).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
@@ -1778,9 +1787,19 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '999999') * 0.95).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
-                                                            <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceUpper ? parseFloat(priceUpper).toFixed(4) : 'Max'}
-                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={priceUpper || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                                                        setPriceUpper(val);
+                                                                    }
+                                                                }}
+                                                                className="font-bold text-lg min-w-[80px] max-w-[120px] text-center bg-transparent border border-white/10 rounded-lg px-1 py-0.5 focus:border-primary/50 focus:outline-none"
+                                                                placeholder="Max"
+                                                            />
                                                             <button
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '1') * 1.05).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"

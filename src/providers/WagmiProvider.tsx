@@ -49,7 +49,6 @@ const config = getDefaultConfig({
                 compassWallet,       // Compass first - Sei's native wallet
                 rabbyWallet,
                 metaMaskWallet,
-                coinbaseWallet,
                 trustWallet,
                 phantomWallet,
             ],
