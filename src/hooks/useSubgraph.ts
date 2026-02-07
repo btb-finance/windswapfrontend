@@ -318,17 +318,18 @@ export interface SubgraphStakedPosition {
     };
     position: {
         tokenId: string;
+        staked: boolean;
         tickLower: number;
         tickUpper: number;
         liquidity: string;
         amount0: string;
         amount1: string;
         amountUSD: string;
-    } | null;
+    };
     tokenId: string;
     amount: string;
-    tickLower: number | null;
-    tickUpper: number | null;
+    tickLower: number;
+    tickUpper: number;
     earned: string;
     totalClaimed: string;
     isActive: boolean;
@@ -411,7 +412,7 @@ const USER_DATA_QUERY = `
                 totalClaimed
             }
         }
-        gaugeStakedPositions(where: { userId: $userId, isActive: true }, first: 100) {
+        gaugeStakedPositions(where: { userId: $userId }, first: 1000) {
             id
             gauge {
                 id
@@ -425,6 +426,7 @@ const USER_DATA_QUERY = `
             }
             position {
                 tokenId
+                staked
                 tickLower
                 tickUpper
                 liquidity

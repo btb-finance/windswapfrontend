@@ -278,13 +278,15 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         refetch: refetchUserData
     } = useUserPositions(address);
 
-    const stakedTokenIdSet = new Set(
-        (subgraphPositions || [])
-            .filter(p => !!p?.staked)
-            .map(p => String(p.tokenId))
-    );
-
-    const filteredSubgraphStaked = (subgraphStaked || []).filter(sp => stakedTokenIdSet.has(String(sp.tokenId)));
+    // Do NOT intersect staked positions with `positions(first: 50)`.
+    // Many wallets have far more than 50 positions; intersecting causes almost all staked NFTs to disappear.
+    // Instead, rely on the staked flag carried on the staked position's linked `position`.
+    const filteredSubgraphStaked = (subgraphStaked || []).filter(sp => {
+        // Most reliable: linked position.staked
+        if (sp?.position && typeof (sp.position as any).staked === 'boolean') return (sp.position as any).staked;
+        // Fallback: keep active rows if position link missing
+        return !!sp?.isActive;
+    });
 
     // RPC earned() calls for live pending rewards
     // Subgraph earned is only a snapshot at last event; on-chain earned() accrues in real-time
