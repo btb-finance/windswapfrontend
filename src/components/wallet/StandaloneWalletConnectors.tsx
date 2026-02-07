@@ -1,27 +1,22 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useCoinbaseWallet, useMetaMaskSDK, useWalletConnectProvider } from '@/hooks/useWalletProviders';
+import { useMetaMaskSDK, useWalletConnectProvider } from '@/hooks/useWalletProviders';
 
 // ==========================================
 // Standalone Wallet Connectors
 // Direct SDK integrations for advanced wallet features
 // ==========================================
 export function StandaloneWalletConnectors() {
-    const coinbase = useCoinbaseWallet();
     const metaMask = useMetaMaskSDK();
     const walletConnect = useWalletConnectProvider();
-    
+
     const [isInitializing, setIsInitializing] = useState<string | null>(null);
 
-    const handleConnect = useCallback(async (type: 'coinbase' | 'metamask' | 'walletconnect') => {
+    const handleConnect = useCallback(async (type: 'metamask' | 'walletconnect') => {
         setIsInitializing(type);
         try {
             switch (type) {
-                case 'coinbase':
-                    await coinbase.initializeCoinbase();
-                    await coinbase.connectCoinbase();
-                    break;
                 case 'metamask':
                     await metaMask.initializeMetaMask();
                     await metaMask.connectMetaMask();
@@ -34,35 +29,13 @@ export function StandaloneWalletConnectors() {
         } finally {
             setIsInitializing(null);
         }
-    }, [coinbase, metaMask, walletConnect]);
+    }, [metaMask, walletConnect]);
 
     return (
         <div className="standalone-connectors space-y-4">
             <h3 className="text-sm font-medium text-gray-400 mb-3">
                 Advanced Wallet Options
             </h3>
-
-            {/* Coinbase Smart Wallet */}
-            <button
-                onClick={() => handleConnect('coinbase')}
-                disabled={isInitializing !== null}
-                className="w-full flex items-center justify-between p-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 rounded-lg transition-colors"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 font-bold text-sm">C</span>
-                    </div>
-                    <div className="text-left">
-                        <p className="text-sm font-medium text-white">Coinbase Smart Wallet</p>
-                        <p className="text-xs text-blue-200">Gasless transactions & passkeys</p>
-                    </div>
-                </div>
-                {isInitializing === 'coinbase' ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                    <span className="text-white text-lg">→</span>
-                )}
-            </button>
 
             {/* MetaMask SDK */}
             <button
@@ -82,7 +55,7 @@ export function StandaloneWalletConnectors() {
                 {isInitializing === 'metamask' ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                    <span className="text-white text-lg">→</span>
+                    <span className="text-white text-lg">&rarr;</span>
                 )}
             </button>
 
@@ -104,7 +77,7 @@ export function StandaloneWalletConnectors() {
                 {isInitializing === 'walletconnect' ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                    <span className="text-white text-lg">→</span>
+                    <span className="text-white text-lg">&rarr;</span>
                 )}
             </button>
 

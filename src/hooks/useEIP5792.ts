@@ -2,15 +2,13 @@
 
 import { useCallback } from 'react';
 import { Address } from 'viem';
-import { useUnifiedWallet } from '@/hooks/useWalletProviders';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 
 // ==========================================
 // EIP-5792: Wallet Send Calls
-// Support for Coinbase Smart Wallet and other EIP-5792 wallets
+// Support for smart wallets with batch transaction capabilities
 // ==========================================
 export function useEIP5792() {
-    const unified = useUnifiedWallet();
     const batch = useBatchTransactions();
 
     const sendCalls = useCallback(async (
@@ -25,12 +23,8 @@ export function useEIP5792() {
 
     const isEIP5792Supported = useCallback(() => {
         // Check if wallet supports EIP-5792
-        // This is typically supported by:
-        // - Coinbase Smart Wallet
-        // - MetaMask with Smart Accounts
-        // - Other modern smart contract wallets
-        return typeof window !== 'undefined' && 
-               (window as any).ethereum?.isCoinbaseWallet || 
+        // Supported by MetaMask with Smart Accounts and other modern smart contract wallets
+        return typeof window !== 'undefined' &&
                (window as any).ethereum?.isMetaMask;
     }, []);
 
@@ -38,6 +32,5 @@ export function useEIP5792() {
         sendCalls,
         isEIP5792Supported,
         batch,
-        unified,
     };
 }

@@ -22,7 +22,7 @@ interface BatchResult {
  * Hook for executing batch transactions using EIP-5792 (wallet_sendCalls)
  * Falls back to sequential transactions if wallet doesn't support batching
  * 
- * Works with MetaMask Smart Accounts, Coinbase Wallet, and other EIP-5792 wallets
+ * Works with MetaMask Smart Accounts and other EIP-5792 wallets
  */
 export function useBatchTransactions() {
     const [isLoading, setIsLoading] = useState(false);

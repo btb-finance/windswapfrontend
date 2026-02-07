@@ -1,8 +1,7 @@
 // Wallet Provider Hooks - Direct SDK Integrations
 // NOTE: These hooks use dynamic imports to avoid SSR/HMR issues
-export { 
+export {
     useWalletConnectProvider,
-    useCoinbaseWallet,
     useMetaMaskSDK,
     useSafeAppsSDK,
     useUnifiedWallet,

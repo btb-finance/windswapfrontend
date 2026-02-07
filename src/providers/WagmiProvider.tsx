@@ -9,7 +9,6 @@ import {
 } from '@rainbow-me/rainbowkit';
 import {
     metaMaskWallet,
-    coinbaseWallet,
     walletConnectWallet,
     trustWallet,
     okxWallet,
