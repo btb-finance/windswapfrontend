@@ -9,7 +9,7 @@ import { useUserPositions } from '@/hooks/useSubgraph';
 import { getRpcForUserData } from '@/utils/rpc';
 
 // Goldsky Subgraph URL for pool data
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.7/gn';
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
 
 // Fetch pools from subgraph
 async function fetchPoolsFromSubgraph(): Promise<{
