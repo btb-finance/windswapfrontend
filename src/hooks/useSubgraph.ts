@@ -48,6 +48,16 @@ export interface SubgraphProtocol {
     totalTVLUSD: string;
     totalPools: string;
     totalSwaps: string;
+    epochCount: string;
+    activePeriod: string;
+    epochEnd: string;
+    weeklyEmissions: string;
+    totalEmissions: string;
+    tailEmissionRate: string;
+    totalVotingWeight: string;
+    proposalThreshold: string;
+    votingDelay: string;
+    votingPeriod: string;
 }
 
 export interface SubgraphPoolDayData {
@@ -103,6 +113,16 @@ const POOLS_QUERY = `
             totalTVLUSD
             totalPools
             totalSwaps
+            epochCount
+            activePeriod
+            epochEnd
+            weeklyEmissions
+            totalEmissions
+            tailEmissionRate
+            totalVotingWeight
+            proposalThreshold
+            votingDelay
+            votingPeriod
         }
     }
 `;
@@ -280,6 +300,8 @@ export interface SubgraphVeNFT {
     claimableRewards: string;
     hasVoted: boolean;
     lastVoted: string;
+    lastVotedEpoch: string;
+    totalClaimed: string;
 }
 
 export interface SubgraphStakedPosition {
@@ -308,6 +330,8 @@ export interface SubgraphStakedPosition {
     tickLower: number | null;
     tickUpper: number | null;
     earned: string;
+    totalClaimed: string;
+    isActive: boolean;
 }
 
 export interface SubgraphUser {
@@ -383,9 +407,11 @@ const USER_DATA_QUERY = `
                 claimableRewards
                 hasVoted
                 lastVoted
+                lastVotedEpoch
+                totalClaimed
             }
         }
-        gaugeStakedPositions(where: { userId: $userId }, first: 100) {
+        gaugeStakedPositions(where: { userId: $userId, isActive: true }, first: 100) {
             id
             gauge {
                 id
@@ -411,6 +437,8 @@ const USER_DATA_QUERY = `
             tickLower
             tickUpper
             earned
+            totalClaimed
+            isActive
         }
     }
 `;

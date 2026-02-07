@@ -139,6 +139,7 @@ export interface VeNFT {
     votingPower: bigint;
     claimable: bigint;       // claimable rebases
     hasVoted: boolean;       // whether veNFT has voted this epoch (blocks unlock/merge)
+    lastVotedEpoch: bigint;  // epoch count when last voted (compare with protocol.epochCount)
 }
 
 export interface UserProfileAnalytics {
@@ -285,6 +286,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
     const filteredSubgraphStaked = (subgraphStaked || []).filter(sp => stakedTokenIdSet.has(String(sp.tokenId)));
 
+    // RPC earned() calls for live pending rewards
+    // Subgraph earned is only a snapshot at last event; on-chain earned() accrues in real-time
     const rpcEarnedKey = filteredSubgraphStaked
         .map(sp => `${String(sp.gauge?.id || '').toLowerCase()}-${String(sp.tokenId || '')}`)
         .sort()
@@ -294,16 +297,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         let cancelled = false;
-
         const FIVE_MINUTES = 5 * 60 * 1000;
 
         const fetchEarnedFromRpc = async () => {
-            if (!address) {
-                setRpcEarnedMap(new Map());
-                return;
-            }
-
-            if (!filteredSubgraphStaked || filteredSubgraphStaked.length === 0) {
+            if (!address || !filteredSubgraphStaked || filteredSubgraphStaked.length === 0) {
                 setRpcEarnedMap(new Map());
                 return;
             }
@@ -417,10 +414,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         isPermanent: nft.isPermanent,
         votingPower: toWei(nft.votingPower),
         claimable: toWei(nft.claimableRewards),
-        hasVoted: nft.hasVoted,  // Now from subgraph
+        hasVoted: nft.hasVoted,
+        lastVotedEpoch: BigInt(nft.lastVotedEpoch || '0'),
     }));
 
     // Transform subgraph staked position data to provider format
+    // Uses RPC earned() for live pending rewards, subgraph for position data
     const stakedPositions: StakedPosition[] = filteredSubgraphStaked.map(sp => {
         const gauge = sp.gauge;
         const pool = gauge?.pool;

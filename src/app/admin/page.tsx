@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useReadContract } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
@@ -8,6 +8,7 @@ import { Address } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, Token } from '@/config/tokens';
 import { getRpcForVoting } from '@/utils/rpc';
+import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 
 // Admin ABIs
 const VOTER_ABI = [
@@ -280,30 +281,42 @@ export default function AdminPage() {
         },
     });
 
-    // Minter data for weekly epoch info
-    const { data: weeklyEmissions } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'weekly',
-    });
+    // Minter/Epoch data from subgraph (no RPC calls)
+    const [weeklyEmissions, setWeeklyEmissions] = useState<bigint | undefined>();
+    const [activePeriod, setActivePeriod] = useState<bigint | undefined>();
+    const [epochCount, setEpochCount] = useState<bigint | undefined>();
+    const [tailEmissionRate, setTailEmissionRate] = useState<bigint | undefined>();
 
-    const { data: activePeriod } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'activePeriod',
-    });
-
-    const { data: epochCount } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'epochCount',
-    });
-
-    const { data: tailEmissionRate } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'tailEmissionRate',
-    });
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch(SUBGRAPH_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: `{ protocol(id: "windswap") { weeklyEmissions activePeriod epochCount tailEmissionRate } }`
+                    }),
+                });
+                const json = await res.json();
+                const p = json.data?.protocol;
+                if (p) {
+                    // weeklyEmissions is BigDecimal in subgraph, convert to wei
+                    if (p.weeklyEmissions) {
+                        const wei = BigInt(Math.floor(parseFloat(p.weeklyEmissions) * 1e18));
+                        setWeeklyEmissions(wei);
+                    }
+                    if (p.activePeriod) setActivePeriod(BigInt(p.activePeriod));
+                    if (p.epochCount) setEpochCount(BigInt(p.epochCount));
+                    if (p.tailEmissionRate) {
+                        const rate = BigInt(Math.floor(parseFloat(p.tailEmissionRate) * 1e18));
+                        setTailEmissionRate(rate);
+                    }
+                }
+            } catch (err) {
+                console.warn('[Admin] Failed to fetch minter data from subgraph:', err);
+            }
+        })();
+    }, []);
 
     const { data: teamRate } = useReadContract({
         address: V2_CONTRACTS.Minter as Address,
