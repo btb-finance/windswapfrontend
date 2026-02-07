@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useReadContract, usePublicClient } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
@@ -127,6 +127,29 @@ export default function VotePage() {
     const [votingRewards, setVotingRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
     const [isLoadingVotingRewards, setIsLoadingVotingRewards] = useState(false);
 
+    // Vote status from subgraph veVotes (more reliable than hasVoted)
+    const [veNftHasVotes, setVeNftHasVotes] = useState<Record<string, boolean>>({});
+
+    const positionsTokenIdsKey = useMemo(() => {
+        if (!positions || positions.length === 0) return '';
+        return positions
+            .map(p => p.tokenId.toString())
+            .sort()
+            .join('|');
+    }, [positions]);
+
+    const rewardsFetchRef = useRef<{ lastKey: string; lastTs: number; inFlight: boolean }>({
+        lastKey: '',
+        lastTs: 0,
+        inFlight: false,
+    });
+
+    const voteStatusFetchRef = useRef<{ lastKey: string; lastTs: number; inFlight: boolean }>({
+        lastKey: '',
+        lastTs: 0,
+        inFlight: false,
+    });
+
     // ABI for fee reward contracts (earned + getReward)
     const FEE_REWARD_ABI = [
         {
@@ -148,24 +171,34 @@ export default function VotePage() {
     // Fetch claimable voting rewards for all veNFTs from subgraph (VotingRewardBalance)
     const fetchVotingRewards = useCallback(async () => {
         if (positions.length === 0) return;
-        if (!epochCount || epochCount === BigInt(0)) return;
+        if (!address) return;
+
+        const FIVE_MINUTES = 5 * 60 * 1000;
+        const key = `${address.toLowerCase()}|${positionsTokenIdsKey}`;
+        const now = Date.now();
+
+        if (rewardsFetchRef.current.inFlight) return;
+        if (rewardsFetchRef.current.lastKey === key && now - rewardsFetchRef.current.lastTs < FIVE_MINUTES) return;
 
         setIsLoadingVotingRewards(true);
+        rewardsFetchRef.current.inFlight = true;
         try {
-            const tokenIds = positions.map(p => p.tokenId.toString());
-            const query = `query VotingRewards($tokenIds: [ID!], $epoch: BigInt!) {
-                votingRewardBalances(where: { veNFT_in: $tokenIds, epoch: $epoch }, first: 2000) {
-                    amount
-                    veNFT { id }
-                    gauge { pool { id } }
-                    token { id }
+            const userId = address.toLowerCase();
+            const query = `query VotingRewards($user: ID!) {
+                votingRewardBalances(where: { user: $user, totalAmount_gt: "0" }, first: 2000) {
+                    totalAmount
+                    user { id }
+                    gauge { id }
+                    pool { id }
+                    token { id symbol decimals }
+                    rewardType
                 }
             }`;
 
             const response = await fetch(SUBGRAPH_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, variables: { tokenIds, epoch: epochCount.toString() } }),
+                body: JSON.stringify({ query, variables: { user: userId } }),
             });
             const json = await response.json();
             if (json.errors) throw new Error(json.errors[0]?.message || 'Subgraph error');
@@ -173,30 +206,112 @@ export default function VotePage() {
             const rows: Array<any> = json.data?.votingRewardBalances || [];
             const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
 
+            const toBigIntFromBigDecimal = (val: string | undefined, decimals: number): bigint => {
+                if (!val) return BigInt(0);
+                const s = String(val);
+                const [wholeRaw, fracRaw = ''] = s.split('.');
+                const whole = wholeRaw.replace(/^0+(?=\d)/, '') || '0';
+                const frac = fracRaw.padEnd(decimals, '0').slice(0, decimals);
+                const normalized = `${whole}${frac}`.replace(/^0+(?=\d)/, '') || '0';
+                try {
+                    return BigInt(normalized);
+                } catch {
+                    return BigInt(0);
+                }
+            };
+
             for (const r of rows) {
-                const tokenId = String(r.veNFT?.id || '');
-                const poolId = String(r.gauge?.pool?.id || '').toLowerCase();
+                const poolId = String(r.pool?.id || '').toLowerCase();
                 const tokenAddr = String(r.token?.id || '').toLowerCase();
-                const amt = r.amount ? BigInt(r.amount) : BigInt(0);
-                if (!tokenId || !poolId || !tokenAddr) continue;
+                const decimals = Number(r.token?.decimals ?? 18);
+                const amt = toBigIntFromBigDecimal(r.totalAmount, decimals);
+                if (!poolId || !tokenAddr) continue;
                 if (amt <= BigInt(0)) continue;
 
-                if (!newRewards[tokenId]) newRewards[tokenId] = {};
-                if (!newRewards[tokenId][poolId]) newRewards[tokenId][poolId] = {};
-                newRewards[tokenId][poolId][tokenAddr] = amt;
+                // Attach these user-level rewards under every veNFT for display/claim.
+                // Claiming still requires selecting a specific tokenId.
+                for (const p of positions) {
+                    const tokenId = p.tokenId.toString();
+                    if (!newRewards[tokenId]) newRewards[tokenId] = {};
+                    if (!newRewards[tokenId][poolId]) newRewards[tokenId][poolId] = {};
+                    newRewards[tokenId][poolId][tokenAddr] = amt;
+                }
             }
 
             setVotingRewards(newRewards);
+
+            rewardsFetchRef.current.lastKey = key;
+            rewardsFetchRef.current.lastTs = now;
         } catch (err) {
             console.error('Error fetching voting rewards (subgraph):', err);
+        } finally {
+            rewardsFetchRef.current.inFlight = false;
+            setIsLoadingVotingRewards(false);
         }
-        setIsLoadingVotingRewards(false);
-    }, [positions, epochCount]);
+    }, [positions, address, positionsTokenIdsKey]);
+
+    const fetchVeNftVoteStatus = useCallback(async () => {
+        if (positions.length === 0) {
+            setVeNftHasVotes({});
+            return;
+        }
+
+        const FIVE_MINUTES = 5 * 60 * 1000;
+        const key = positionsTokenIdsKey;
+        const now = Date.now();
+
+        if (voteStatusFetchRef.current.inFlight) return;
+        if (voteStatusFetchRef.current.lastKey === key && now - voteStatusFetchRef.current.lastTs < FIVE_MINUTES) return;
+
+        voteStatusFetchRef.current.inFlight = true;
+
+        try {
+            const tokenIds = positions.map(p => p.tokenId.toString());
+            const query = `query VeVoteStatus($tokenIds: [ID!]) {
+                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, orderBy: epoch, orderDirection: desc, first: 2000) {
+                    epoch
+                    veNFT { id }
+                }
+            }`;
+
+            const response = await fetch(SUBGRAPH_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, variables: { tokenIds } }),
+            });
+            const json = await response.json();
+            if (json.errors) throw new Error(json.errors[0]?.message || 'Subgraph error');
+
+            const rows: Array<any> = json.data?.veVotes || [];
+            const next: Record<string, boolean> = {};
+            for (const p of positions) next[p.tokenId.toString()] = false;
+
+            // Mark true if there is at least one active vote row for the veNFT.
+            for (const r of rows) {
+                const tid = String(r.veNFT?.id || '');
+                if (!tid) continue;
+                next[tid] = true;
+            }
+
+            setVeNftHasVotes(next);
+
+            voteStatusFetchRef.current.lastKey = key;
+            voteStatusFetchRef.current.lastTs = now;
+        } catch (err) {
+            console.error('Error fetching veNFT vote status (subgraph):', err);
+        } finally {
+            voteStatusFetchRef.current.inFlight = false;
+        }
+    }, [positions, positionsTokenIdsKey]);
 
     // Fetch voting rewards when positions or gauges change
     useEffect(() => {
         fetchVotingRewards();
     }, [fetchVotingRewards]);
+
+    useEffect(() => {
+        fetchVeNftVoteStatus();
+    }, [fetchVeNftVoteStatus]);
 
     // Claim voting rewards for a specific veNFT and gauge
     const [isClaimingVotingRewards, setIsClaimingVotingRewards] = useState<string | null>(null);
@@ -893,13 +1008,13 @@ export default function VotePage() {
                                                                                                     </div>
                                                                                                 </div>
                                                                                             </div>
-                                                                                            {p.hasVoted ? (
+                                                                                            {(veNftHasVotes[p.tokenId.toString()] ?? p.hasVoted) ? (
                                                                                                 <div className="text-xs text-red-400">Voted</div>
                                                                                             ) : mergeTarget === p.tokenId ? (
                                                                                                 <div className="text-purple-400 text-sm font-bold">Selected</div>
                                                                                             ) : null}
                                                                                         </button>
-                                                                                        {p.hasVoted && (
+                                                                                        {(veNftHasVotes[p.tokenId.toString()] ?? p.hasVoted) && (
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
