@@ -65,7 +65,15 @@ export async function rpcCall<T = any>(
         }),
     });
 
-    const result = await response.json();
+    const text = await response.text();
+    let result: any;
+    try {
+        result = JSON.parse(text);
+    } catch {
+        const ct = response.headers.get('content-type') || '';
+        const snippet = text.slice(0, 200);
+        throw new Error(`RPC returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
+    }
     if (result.error) {
         throw new Error(result.error.message || 'RPC error');
     }
@@ -93,7 +101,15 @@ export async function batchRpcCall(
         ),
     });
 
-    const results = await response.json();
+    const text = await response.text();
+    let results: any;
+    try {
+        results = JSON.parse(text);
+    } catch {
+        const ct = response.headers.get('content-type') || '';
+        const snippet = text.slice(0, 200);
+        throw new Error(`RPC batch returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
+    }
     if (Array.isArray(results)) {
         return results.map(r => r.result);
     }
