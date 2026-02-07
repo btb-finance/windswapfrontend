@@ -1,11 +1,12 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Address } from 'viem';
+import { Address, encodeFunctionData, decodeFunctionResult } from 'viem';
 import { useAccount } from 'wagmi';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 import { useUserPositions } from '@/hooks/useSubgraph';
+import { getRpcForUserData } from '@/utils/rpc';
 
 // Goldsky Subgraph URL for pool data
 const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.7/gn';
@@ -268,12 +269,116 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     // SUBGRAPH-BASED USER DATA (replaces RPC fetching)
     // ============================================
     const {
+        positions: subgraphPositions,
         veNFTs: subgraphVeNFTs,
         stakedPositions: subgraphStaked,
         profile: subgraphProfile,
         isLoading: userDataLoading,
         refetch: refetchUserData
     } = useUserPositions(address);
+
+    const stakedTokenIdSet = new Set(
+        (subgraphPositions || [])
+            .filter(p => !!p?.staked)
+            .map(p => String(p.tokenId))
+    );
+
+    const filteredSubgraphStaked = (subgraphStaked || []).filter(sp => stakedTokenIdSet.has(String(sp.tokenId)));
+
+    const rpcEarnedKey = filteredSubgraphStaked
+        .map(sp => `${String(sp.gauge?.id || '').toLowerCase()}-${String(sp.tokenId || '')}`)
+        .sort()
+        .join('|');
+
+    const [rpcEarnedMap, setRpcEarnedMap] = useState<Map<string, bigint>>(new Map());
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const FIVE_MINUTES = 5 * 60 * 1000;
+
+        const fetchEarnedFromRpc = async () => {
+            if (!address) {
+                setRpcEarnedMap(new Map());
+                return;
+            }
+
+            if (!filteredSubgraphStaked || filteredSubgraphStaked.length === 0) {
+                setRpcEarnedMap(new Map());
+                return;
+            }
+
+            const rpc = getRpcForUserData();
+            const earnedAbi = [
+                {
+                    inputs: [
+                        { name: 'account', type: 'address' },
+                        { name: 'tokenId', type: 'uint256' },
+                    ],
+                    name: 'earned',
+                    outputs: [{ name: '', type: 'uint256' }],
+                    stateMutability: 'view',
+                    type: 'function',
+                },
+            ] as const;
+
+            const calls = filteredSubgraphStaked
+                .map(sp => ({
+                    gauge: String(sp.gauge?.id || ''),
+                    tokenId: sp.tokenId ? BigInt(sp.tokenId) : BigInt(0),
+                }))
+                .filter(x => x.gauge && x.tokenId > BigInt(0));
+
+            try {
+                const results = await Promise.all(calls.map(async (c, i) => {
+                    const data = encodeFunctionData({
+                        abi: earnedAbi,
+                        functionName: 'earned',
+                        args: [address as Address, c.tokenId],
+                    });
+
+                    const res = await fetch(rpc, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            id: i + 1,
+                            method: 'eth_call',
+                            params: [{ to: c.gauge, data }, 'latest'],
+                        }),
+                    });
+
+                    const json = await res.json();
+                    if (json?.error) {
+                        return { key: `${c.gauge.toLowerCase()}-${c.tokenId.toString()}`, earned: BigInt(0) };
+                    }
+
+                    const decoded = decodeFunctionResult({
+                        abi: earnedAbi,
+                        functionName: 'earned',
+                        data: json.result,
+                    });
+
+                    return { key: `${c.gauge.toLowerCase()}-${c.tokenId.toString()}`, earned: decoded as unknown as bigint };
+                }));
+
+                if (cancelled) return;
+                const next = new Map<string, bigint>();
+                results.forEach(r => next.set(r.key, r.earned));
+                setRpcEarnedMap(next);
+            } catch (err) {
+                console.warn('[PoolDataProvider] RPC earned() fetch error:', err);
+                if (!cancelled) setRpcEarnedMap(new Map());
+            }
+        };
+
+        fetchEarnedFromRpc();
+        const interval = setInterval(fetchEarnedFromRpc, FIVE_MINUTES);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [address, rpcEarnedKey]);
 
     const userProfile: UserProfileAnalytics | null = subgraphProfile ? {
         id: String(subgraphProfile.id),
@@ -316,14 +421,19 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     }));
 
     // Transform subgraph staked position data to provider format
-    const stakedPositions: StakedPosition[] = subgraphStaked.map(sp => {
+    const stakedPositions: StakedPosition[] = filteredSubgraphStaked.map(sp => {
         const gauge = sp.gauge;
         const pool = gauge?.pool;
         const known0 = pool?.token0 ? KNOWN_TOKENS[pool.token0.id.toLowerCase()] : null;
         const known1 = pool?.token1 ? KNOWN_TOKENS[pool.token1.id.toLowerCase()] : null;
 
+        const tokenId = BigInt(sp.tokenId || '0');
+        const gaugeId = String(gauge?.id || '').toLowerCase();
+        const earnedKey = `${gaugeId}-${tokenId.toString()}`;
+        const earnedFromRpc = rpcEarnedMap.get(earnedKey) ?? BigInt(0);
+
         return {
-            tokenId: BigInt(sp.tokenId || '0'),
+            tokenId,
             gaugeAddress: gauge?.id as Address || '' as Address,
             poolAddress: pool?.id as Address || '' as Address,
             token0: pool?.token0?.id as Address || '' as Address,
@@ -337,7 +447,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             tickUpper: sp.tickUpper ?? sp.position?.tickUpper ?? 0,
             currentTick: pool?.tick || 0,
             liquidity: toBigIntSafe(sp.position?.liquidity || sp.amount || '0'),
-            pendingRewards: toBigIntSafe(sp.earned || '0'),
+            pendingRewards: earnedFromRpc,
             rewardRate: BigInt(0),
         };
     });
