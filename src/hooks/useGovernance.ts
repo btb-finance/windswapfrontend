@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAccount, useReadContract, usePublicClient } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { Address, encodeFunctionData, keccak256, toBytes, parseUnits } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
+import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 
 // Governor states
 export enum ProposalState {
@@ -164,27 +165,34 @@ export function useGovernance() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Read governance params
-    const { data: proposalThreshold } = useReadContract({
-        address: V2_CONTRACTS.ProtocolGovernor as Address,
-        abi: GOVERNOR_ABI,
-        functionName: 'proposalThreshold',
-    });
+    // Governance params from subgraph (no RPC calls)
+    const [proposalThreshold, setProposalThreshold] = useState<bigint | undefined>();
+    const [votingDelay, setVotingDelay] = useState<bigint | undefined>();
+    const [votingPeriod, setVotingPeriod] = useState<bigint | undefined>();
 
-    const { data: votingDelay } = useReadContract({
-        address: V2_CONTRACTS.ProtocolGovernor as Address,
-        abi: GOVERNOR_ABI,
-        functionName: 'votingDelay',
-    });
-
-    const { data: votingPeriod } = useReadContract({
-        address: V2_CONTRACTS.ProtocolGovernor as Address,
-        abi: GOVERNOR_ABI,
-        functionName: 'votingPeriod',
-    });
-
-    // Subgraph URL for governance data
-    const GOVERNANCE_SUBGRAPH = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v2/gn';
+    // Fetch governance params from subgraph Protocol entity
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch(SUBGRAPH_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: `{ protocol(id: "windswap") { proposalThreshold votingDelay votingPeriod } }`
+                    }),
+                });
+                const json = await res.json();
+                const p = json.data?.protocol;
+                if (p) {
+                    if (p.proposalThreshold) setProposalThreshold(BigInt(p.proposalThreshold));
+                    if (p.votingDelay) setVotingDelay(BigInt(p.votingDelay));
+                    if (p.votingPeriod) setVotingPeriod(BigInt(p.votingPeriod));
+                }
+            } catch (err) {
+                console.warn('[Governance] Failed to fetch params from subgraph:', err);
+            }
+        })();
+    }, []);
 
     // Fetch proposals from subgraph (fast!)
     const fetchProposals = useCallback(async () => {
@@ -212,7 +220,7 @@ export function useGovernance() {
                 }
             }`;
 
-            const response = await fetch(GOVERNANCE_SUBGRAPH, {
+            const response = await fetch(SUBGRAPH_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query }),

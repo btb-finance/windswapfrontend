@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 // Goldsky GraphQL endpoint (v3.0.6 with user data)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.7/gn';
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
 
 // Types matching subgraph schema
 export interface SubgraphToken {
@@ -48,6 +48,16 @@ export interface SubgraphProtocol {
     totalTVLUSD: string;
     totalPools: string;
     totalSwaps: string;
+    epochCount: string;
+    activePeriod: string;
+    epochEnd: string;
+    weeklyEmissions: string;
+    totalEmissions: string;
+    tailEmissionRate: string;
+    totalVotingWeight: string;
+    proposalThreshold: string;
+    votingDelay: string;
+    votingPeriod: string;
 }
 
 export interface SubgraphPoolDayData {
@@ -103,6 +113,16 @@ const POOLS_QUERY = `
             totalTVLUSD
             totalPools
             totalSwaps
+            epochCount
+            activePeriod
+            epochEnd
+            weeklyEmissions
+            totalEmissions
+            tailEmissionRate
+            totalVotingWeight
+            proposalThreshold
+            votingDelay
+            votingPeriod
         }
     }
 `;
@@ -280,6 +300,8 @@ export interface SubgraphVeNFT {
     claimableRewards: string;
     hasVoted: boolean;
     lastVoted: string;
+    lastVotedEpoch: string;
+    totalClaimed: string;
 }
 
 export interface SubgraphStakedPosition {
@@ -296,18 +318,21 @@ export interface SubgraphStakedPosition {
     };
     position: {
         tokenId: string;
+        staked: boolean;
         tickLower: number;
         tickUpper: number;
         liquidity: string;
         amount0: string;
         amount1: string;
         amountUSD: string;
-    } | null;
+    };
     tokenId: string;
     amount: string;
-    tickLower: number | null;
-    tickUpper: number | null;
+    tickLower: number;
+    tickUpper: number;
     earned: string;
+    totalClaimed: string;
+    isActive: boolean;
 }
 
 export interface SubgraphUser {
@@ -383,9 +408,11 @@ const USER_DATA_QUERY = `
                 claimableRewards
                 hasVoted
                 lastVoted
+                lastVotedEpoch
+                totalClaimed
             }
         }
-        gaugeStakedPositions(where: { userId: $userId }, first: 100) {
+        gaugeStakedPositions(where: { userId: $userId }, first: 1000) {
             id
             gauge {
                 id
@@ -399,6 +426,7 @@ const USER_DATA_QUERY = `
             }
             position {
                 tokenId
+                staked
                 tickLower
                 tickUpper
                 liquidity
@@ -411,6 +439,8 @@ const USER_DATA_QUERY = `
             tickLower
             tickUpper
             earned
+            totalClaimed
+            isActive
         }
     }
 `;
