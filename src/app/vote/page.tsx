@@ -168,13 +168,16 @@ export default function VotePage() {
         },
     ] as const;
 
-    // Fetch claimable voting rewards for all veNFTs from subgraph (VotingRewardBalance)
+    // Fetch claimable voting rewards for all veNFTs using on-chain earned() calls
+    // Note: VotingRewardBalance in subgraph tracks CLAIMED rewards, not pending ones
+    // We must call earned(token, tokenId) on fee/bribe reward contracts to get pending
     const fetchVotingRewards = useCallback(async () => {
         if (positions.length === 0) return;
         if (!address) return;
+        if (gauges.length === 0) return;
 
         const FIVE_MINUTES = 5 * 60 * 1000;
-        const key = `${address.toLowerCase()}|${positionsTokenIdsKey}`;
+        const key = `${address.toLowerCase()}|${positionsTokenIdsKey}|${gauges.length}`;
         const now = Date.now();
 
         if (rewardsFetchRef.current.inFlight) return;
@@ -183,59 +186,139 @@ export default function VotePage() {
         setIsLoadingVotingRewards(true);
         rewardsFetchRef.current.inFlight = true;
         try {
-            const userId = address.toLowerCase();
-            const query = `query VotingRewards($user: ID!) {
-                votingRewardBalances(where: { user: $user, totalAmount_gt: "0" }, first: 2000) {
-                    totalAmount
-                    user { id }
-                    gauge { id }
-                    pool { id }
-                    token { id symbol decimals }
-                    rewardType
+            // Step 1: Get active votes for each veNFT to know which pools they voted for
+            const tokenIds = positions.map(p => p.tokenId.toString());
+            const votesQuery = `query VeVotesForRewards($tokenIds: [ID!]) {
+                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, first: 2000) {
+                    veNFT { id }
+                    pool { id token0 { id decimals } token1 { id decimals } }
                 }
             }`;
 
-            const response = await fetch(SUBGRAPH_URL, {
+            const votesRes = await fetch(SUBGRAPH_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, variables: { user: userId } }),
+                body: JSON.stringify({ query: votesQuery, variables: { tokenIds } }),
             });
-            const json = await response.json();
-            if (json.errors) throw new Error(json.errors[0]?.message || 'Subgraph error');
+            const votesJson = await votesRes.json();
+            if (votesJson.errors) throw new Error(votesJson.errors[0]?.message || 'Subgraph error');
 
-            const rows: Array<any> = json.data?.votingRewardBalances || [];
+            const veVotes: Array<{
+                veNFT: { id: string };
+                pool: { id: string; token0: { id: string; decimals: number }; token1: { id: string; decimals: number } };
+            }> = votesJson.data?.veVotes || [];
+
+            if (veVotes.length === 0) {
+                setVotingRewards({});
+                rewardsFetchRef.current.lastKey = key;
+                rewardsFetchRef.current.lastTs = now;
+                return;
+            }
+
+            // Step 2: Build list of (tokenId, feeRewardContract, token, decimals) to call earned()
+            const earnedAbi = [{
+                inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
+                name: 'earned',
+                outputs: [{ name: '', type: 'uint256' }],
+                stateMutability: 'view',
+                type: 'function',
+            }] as const;
+
+            type EarnedCall = {
+                veNFTId: string;
+                poolId: string;
+                feeReward: string;
+                token: string;
+                decimals: number;
+            };
+            const calls: EarnedCall[] = [];
+
+            for (const vote of veVotes) {
+                const poolId = vote.pool?.id?.toLowerCase();
+                if (!poolId) continue;
+
+                // Find gauge for this pool to get feeReward address
+                const gauge = gauges.find(g => g.pool.toLowerCase() === poolId);
+                if (!gauge || !gauge.feeReward || gauge.feeReward === '0x0000000000000000000000000000000000000000') continue;
+
+                const veNFTId = vote.veNFT?.id;
+                if (!veNFTId) continue;
+
+                // Add calls for token0 and token1
+                if (vote.pool.token0?.id) {
+                    calls.push({
+                        veNFTId,
+                        poolId,
+                        feeReward: gauge.feeReward,
+                        token: vote.pool.token0.id,
+                        decimals: vote.pool.token0.decimals || 18,
+                    });
+                }
+                if (vote.pool.token1?.id) {
+                    calls.push({
+                        veNFTId,
+                        poolId,
+                        feeReward: gauge.feeReward,
+                        token: vote.pool.token1.id,
+                        decimals: vote.pool.token1.decimals || 18,
+                    });
+                }
+            }
+
+            if (calls.length === 0) {
+                setVotingRewards({});
+                rewardsFetchRef.current.lastKey = key;
+                rewardsFetchRef.current.lastTs = now;
+                return;
+            }
+
+            // Step 3: Call earned() on-chain for each (token, tokenId)
+            const rpc = 'https://evm-rpc.sei-apis.com';
+            const results = await Promise.all(calls.map(async (c, i) => {
+                try {
+                    const data = encodeFunctionData({
+                        abi: earnedAbi,
+                        functionName: 'earned',
+                        args: [c.token as Address, BigInt(c.veNFTId)],
+                    });
+
+                    const res = await fetch(rpc, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            id: i + 1,
+                            method: 'eth_call',
+                            params: [{ to: c.feeReward, data }, 'latest'],
+                        }),
+                    });
+
+                    const json = await res.json();
+                    if (json?.error || !json?.result || json.result === '0x') {
+                        return { ...c, earned: BigInt(0) };
+                    }
+
+                    // Decode the result (uint256)
+                    const earned = BigInt(json.result);
+                    return { ...c, earned };
+                } catch {
+                    return { ...c, earned: BigInt(0) };
+                }
+            }));
+
+            // Step 4: Aggregate results into votingRewards structure
             const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
 
-            const toBigIntFromBigDecimal = (val: string | undefined, decimals: number): bigint => {
-                if (!val) return BigInt(0);
-                const s = String(val);
-                const [wholeRaw, fracRaw = ''] = s.split('.');
-                const whole = wholeRaw.replace(/^0+(?=\d)/, '') || '0';
-                const frac = fracRaw.padEnd(decimals, '0').slice(0, decimals);
-                const normalized = `${whole}${frac}`.replace(/^0+(?=\d)/, '') || '0';
-                try {
-                    return BigInt(normalized);
-                } catch {
-                    return BigInt(0);
-                }
-            };
+            for (const r of results) {
+                if (r.earned <= BigInt(0)) continue;
 
-            for (const r of rows) {
-                const poolId = String(r.pool?.id || '').toLowerCase();
-                const tokenAddr = String(r.token?.id || '').toLowerCase();
-                const decimals = Number(r.token?.decimals ?? 18);
-                const amt = toBigIntFromBigDecimal(r.totalAmount, decimals);
-                if (!poolId || !tokenAddr) continue;
-                if (amt <= BigInt(0)) continue;
+                const tokenId = r.veNFTId;
+                const poolId = r.poolId.toLowerCase();
+                const tokenAddr = r.token.toLowerCase();
 
-                // Attach these user-level rewards under every veNFT for display/claim.
-                // Claiming still requires selecting a specific tokenId.
-                for (const p of positions) {
-                    const tokenId = p.tokenId.toString();
-                    if (!newRewards[tokenId]) newRewards[tokenId] = {};
-                    if (!newRewards[tokenId][poolId]) newRewards[tokenId][poolId] = {};
-                    newRewards[tokenId][poolId][tokenAddr] = amt;
-                }
+                if (!newRewards[tokenId]) newRewards[tokenId] = {};
+                if (!newRewards[tokenId][poolId]) newRewards[tokenId][poolId] = {};
+                newRewards[tokenId][poolId][tokenAddr] = r.earned;
             }
 
             setVotingRewards(newRewards);
@@ -243,12 +326,13 @@ export default function VotePage() {
             rewardsFetchRef.current.lastKey = key;
             rewardsFetchRef.current.lastTs = now;
         } catch (err) {
-            console.error('Error fetching voting rewards (subgraph):', err);
+            console.error('Error fetching voting rewards (on-chain earned):', err);
         } finally {
             rewardsFetchRef.current.inFlight = false;
             setIsLoadingVotingRewards(false);
         }
-    }, [positions, address, positionsTokenIdsKey]);
+    }, [positions, address, positionsTokenIdsKey, gauges]);
+
 
     const fetchVeNftVoteStatus = useCallback(async () => {
         if (positions.length === 0) {
