@@ -273,8 +273,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
 
                 // Prefer tick-based price conversion to avoid precision issues from sqrtPriceX96 squaring.
-                // slot0 layout (UniswapV3): sqrtPriceX96 (32 bytes) | tick (int24) | ...
-                const slot0TickHex = slot0Result.result.slice(66, 66 + 6);
+                // slot0 is ABI-encoded: each return value takes 32 bytes (64 hex chars)
+                // sqrtPriceX96 (chars 2-65), tick (chars 66-129), ...
+                // tick is int24, so we need the last 6 hex chars of the 32-byte word
+                const slot0TickHex = slot0Result.result.slice(124, 130);
                 let tick = parseInt(slot0TickHex, 16);
                 if (tick >= 0x800000) tick -= 0x1000000; // sign extend int24
 
