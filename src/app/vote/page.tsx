@@ -4,21 +4,33 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useReadContract, usePublicClient } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
-import { formatUnits, Address, encodeFunctionData } from 'viem';
+import { formatUnits, Address, encodeFunctionData, decodeFunctionResult } from 'viem';
 import Link from 'next/link';
 import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
 import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { getTokenLogo } from '@/utils/tokens';
-import { V2_CONTRACTS } from '@/config/contracts';
+import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
+import { getRpcForVoting, rpcCall } from '@/utils/rpc';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 import { usePoolData } from '@/providers/PoolDataProvider';
 
-
+async function readSubgraphJson(response: Response, label: string): Promise<any> {
+    const text = await response.text();
+    let json: any;
+    try {
+        json = JSON.parse(text);
+    } catch {
+        const ct = response.headers.get('content-type') || '';
+        const snippet = text.slice(0, 200);
+        throw new Error(`[Subgraph] ${label} returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
+    }
+    return json;
+}
 
 // Voter ABI for distribute (permissionless!)
 const VOTER_DISTRIBUTE_ABI = [
@@ -189,7 +201,7 @@ export default function VotePage() {
             // Step 1: Get active votes for each veNFT to know which pools they voted for
             const tokenIds = positions.map(p => p.tokenId.toString());
             const votesQuery = `query VeVotesForRewards($tokenIds: [ID!]) {
-                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, first: 2000) {
+                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, first: 1000) {
                     veNFT { id }
                     pool { id token0 { id decimals } token1 { id decimals } }
                 }
@@ -200,7 +212,7 @@ export default function VotePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: votesQuery, variables: { tokenIds } }),
             });
-            const votesJson = await votesRes.json();
+            const votesJson = await readSubgraphJson(votesRes, 'veVotes(for rewards)');
             if (votesJson.errors) throw new Error(votesJson.errors[0]?.message || 'Subgraph error');
 
             const veVotes: Array<{
@@ -273,7 +285,7 @@ export default function VotePage() {
             }
 
             // Step 3: Call earned() on-chain for each (token, tokenId)
-            const rpc = 'https://evm-rpc.sei-apis.com';
+            const rpc = getRpcForVoting();
             const results = await Promise.all(calls.map(async (c, i) => {
                 try {
                     const data = encodeFunctionData({
@@ -282,25 +294,23 @@ export default function VotePage() {
                         args: [c.token as Address, BigInt(c.veNFTId)],
                     });
 
-                    const res = await fetch(rpc, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0',
-                            id: i + 1,
-                            method: 'eth_call',
-                            params: [{ to: c.feeReward, data }, 'latest'],
-                        }),
+                    const result = await rpcCall<string>(
+                        'eth_call',
+                        [{ to: c.feeReward, data }, 'latest'],
+                        rpc
+                    );
+
+                    if (!result || result === '0x') return { ...c, earned: BigInt(0) };
+
+                    const resultHex = result as `0x${string}`;
+
+                    const decoded = decodeFunctionResult({
+                        abi: earnedAbi,
+                        functionName: 'earned',
+                        data: resultHex,
                     });
 
-                    const json = await res.json();
-                    if (json?.error || !json?.result || json.result === '0x') {
-                        return { ...c, earned: BigInt(0) };
-                    }
-
-                    // Decode the result (uint256)
-                    const earned = BigInt(json.result);
-                    return { ...c, earned };
+                    return { ...c, earned: decoded as unknown as bigint };
                 } catch {
                     return { ...c, earned: BigInt(0) };
                 }
@@ -352,7 +362,7 @@ export default function VotePage() {
         try {
             const tokenIds = positions.map(p => p.tokenId.toString());
             const query = `query VeVoteStatus($tokenIds: [ID!]) {
-                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, orderBy: epoch, orderDirection: desc, first: 2000) {
+                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, orderBy: epoch, orderDirection: desc, first: 1000) {
                     epoch
                     veNFT { id }
                 }
@@ -363,7 +373,7 @@ export default function VotePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query, variables: { tokenIds } }),
             });
-            const json = await response.json();
+            const json = await readSubgraphJson(response, 'veVotes(vote status)');
             if (json.errors) throw new Error(json.errors[0]?.message || 'Subgraph error');
 
             const rows: Array<any> = json.data?.veVotes || [];

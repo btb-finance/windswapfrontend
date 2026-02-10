@@ -645,7 +645,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     epochCount
                     activePeriod
                 }
-                gauges(first: 200, where: { isActive: true }) {
+                gauges(first: 1000, where: { isActive: true }) {
                     id
                     pool { id token0 { id symbol decimals } token1 { id symbol decimals } }
                     gaugeType
