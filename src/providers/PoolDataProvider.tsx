@@ -7,6 +7,7 @@ import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 import { useUserPositions } from '@/hooks/useSubgraph';
 import { getRpcForUserData } from '@/utils/rpc';
+import { V2_CONTRACTS } from '@/config/contracts';
 
 // Goldsky Subgraph URL for pool data
 const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
@@ -402,6 +403,91 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         return BigInt(Math.floor(num * 1e18));
     };
 
+    const permanentVeNftTokenIdsNeedingRpc = (subgraphVeNFTs || [])
+        .filter(nft => {
+            if (!nft?.isPermanent) return false;
+            const vp = parseFloat(String(nft.votingPower || '0'));
+            return !Number.isFinite(vp) || vp <= 0;
+        })
+        .map(nft => BigInt(nft.tokenId))
+        .filter(id => id > BigInt(0))
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+    const permanentVeNftRpcKey = permanentVeNftTokenIdsNeedingRpc.map(x => x.toString()).join('|');
+    const [permanentVeNftVotingPowerMap, setPermanentVeNftVotingPowerMap] = useState<Map<string, bigint>>(new Map());
+
+    useEffect(() => {
+        let cancelled = false;
+        const FIVE_MINUTES = 5 * 60 * 1000;
+
+        const fetchPermanentVotingPowerFromRpc = async () => {
+            if (!address || permanentVeNftTokenIdsNeedingRpc.length === 0) {
+                setPermanentVeNftVotingPowerMap(new Map());
+                return;
+            }
+
+            const rpc = getRpcForUserData();
+            const balanceOfNftAbi = [
+                {
+                    inputs: [{ name: 'tokenId', type: 'uint256' }],
+                    name: 'balanceOfNFT',
+                    outputs: [{ name: '', type: 'uint256' }],
+                    stateMutability: 'view',
+                    type: 'function',
+                },
+            ] as const;
+
+            try {
+                const results = await Promise.all(permanentVeNftTokenIdsNeedingRpc.map(async (tokenId, i) => {
+                    const data = encodeFunctionData({
+                        abi: balanceOfNftAbi,
+                        functionName: 'balanceOfNFT',
+                        args: [tokenId],
+                    });
+
+                    const res = await fetch(rpc, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            id: i + 1,
+                            method: 'eth_call',
+                            params: [{ to: V2_CONTRACTS.VotingEscrow as Address, data }, 'latest'],
+                        }),
+                    });
+
+                    const json = await res.json();
+                    if (json?.error || !json?.result) {
+                        return { tokenId, votingPower: BigInt(0) };
+                    }
+
+                    const decoded = decodeFunctionResult({
+                        abi: balanceOfNftAbi,
+                        functionName: 'balanceOfNFT',
+                        data: json.result,
+                    });
+
+                    return { tokenId, votingPower: decoded as unknown as bigint };
+                }));
+
+                if (cancelled) return;
+                const next = new Map<string, bigint>();
+                results.forEach(r => next.set(r.tokenId.toString(), r.votingPower));
+                setPermanentVeNftVotingPowerMap(next);
+            } catch (err) {
+                console.warn('[PoolDataProvider] RPC balanceOfNFT fetch error:', err);
+                if (!cancelled) setPermanentVeNftVotingPowerMap(new Map());
+            }
+        };
+
+        fetchPermanentVotingPowerFromRpc();
+        const interval = setInterval(fetchPermanentVotingPowerFromRpc, FIVE_MINUTES);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [address, permanentVeNftRpcKey]);
+
     const toBigIntSafe = (value: string | undefined): bigint => {
         if (!value) return BigInt(0);
         // Subgraph sometimes returns BigDecimal strings; BigInt("0.1") throws.
@@ -414,7 +500,9 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         amount: toWei(nft.lockedAmount),
         end: BigInt(nft.lockEnd || '0'),
         isPermanent: nft.isPermanent,
-        votingPower: toWei(nft.votingPower),
+        votingPower: (nft.isPermanent && toWei(nft.votingPower) === BigInt(0))
+            ? (permanentVeNftVotingPowerMap.get(String(nft.tokenId)) ?? BigInt(0))
+            : toWei(nft.votingPower),
         claimable: toWei(nft.claimableRewards),
         hasVoted: nft.hasVoted,
         lastVotedEpoch: BigInt(nft.lastVotedEpoch || '0'),
