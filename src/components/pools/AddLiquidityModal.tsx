@@ -1776,9 +1776,19 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 0.95).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
-                                                            <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceLower ? formatSmartPrice(parseFloat(priceLower)) : '0'}
-                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={priceLower || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                                                        setPriceLower(val);
+                                                                    }
+                                                                }}
+                                                                className="font-bold text-lg min-w-[80px] max-w-[120px] text-center bg-transparent border border-white/10 rounded-lg px-1 py-0.5 focus:border-primary/50 focus:outline-none"
+                                                                placeholder="0"
+                                                            />
                                                             <button
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 1.05).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
@@ -1803,9 +1813,19 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '999999') * 0.95).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
-                                                            <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceUpper ? formatSmartPrice(parseFloat(priceUpper)) : 'Max'}
-                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={priceUpper || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                                                        setPriceUpper(val);
+                                                                    }
+                                                                }}
+                                                                className="font-bold text-lg min-w-[80px] max-w-[120px] text-center bg-transparent border border-white/10 rounded-lg px-1 py-0.5 focus:border-primary/50 focus:outline-none"
+                                                                placeholder="Max"
+                                                            />
                                                             <button
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '1') * 1.05).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
