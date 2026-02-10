@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
-import { parseUnits, Address, formatUnits } from 'viem';
+import { formatUnits, parseUnits, Address } from 'viem';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC, USDT0 } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { TokenSelector } from '@/components/common/TokenSelector';
@@ -21,9 +21,11 @@ import { useToast } from '@/providers/ToastProvider';
 import { haptic } from '@/hooks/useHaptic';
 import {
     calculateOptimalAmounts,
-    getRequiredTokens,
-    priceToTick,
-    MAX_TICK,
+    getRequiredTokens, 
+    priceToTick, 
+    tickToPrice, 
+    MAX_TICK, 
+    MIN_TICK 
 } from '@/utils/liquidityMath';
 
 
@@ -270,18 +272,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     return;
                 }
 
-                const sqrtPriceX96 = BigInt('0x' + slot0Result.result.slice(2, 66));
-                if (sqrtPriceX96 === BigInt(0)) {
-                    // Pool exists but has no price set (not initialized)
-                    setClPoolPrice(null);
-                    return;
-                }
+                // Prefer tick-based price conversion to avoid precision issues from sqrtPriceX96 squaring.
+                // slot0 layout (UniswapV3): sqrtPriceX96 (32 bytes) | tick (int24) | ...
+                const slot0TickHex = slot0Result.result.slice(66, 66 + 6);
+                let tick = parseInt(slot0TickHex, 16);
+                if (tick >= 0x800000) tick -= 0x1000000; // sign extend int24
 
-                const Q96 = BigInt(2) ** BigInt(96);
-                const priceRaw = Number(sqrtPriceX96 * sqrtPriceX96 * BigInt(10 ** token0.decimals)) / Number(Q96 * Q96 * BigInt(10 ** token1.decimals));
-                const price = actualTokenA.address.toLowerCase() === token0.address.toLowerCase()
-                    ? priceRaw
-                    : 1 / priceRaw;
+                const isToken0Base = actualTokenA.address.toLowerCase() === token0.address.toLowerCase();
+                const price = tickToPrice(tick, token0.decimals, token1.decimals, isToken0Base);
 
                 setClPoolPrice(price);
 

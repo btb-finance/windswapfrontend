@@ -575,7 +575,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
                     // Approx. 24h volume from latest PoolDayData (UTC day bucket)
                     const latestDay = p.poolDayData && p.poolDayData.length > 0 ? p.poolDayData[0] : undefined;
-                    const volume24h = latestDay ? parseFloat(latestDay.volumeUSD || '0') : 0;
+                    const rawVolume24h = latestDay ? parseFloat(latestDay.volumeUSD || '0') : 0;
+                    // Guardrail: some pools can have corrupted/overflowed subgraph volumeUSD.
+                    // If volume is non-finite or absurdly large, treat as unknown.
+                    const volume24h = (!isFinite(rawVolume24h) || rawVolume24h < 0 || rawVolume24h > 1e12)
+                        ? 0
+                        : rawVolume24h;
 
                     return {
                         address: p.id as Address,
