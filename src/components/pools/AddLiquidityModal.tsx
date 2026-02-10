@@ -28,6 +28,31 @@ import {
     MIN_TICK 
 } from '@/utils/liquidityMath';
 
+// Smart price formatter for displaying very small or large prices
+function formatSmartPrice(price: number): string {
+    if (price === 0) return '0';
+
+    const absPrice = Math.abs(price);
+
+    // For very small numbers (< 0.0001), use significant digits
+    if (absPrice < 0.0001) {
+        // Find first non-zero digit and show 4 significant digits
+        return price.toPrecision(4);
+    }
+
+    // For small numbers (< 1), show up to 6 decimals
+    if (absPrice < 1) {
+        return price.toFixed(6).replace(/\.?0+$/, '');
+    }
+
+    // For normal numbers (1-10000), show 4 decimals
+    if (absPrice < 10000) {
+        return price.toFixed(4).replace(/\.?0+$/, '');
+    }
+
+    // For large numbers, use compact notation
+    return price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
 
 type PoolType = 'v2' | 'cl';
 type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'approving_nft' | 'staking' | 'done' | 'error';
@@ -1248,7 +1273,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             </div>
                                             {poolType === 'cl' && clPoolPrice && (
                                                 <div className="text-[10px] text-gray-400 flex-shrink-0">
-                                                    <span className="text-green-400">●</span> 1={clPoolPrice.toFixed(4)}
+                                                    <span className="text-green-400">●</span> 1={formatSmartPrice(clPoolPrice)}
                                                 </div>
                                             )}
                                         </div>
@@ -1752,7 +1777,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
                                                             <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceLower ? parseFloat(priceLower).toFixed(4) : '0'}
+                                                                {priceLower ? formatSmartPrice(parseFloat(priceLower)) : '0'}
                                                             </span>
                                                             <button
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 1.05).toFixed(6))}
@@ -1779,7 +1804,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
                                                             <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceUpper ? parseFloat(priceUpper).toFixed(4) : 'Max'}
+                                                                {priceUpper ? formatSmartPrice(parseFloat(priceUpper)) : 'Max'}
                                                             </span>
                                                             <button
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '1') * 1.05).toFixed(6))}
