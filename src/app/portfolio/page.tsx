@@ -246,6 +246,14 @@ export default function PortfolioPage() {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+    // Search and sort state for positions
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'value' | 'pnl' | 'recent'>('value'); // Sort by locked amount (value) by default
+
+    // Search and sort state for staked positions
+    const [stakedSearchQuery, setStakedSearchQuery] = useState('');
+    const [stakedSortBy, setStakedSortBy] = useState<'value' | 'rewards' | 'recent'>('value');
+
     const handleRefresh = async () => {
         setIsRefreshing(true);
         try {
@@ -1252,6 +1260,78 @@ export default function PortfolioPage() {
         );
     }
 
+    // Filter and sort positions
+    const filteredAndSortedCLPositions = clPositions
+        .filter(pos => {
+            if (!searchQuery) return true;
+            const t0 = getTokenInfo(pos.token0);
+            const t1 = getTokenInfo(pos.token1);
+            const query = searchQuery.toLowerCase();
+            return (
+                t0.symbol.toLowerCase().includes(query) ||
+                t1.symbol.toLowerCase().includes(query) ||
+                pos.tokenId.toString().includes(query)
+            );
+        })
+        .sort((a, b) => {
+            if (sortBy === 'value') {
+                // Sort by USD value (highest first)
+                return (b.amountUSD || 0) - (a.amountUSD || 0);
+            } else if (sortBy === 'pnl') {
+                // Sort by PnL (highest first)
+                const aPnl = (a.amountUSD || 0) + (a.withdrawnToken0 || 0) * (a.token0PriceUSD || 0) + (a.withdrawnToken1 || 0) * (a.token1PriceUSD || 0) + (a.collectedToken0 || 0) * (a.token0PriceUSD || 0) + (a.collectedToken1 || 0) * (a.token1PriceUSD || 0) - (a.depositedToken0 || 0) * (a.token0PriceUSD || 0) - (a.depositedToken1 || 0) * (a.token1PriceUSD || 0);
+                const bPnl = (b.amountUSD || 0) + (b.withdrawnToken0 || 0) * (b.token0PriceUSD || 0) + (b.withdrawnToken1 || 0) * (b.token1PriceUSD || 0) + (b.collectedToken0 || 0) * (b.token0PriceUSD || 0) + (b.collectedToken1 || 0) * (b.token1PriceUSD || 0) - (b.depositedToken0 || 0) * (b.token0PriceUSD || 0) - (b.depositedToken1 || 0) * (b.token1PriceUSD || 0);
+                return bPnl - aPnl;
+            } else {
+                // Sort by tokenId (most recent first - assuming higher ID = newer)
+                return Number(b.tokenId) - Number(a.tokenId);
+            }
+        });
+
+    const filteredAndSortedV2Positions = v2Positions
+        .filter(pos => {
+            if (!searchQuery) return true;
+            const t0 = getTokenInfo(pos.token0);
+            const t1 = getTokenInfo(pos.token1);
+            const query = searchQuery.toLowerCase();
+            return (
+                t0.symbol.toLowerCase().includes(query) ||
+                t1.symbol.toLowerCase().includes(query)
+            );
+        })
+        .sort((a, b) => {
+            if (sortBy === 'value') {
+                // Sort by LP balance (highest first)
+                return Number(b.lpBalance) - Number(a.lpBalance);
+            }
+            // For PnL and recent, just maintain order
+            return 0;
+        });
+
+    // Filter and sort staked positions
+    const filteredAndSortedStakedPositions = stakedPositions
+        .filter(pos => {
+            if (!stakedSearchQuery) return true;
+            const query = stakedSearchQuery.toLowerCase();
+            return (
+                pos.token0Symbol.toLowerCase().includes(query) ||
+                pos.token1Symbol.toLowerCase().includes(query) ||
+                pos.tokenId.toString().includes(query)
+            );
+        })
+        .sort((a, b) => {
+            if (stakedSortBy === 'value') {
+                // Sort by liquidity value (highest first)
+                return Number(b.liquidity || 0) - Number(a.liquidity || 0);
+            } else if (stakedSortBy === 'rewards') {
+                // Sort by pending rewards (highest first)
+                return Number(b.pendingRewards || 0) - Number(a.pendingRewards || 0);
+            } else {
+                // Sort by tokenId (most recent first)
+                return Number(b.tokenId) - Number(a.tokenId);
+            }
+        });
+
     return (
         <div className="container mx-auto px-3 sm:px-6 py-4">
             {/* Header - Compact inline */}
@@ -1468,14 +1548,44 @@ export default function PortfolioPage() {
                 {activeTab === 'positions' && (
                     <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         <div className="glass-card p-6">
-                            <h3 className="font-semibold mb-4">All LP Positions</h3>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                                <h3 className="font-semibold">All LP Positions</h3>
+
+                                {/* Search and Sort Controls */}
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    {/* Search Input */}
+                                    <input
+                                        type="text"
+                                        placeholder="Search pools..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="flex-1 sm:flex-none sm:w-48 px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
+                                    />
+
+                                    {/* Sort Dropdown */}
+                                    <div className="relative">
+                                        <select
+                                            value={sortBy}
+                                            onChange={(e) => setSortBy(e.target.value as 'value' | 'pnl' | 'recent')}
+                                            className="pl-3 pr-8 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
+                                        >
+                                            <option value="value">Value</option>
+                                            <option value="pnl">PnL</option>
+                                            <option value="recent">Recent</option>
+                                        </select>
+                                        <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
 
                             {/* CL Positions */}
-                            {clPositions.length > 0 && (
+                            {filteredAndSortedCLPositions.length > 0 && (
                                 <div className="mb-6">
                                     <h4 className="text-sm text-gray-400 mb-3">Concentrated Liquidity (V3)</h4>
                                     <div className="space-y-3">
-                                        {clPositions.map((pos, i) => {
+                                        {filteredAndSortedCLPositions.map((pos, i) => {
                                             const t0 = getTokenInfo(pos.token0);
                                             const t1 = getTokenInfo(pos.token1);
                                             const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
@@ -1665,11 +1775,11 @@ export default function PortfolioPage() {
                             )}
 
                             {/* V2 Positions */}
-                            {v2Positions.length > 0 && (
+                            {filteredAndSortedV2Positions.length > 0 && (
                                 <div>
                                     <h4 className="text-sm text-gray-400 mb-3">V2 Pools</h4>
                                     <div className="space-y-3">
-                                        {v2Positions.map((pos, i) => {
+                                        {filteredAndSortedV2Positions.map((pos, i) => {
                                             const t0 = getTokenInfo(pos.token0);
                                             const t1 = getTokenInfo(pos.token1);
                                             const logo0 = getTokenLogo(pos.token0);
@@ -1767,10 +1877,24 @@ export default function PortfolioPage() {
                                 </div>
                             )}
 
-                            {clPositions.length === 0 && v2Positions.length === 0 && (
+                            {filteredAndSortedCLPositions.length === 0 && filteredAndSortedV2Positions.length === 0 && (
                                 <div className="text-center py-12">
-                                    <p className="text-gray-400 mb-4">No LP positions found</p>
-                                    <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
+                                    {searchQuery ? (
+                                        <>
+                                            <p className="text-gray-400 mb-2">No positions found matching "{searchQuery}"</p>
+                                            <button
+                                                onClick={() => setSearchQuery('')}
+                                                className="text-sm text-primary hover:underline"
+                                            >
+                                                Clear search
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className="text-gray-400 mb-4">No LP positions found</p>
+                                            <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1782,12 +1906,49 @@ export default function PortfolioPage() {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         {/* Staked Positions List */}
                         <div className="glass-card p-3 sm:p-4">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="font-semibold text-sm">Your Staked NFTs</h3>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                                <div className="flex items-center justify-between w-full sm:w-auto">
+                                    <h3 className="font-semibold text-sm">Your Staked NFTs</h3>
+                                    {stakedPositions.length > 0 && (
+                                        <span className="text-xs text-green-400 sm:hidden">
+                                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Search and Sort Controls */}
                                 {stakedPositions.length > 0 && (
-                                    <span className="text-xs text-green-400">
-                                        {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND pending
-                                    </span>
+                                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                                        {/* Search Input */}
+                                        <input
+                                            type="text"
+                                            placeholder="Search staked..."
+                                            value={stakedSearchQuery}
+                                            onChange={(e) => setStakedSearchQuery(e.target.value)}
+                                            className="flex-1 sm:flex-none sm:w-40 px-3 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
+                                        />
+
+                                        {/* Sort Dropdown */}
+                                        <div className="relative">
+                                            <select
+                                                value={stakedSortBy}
+                                                onChange={(e) => setStakedSortBy(e.target.value as 'value' | 'rewards' | 'recent')}
+                                                className="pl-3 pr-7 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
+                                            >
+                                                <option value="value">Value</option>
+                                                <option value="rewards">Rewards</option>
+                                                <option value="recent">Recent</option>
+                                            </select>
+                                            <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+
+                                        {/* Desktop rewards display */}
+                                        <span className="hidden sm:block text-xs text-green-400 whitespace-nowrap">
+                                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
+                                        </span>
+                                    </div>
                                 )}
                             </div>
                             {loadingStaked ? (
@@ -1795,14 +1956,28 @@ export default function PortfolioPage() {
                                     <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                                     Loading...
                                 </div>
-                            ) : stakedPositions.length === 0 ? (
+                            ) : filteredAndSortedStakedPositions.length === 0 ? (
                                 <div className="text-center py-8">
-                                    <p className="text-gray-400 text-sm mb-3">No staked positions</p>
-                                    <Link href="/pools" className="btn-primary px-4 py-2 text-sm rounded-lg">Stake LP</Link>
+                                    {stakedSearchQuery ? (
+                                        <>
+                                            <p className="text-gray-400 text-sm mb-2">No staked positions found matching "{stakedSearchQuery}"</p>
+                                            <button
+                                                onClick={() => setStakedSearchQuery('')}
+                                                className="text-xs text-primary hover:underline"
+                                            >
+                                                Clear search
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className="text-gray-400 text-sm mb-3">No staked positions</p>
+                                            <Link href="/pools" className="btn-primary px-4 py-2 text-sm rounded-lg">Stake LP</Link>
+                                        </>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    {stakedPositions.map((pos, i) => {
+                                    {filteredAndSortedStakedPositions.map((pos, i) => {
                                         const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
 
                                         return (
