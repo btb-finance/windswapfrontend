@@ -65,6 +65,10 @@ export default function VotePage() {
     const [voteWeights, setVoteWeights] = useState<Record<string, number>>({});
     const [isVoting, setIsVoting] = useState(false);
 
+    // Search and sort state for gauges
+    const [gaugeSearchQuery, setGaugeSearchQuery] = useState('');
+    const [gaugeSortBy, setGaugeSortBy] = useState<'rewards' | 'votes'>('rewards');
+
     // Lock management state
     const [managingNFT, setManagingNFT] = useState<bigint | null>(null);
     const [increaseAmountValue, setIncreaseAmountValue] = useState('');
@@ -655,6 +659,37 @@ export default function VotePage() {
         { key: 'vote' as const, label: 'Vote', icon: '', description: 'Choose pools' },
         { key: 'rewards' as const, label: 'Rewards', icon: '', description: 'Claim earnings' },
     ];
+
+    // Filter and sort gauges
+    const sortedGauges = [...gauges]
+        .filter(gauge => {
+            if (!gaugeSearchQuery) return true;
+            const query = gaugeSearchQuery.toLowerCase();
+            return (
+                gauge.symbol0.toLowerCase().includes(query) ||
+                gauge.symbol1.toLowerCase().includes(query) ||
+                gauge.pool.toLowerCase().includes(query)
+            );
+        })
+        .sort((a, b) => {
+            // Primary sort by user preference
+            if (gaugeSortBy === 'rewards') {
+                const aRewards = a.rewardTokens?.reduce((sum, r) => sum + Number(formatUnits(r.amount, r.decimals)), 0) || 0;
+                const bRewards = b.rewardTokens?.reduce((sum, r) => sum + Number(formatUnits(r.amount, r.decimals)), 0) || 0;
+                if (bRewards !== aRewards) return bRewards - aRewards;
+            } else if (gaugeSortBy === 'votes') {
+                const aWeight = Number(a.weight || 0);
+                const bWeight = Number(b.weight || 0);
+                if (bWeight !== aWeight) return bWeight - aWeight;
+            }
+
+            // Secondary sort: Active gauges first, then alive gauges
+            if (a.gauge && !b.gauge) return -1;
+            if (!a.gauge && b.gauge) return 1;
+            if (a.isAlive && !b.isAlive) return -1;
+            if (!a.isAlive && b.isAlive) return 1;
+            return 0;
+        });
 
     return (
         <div className="container mx-auto px-3 sm:px-6 py-4">
@@ -1277,9 +1312,37 @@ export default function VotePage() {
 
                                 {/* Pools List */}
                                 <div className="glass-card overflow-hidden">
-                                    <div className="p-3 border-b border-white/5 flex justify-between items-center">
-                                        <span className="font-semibold text-sm">Pools ({gauges.length})</span>
-                                        <span className="text-xs text-gray-400">{parseFloat(formatUnits(totalWeight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} votes</span>
+                                    <div className="p-3 border-b border-white/5">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                            <span className="font-semibold text-sm">Pools ({sortedGauges.length}/{gauges.length})</span>
+
+                                            {/* Search and Sort Controls */}
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search pools..."
+                                                    value={gaugeSearchQuery}
+                                                    onChange={(e) => setGaugeSearchQuery(e.target.value)}
+                                                    className="flex-1 sm:w-40 px-3 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
+                                                />
+                                                <div className="relative">
+                                                    <select
+                                                        value={gaugeSortBy}
+                                                        onChange={(e) => setGaugeSortBy(e.target.value as 'rewards' | 'votes')}
+                                                        className="pl-3 pr-7 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
+                                                    >
+                                                        <option value="rewards">Rewards</option>
+                                                        <option value="votes">Votes</option>
+                                                    </select>
+                                                    <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </div>
+                                                <span className="hidden sm:block text-xs text-gray-400 whitespace-nowrap">
+                                                    {parseFloat(formatUnits(totalWeight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} votes
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {/* Loading State */}
@@ -1292,16 +1355,19 @@ export default function VotePage() {
 
                                     {/* Pools - Compact Mobile Layout */}
                                     <div className="divide-y divide-white/5">
-                                        {/* Sort: Active gauges (with gauge address) first, then by isAlive */}
-                                        {[...gauges].sort((a, b) => {
-                                            // First priority: has gauge address
-                                            if (a.gauge && !b.gauge) return -1;
-                                            if (!a.gauge && b.gauge) return 1;
-                                            // Second priority: isAlive
-                                            if (a.isAlive && !b.isAlive) return -1;
-                                            if (!a.isAlive && b.isAlive) return 1;
-                                            return 0;
-                                        }).map((gauge) => (
+                                        {sortedGauges.length === 0 ? (
+                                            <div className="p-6 text-center">
+                                                <p className="text-gray-400 text-sm mb-2">No pools found{gaugeSearchQuery && ` matching "${gaugeSearchQuery}"`}</p>
+                                                {gaugeSearchQuery && (
+                                                    <button
+                                                        onClick={() => setGaugeSearchQuery('')}
+                                                        className="text-xs text-primary hover:underline"
+                                                    >
+                                                        Clear search
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : sortedGauges.map((gauge) => (
                                             <div key={gauge.pool} className="p-2 sm:p-3">
                                                 {/* Row 1: Pool info + share */}
                                                 <div className="flex items-center justify-between gap-2 mb-2">
