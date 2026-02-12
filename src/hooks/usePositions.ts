@@ -58,7 +58,9 @@ export function useCLPositionsFromSubgraph(showZeroBalance: boolean = false) {
     const { positions: subgraphPositions, isLoading, error, refetch } = useUserPositions(address);
 
     // Convert subgraph positions to CLPosition format
+    // Filter out staked positions - they're shown in the "Staked" tab separately
     const positions: CLPosition[] = subgraphPositions
+        .filter(p => !p.staked)  // Exclude staked positions from regular list
         .map((p: SubgraphPosition) => ({
             tokenId: BigInt(p.tokenId),
             poolId: p.pool.id as Address,
