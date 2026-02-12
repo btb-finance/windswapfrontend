@@ -44,7 +44,7 @@ export function useCLPositionsFromSubgraph() {
     const { positions: subgraphPositions, isLoading, error, refetch } = useUserPositions(address);
 
     // Convert subgraph positions to CLPosition format
-    // Show positions with liquidity OR uncollected tokens (to prevent stuck tokens)
+    // Show ALL positions - even those with 0 liquidity (user might want to see unstaked positions)
     const positions: CLPosition[] = subgraphPositions
         .map((p: SubgraphPosition) => ({
             tokenId: BigInt(p.tokenId),
@@ -60,11 +60,7 @@ export function useCLPositionsFromSubgraph() {
             tokensOwed1: BigInt(0),
             token0Symbol: p.pool.token0.symbol,
             token1Symbol: p.pool.token1.symbol,
-        }))
-        // Only filter out positions with 0 liquidity AND no pending collection
-        // Subgraph doesn't have tokensOwed, so we keep all positions from subgraph
-        // and let the RPC-based hook do the filtering
-        .filter(p => p.liquidity > BigInt(0));
+        }));
 
     return {
         positions,
@@ -109,12 +105,10 @@ export function useCLPositions() {
             }
 
             const results = await Promise.all(positionPromises);
-            // Filter out null positions
-            // Show positions with liquidity > 0 OR uncollected tokens (tokensOwed > 0)
-            // This prevents positions from disappearing when decreaseLiquidity succeeds but collect fails
-            const validPositions = results.filter((p): p is CLPosition =>
-                p !== null && (p.liquidity > BigInt(0) || p.tokensOwed0 > BigInt(0) || p.tokensOwed1 > BigInt(0))
-            );
+            // Filter out null positions only
+            // Show ALL positions the user owns, even with 0 liquidity
+            // This ensures unstaked positions are visible so users can add liquidity back or manage them
+            const validPositions = results.filter((p): p is CLPosition => p !== null);
             setPositions(validPositions);
 
             // If we didn't get all positions, retry missing ones after a delay
@@ -129,11 +123,9 @@ export function useCLPositions() {
                         retryPromises.push(fetchPositionByIndex(address, i));
                     }
                     const retryResults = await Promise.all(retryPromises);
-                    // Also show positions with tokensOwed > 0 on retry
+                    // Show all non-null positions that we haven't already fetched
                     const newPositions = retryResults.filter((p): p is CLPosition =>
-                        p !== null &&
-                        (p.liquidity > BigInt(0) || p.tokensOwed0 > BigInt(0) || p.tokensOwed1 > BigInt(0)) &&
-                        !fetchedIds.has(p.tokenId.toString())
+                        p !== null && !fetchedIds.has(p.tokenId.toString())
                     );
                     if (newPositions.length > 0) {
                         console.log(`[usePositions] ✅ Recovered ${newPositions.length} more positions`);
