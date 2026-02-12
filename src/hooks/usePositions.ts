@@ -84,9 +84,9 @@ export function useCLPositionsFromSubgraph() {
             collectedToken1: p.collectedToken1 ? parseFloat(p.collectedToken1) : 0,
             token0Symbol: p.pool.token0.symbol,
             token1Symbol: p.pool.token1.symbol,
-        }))
-        // Show positions with liquidity > 0 OR uncollected tokens
-        .filter(p => p.liquidity > BigInt(0) || p.tokensOwed0 > BigInt(0) || p.tokensOwed1 > BigInt(0));
+        }));
+        // Show ALL positions - including unstaked positions with 0 liquidity
+        // Users need to see these to manage or close them
 
     return {
         positions,
