@@ -356,7 +356,7 @@ export interface SubgraphUser {
 
 // Comprehensive user data query - replaces all RPC calls for user data
 const USER_DATA_QUERY = `
-    query GetUserData($userId: ID!) {
+    query GetUserData($userId: ID!, $positionsSkip: Int!, $stakedSkip: Int!) {
         user(id: $userId) {
             id
             profile {
@@ -372,7 +372,7 @@ const USER_DATA_QUERY = `
                 firstActivityTimestamp
                 lastActivityTimestamp
             }
-            positions(first: 100) {
+            positions(first: 1000, skip: $positionsSkip) {
                 id
                 tokenId
                 pool {
@@ -412,7 +412,7 @@ const USER_DATA_QUERY = `
                 totalClaimed
             }
         }
-        gaugeStakedPositions(where: { userId: $userId }, first: 1000) {
+        gaugeStakedPositions(where: { userId: $userId }, first: 1000, skip: $stakedSkip) {
             id
             gauge {
                 id
@@ -474,31 +474,72 @@ export function useUserPositions(userAddress: string | undefined) {
         setError(null);
 
         try {
-            const data = await fetchGraphQL<{
-                user: SubgraphUser | null;
-                gaugeStakedPositions: SubgraphStakedPosition[];
-            }>(
-                USER_DATA_QUERY,
-                { userId: userAddress.toLowerCase() }
-            );
+            // Fetch ALL positions AND staked positions with pagination (no limit!)
+            let allPositions: SubgraphPosition[] = [];
+            let allStakedPositions: SubgraphStakedPosition[] = [];
+            const batchSize = 1000;
 
-            if (data.user) {
-                setPositions(data.user.positions || []);
-                setVeNFTs(data.user.veNFTs || []);
-                setProfile(data.user.profile || null);
-            } else {
-                setPositions([]);
-                setVeNFTs([]);
-                setProfile(null);
+            // Fetch positions with pagination
+            let positionsSkip = 0;
+            let hasMorePositions = true;
+
+            while (hasMorePositions) {
+                const data = await fetchGraphQL<{
+                    user: SubgraphUser | null;
+                    gaugeStakedPositions: SubgraphStakedPosition[];
+                }>(
+                    USER_DATA_QUERY,
+                    { userId: userAddress.toLowerCase(), positionsSkip, stakedSkip: 0 }
+                );
+
+                if (data.user) {
+                    const positions = data.user.positions || [];
+                    allPositions = [...allPositions, ...positions];
+
+                    // Store profile and veNFTs from first batch only
+                    if (positionsSkip === 0) {
+                        setVeNFTs(data.user.veNFTs || []);
+                        setProfile(data.user.profile || null);
+                    }
+
+                    // If we got less than batchSize, we've reached the end
+                    hasMorePositions = positions.length === batchSize;
+                    positionsSkip += batchSize;
+                } else {
+                    hasMorePositions = false;
+                }
             }
 
-            // Staked positions are a top-level query result
-            setStakedPositions(data.gaugeStakedPositions || []);
+            // Fetch staked positions with pagination
+            let stakedSkip = 0;
+            let hasMoreStaked = true;
 
-            console.log(`[useUserPositions] Found ${data.user?.positions?.length || 0} positions, ${data.user?.veNFTs?.length || 0} veNFTs, ${data.gaugeStakedPositions?.length || 0} staked`);
+            while (hasMoreStaked) {
+                const data = await fetchGraphQL<{
+                    user: SubgraphUser | null;
+                    gaugeStakedPositions: SubgraphStakedPosition[];
+                }>(
+                    USER_DATA_QUERY,
+                    { userId: userAddress.toLowerCase(), positionsSkip: 0, stakedSkip }
+                );
+
+                const staked = data.gaugeStakedPositions || [];
+                allStakedPositions = [...allStakedPositions, ...staked];
+
+                // If we got less than batchSize, we've reached the end
+                hasMoreStaked = staked.length === batchSize;
+                stakedSkip += batchSize;
+            }
+
+            setPositions(allPositions);
+            setStakedPositions(allStakedPositions);
+            console.log(`[useUserPositions] Fetched ALL ${allPositions.length} positions, ${allStakedPositions.length} staked (no limits!)`);
         } catch (err) {
             console.error('[useUserPositions] Error:', err);
             setError(err instanceof Error ? err.message : 'Failed to fetch user data');
+            setPositions([]);
+            setVeNFTs([]);
+            setProfile(null);
         } finally {
             setIsLoading(false);
         }

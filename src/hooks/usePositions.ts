@@ -51,8 +51,9 @@ import { useUserPositions, SubgraphPosition } from './useSubgraph';
 /**
  * Primary hook for fetching CL positions from subgraph
  * Returns positions with tokensOwed from subgraph data
+ * @param showZeroBalance - If true, show positions with 0 liquidity and 0 fees (default: false)
  */
-export function useCLPositionsFromSubgraph() {
+export function useCLPositionsFromSubgraph(showZeroBalance: boolean = false) {
     const { address } = useAccount();
     const { positions: subgraphPositions, isLoading, error, refetch } = useUserPositions(address);
 
@@ -84,9 +85,10 @@ export function useCLPositionsFromSubgraph() {
             collectedToken1: p.collectedToken1 ? parseFloat(p.collectedToken1) : 0,
             token0Symbol: p.pool.token0.symbol,
             token1Symbol: p.pool.token1.symbol,
-        }));
-        // Show ALL positions - including unstaked positions with 0 liquidity
-        // Users need to see these to manage or close them
+        }))
+        // By default, hide positions with 0 liquidity AND 0 fees (cleaner UI)
+        // But allow showing them if showZeroBalance = true (for managing empty positions)
+        .filter(p => showZeroBalance || p.liquidity > BigInt(0) || p.tokensOwed0 > BigInt(0) || p.tokensOwed1 > BigInt(0));
 
     return {
         positions,
