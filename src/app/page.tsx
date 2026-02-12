@@ -2,67 +2,32 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useAccount, useReadContract, useReadContracts } from 'wagmi';
-import { formatUnits, Address } from 'viem';
-import { V2_CONTRACTS } from '@/config/contracts';
-import { POOL_FACTORY_ABI } from '@/config/abis';
-import { FeatureCard } from '@/components/common/InfoCard';
+import { useAccount } from 'wagmi';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { useVeWIND } from '@/hooks/useVeWIND';
-
-// Voter ABI for getting gauge count
-const VOTER_ABI = [
-  {
-    inputs: [],
-    name: 'length',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const;
-
-// VotingEscrow ABI for total supply
-const VE_ABI = [
-  {
-    inputs: [],
-    name: 'supply',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const;
+import { usePoolData } from '@/providers/PoolDataProvider';
 
 export default function Home() {
   const { isConnected } = useAccount();
 
-  // Fetch real on-chain data
-  const { data: poolCount } = useReadContract({
-    address: V2_CONTRACTS.PoolFactory as Address,
-    abi: POOL_FACTORY_ABI,
-    functionName: 'allPoolsLength',
-  });
-
-  const { data: gaugeCount } = useReadContract({
-    address: V2_CONTRACTS.Voter as Address,
-    abi: VOTER_ABI,
-    functionName: 'length',
-  });
-
-  const { data: veSupply } = useReadContract({
-    address: V2_CONTRACTS.VotingEscrow as Address,
-    abi: VE_ABI,
-    functionName: 'supply',
-  });
+  // Use subgraph data from PoolDataProvider (no RPC calls needed)
+  const { allPools, gauges, veNFTs: providerVeNFTs } = usePoolData();
+  const poolCount = allPools.length;
+  const gaugeCount = gauges.length;
 
   // Portfolio data hooks (only useful when connected)
-  const { positions: clPositions, positionCount: clCount } = useCLPositions();
+  const { positionCount: clCount } = useCLPositions();
   const { positions: v2Positions } = useV2Positions();
-  const { positions: vePositions, veNFTCount } = useVeWIND();
+  const { veNFTCount } = useVeWIND();
 
-  // Format veSupply
-  const formattedVeSupply = veSupply
-    ? parseFloat(formatUnits(veSupply, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })
+  // Calculate total WIND locked from veNFTs (from subgraph)
+  const totalWindLocked = providerVeNFTs.reduce((sum, nft) => {
+    const amount = Number(nft.amount) / 1e18;
+    return sum + amount;
+  }, 0);
+  const formattedVeSupply = totalWindLocked > 0
+    ? totalWindLocked.toLocaleString(undefined, { maximumFractionDigits: 0 })
     : '--';
 
   // Portfolio counts
@@ -185,11 +150,11 @@ export default function Home() {
         >
           <div className="stat-card text-center">
             <p className="text-xs md:text-sm text-gray-400 mb-1">Total Pools</p>
-            <p className="text-xl md:text-3xl font-bold">{poolCount ? Number(poolCount).toLocaleString() : '--'}</p>
+            <p className="text-xl md:text-3xl font-bold">{poolCount > 0 ? poolCount.toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
             <p className="text-xs md:text-sm text-gray-400 mb-1">Active Gauges</p>
-            <p className="text-xl md:text-3xl font-bold">{gaugeCount ? Number(gaugeCount).toLocaleString() : '--'}</p>
+            <p className="text-xl md:text-3xl font-bold">{gaugeCount > 0 ? gaugeCount.toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
             <p className="text-xs md:text-sm text-gray-400 mb-1">WIND Locked</p>

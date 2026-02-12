@@ -1,41 +1,36 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useReadContract, usePublicClient } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
-import { formatUnits, Address, encodeFunctionData } from 'viem';
+import { formatUnits, Address, encodeFunctionData, decodeFunctionResult } from 'viem';
 import Link from 'next/link';
 import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
 import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { getTokenLogo } from '@/utils/tokens';
-import { V2_CONTRACTS } from '@/config/contracts';
-import { getRpcForVoting } from '@/utils/rpc';
+import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
+import { getRpcForVoting, rpcCall } from '@/utils/rpc';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
+import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
+import { usePoolData } from '@/providers/PoolDataProvider';
 
-
-
-// Minter ABI for epoch info
-const MINTER_ABI = [
-    {
-        inputs: [],
-        name: 'activePeriod',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'epochCount',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
+async function readSubgraphJson(response: Response, label: string): Promise<any> {
+    const text = await response.text();
+    let json: any;
+    try {
+        json = JSON.parse(text);
+    } catch {
+        const ct = response.headers.get('content-type') || '';
+        const snippet = text.slice(0, 200);
+        throw new Error(`[Subgraph] ${label} returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
+    }
+    return json;
+}
 
 // Voter ABI for distribute (permissionless!)
 const VOTER_DISTRIBUTE_ABI = [
@@ -69,6 +64,10 @@ export default function VotePage() {
     const [selectedVeNFT, setSelectedVeNFT] = useState<bigint | null>(null);
     const [voteWeights, setVoteWeights] = useState<Record<string, number>>({});
     const [isVoting, setIsVoting] = useState(false);
+
+    // Search and sort state for gauges
+    const [gaugeSearchQuery, setGaugeSearchQuery] = useState('');
+    const [gaugeSortBy, setGaugeSortBy] = useState<'rewards' | 'votes'>('rewards');
 
     // Lock management state
     const [managingNFT, setManagingNFT] = useState<bigint | null>(null);
@@ -116,20 +115,9 @@ export default function VotePage() {
         addIncentive,
     } = useVoter();
 
+    const { activePeriod, epochCount } = usePoolData();
+
     const { balance: windBalance, raw: rawWindBalance, formatted: formattedWindBalance } = useTokenBalance(WIND);
-
-    // Read epoch info from Minter
-    const { data: activePeriod } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'activePeriod',
-    });
-
-    const { data: epochCount } = useReadContract({
-        address: V2_CONTRACTS.Minter as Address,
-        abi: MINTER_ABI,
-        functionName: 'epochCount',
-    });
 
     // Calculate epoch times
     const epochStartDate = activePeriod ? new Date(Number(activePeriod) * 1000) : null;
@@ -155,6 +143,29 @@ export default function VotePage() {
     const [votingRewards, setVotingRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
     const [isLoadingVotingRewards, setIsLoadingVotingRewards] = useState(false);
 
+    // Vote status from subgraph veVotes (more reliable than hasVoted)
+    const [veNftHasVotes, setVeNftHasVotes] = useState<Record<string, boolean>>({});
+
+    const positionsTokenIdsKey = useMemo(() => {
+        if (!positions || positions.length === 0) return '';
+        return positions
+            .map(p => p.tokenId.toString())
+            .sort()
+            .join('|');
+    }, [positions]);
+
+    const rewardsFetchRef = useRef<{ lastKey: string; lastTs: number; inFlight: boolean }>({
+        lastKey: '',
+        lastTs: 0,
+        inFlight: false,
+    });
+
+    const voteStatusFetchRef = useRef<{ lastKey: string; lastTs: number; inFlight: boolean }>({
+        lastKey: '',
+        lastTs: 0,
+        inFlight: false,
+    });
+
     // ABI for fee reward contracts (earned + getReward)
     const FEE_REWARD_ABI = [
         {
@@ -173,103 +184,232 @@ export default function VotePage() {
         },
     ] as const;
 
-    // Fetch claimable voting rewards for all veNFTs using batch RPC
+    // Fetch claimable voting rewards for all veNFTs using on-chain earned() calls
+    // Note: VotingRewardBalance in subgraph tracks CLAIMED rewards, not pending ones
+    // We must call earned(token, tokenId) on fee/bribe reward contracts to get pending
     const fetchVotingRewards = useCallback(async () => {
-        if (positions.length === 0 || gauges.length === 0) return;
+        if (positions.length === 0) return;
+        if (!address) return;
+        if (gauges.length === 0) return;
+
+        const FIVE_MINUTES = 5 * 60 * 1000;
+        const key = `${address.toLowerCase()}|${positionsTokenIdsKey}|${gauges.length}`;
+        const now = Date.now();
+
+        if (rewardsFetchRef.current.inFlight) return;
+        if (rewardsFetchRef.current.lastKey === key && now - rewardsFetchRef.current.lastTs < FIVE_MINUTES) return;
 
         setIsLoadingVotingRewards(true);
+        rewardsFetchRef.current.inFlight = true;
         try {
-            // Build all earned() calls upfront
-            interface EarnedCall {
-                tokenId: string;
-                pool: string;
-                token: string;
-                feeReward: string;
+            // Step 1: Get active votes for each veNFT to know which pools they voted for
+            const tokenIds = positions.map(p => p.tokenId.toString());
+            const votesQuery = `query VeVotesForRewards($tokenIds: [ID!]) {
+                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, first: 1000) {
+                    veNFT { id }
+                    pool { id token0 { id decimals } token1 { id decimals } }
+                }
+            }`;
+
+            const votesRes = await fetch(SUBGRAPH_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: votesQuery, variables: { tokenIds } }),
+            });
+            const votesJson = await readSubgraphJson(votesRes, 'veVotes(for rewards)');
+            if (votesJson.errors) throw new Error(votesJson.errors[0]?.message || 'Subgraph error');
+
+            const veVotes: Array<{
+                veNFT: { id: string };
+                pool: { id: string; token0: { id: string; decimals: number }; token1: { id: string; decimals: number } };
+            }> = votesJson.data?.veVotes || [];
+
+            if (veVotes.length === 0) {
+                setVotingRewards({});
+                rewardsFetchRef.current.lastKey = key;
+                rewardsFetchRef.current.lastTs = now;
+                return;
             }
+
+            // Step 2: Build list of (tokenId, feeRewardContract, token, decimals) to call earned()
+            const earnedAbi = [{
+                inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
+                name: 'earned',
+                outputs: [{ name: '', type: 'uint256' }],
+                stateMutability: 'view',
+                type: 'function',
+            }] as const;
+
+            type EarnedCall = {
+                veNFTId: string;
+                poolId: string;
+                feeReward: string;
+                token: string;
+                decimals: number;
+            };
             const calls: EarnedCall[] = [];
 
-            for (const position of positions) {
-                for (const gauge of gauges) {
-                    if (!gauge.feeReward || gauge.feeReward === '0x0000000000000000000000000000000000000000') continue;
+            for (const vote of veVotes) {
+                const poolId = vote.pool?.id?.toLowerCase();
+                if (!poolId) continue;
 
-                    // Add call for token0 and token1
+                // Find gauge for this pool to get feeReward address
+                const gauge = gauges.find(g => g.pool.toLowerCase() === poolId);
+                if (!gauge || !gauge.feeReward || gauge.feeReward === '0x0000000000000000000000000000000000000000') continue;
+
+                const veNFTId = vote.veNFT?.id;
+                if (!veNFTId) continue;
+
+                // Add calls for token0 and token1
+                if (vote.pool.token0?.id) {
                     calls.push({
-                        tokenId: position.tokenId.toString(),
-                        pool: gauge.pool,
-                        token: gauge.token0,
+                        veNFTId,
+                        poolId,
                         feeReward: gauge.feeReward,
+                        token: vote.pool.token0.id,
+                        decimals: vote.pool.token0.decimals || 18,
                     });
+                }
+                if (vote.pool.token1?.id) {
                     calls.push({
-                        tokenId: position.tokenId.toString(),
-                        pool: gauge.pool,
-                        token: gauge.token1,
+                        veNFTId,
+                        poolId,
                         feeReward: gauge.feeReward,
+                        token: vote.pool.token1.id,
+                        decimals: vote.pool.token1.decimals || 18,
                     });
                 }
             }
 
             if (calls.length === 0) {
                 setVotingRewards({});
-                setIsLoadingVotingRewards(false);
+                rewardsFetchRef.current.lastKey = key;
+                rewardsFetchRef.current.lastTs = now;
                 return;
             }
 
-            // Encode earned(token, tokenId) calls
-            const earnedSelector = '0x3e491d47'; // earned(address,uint256)
-            const rpcCalls = calls.map(call => ({
-                method: 'eth_call',
-                params: [{
-                    to: call.feeReward,
-                    data: earnedSelector +
-                        call.token.slice(2).padStart(64, '0') +
-                        BigInt(call.tokenId).toString(16).padStart(64, '0')
-                }, 'latest']
+            // Step 3: Call earned() on-chain for each (token, tokenId)
+            const rpc = getRpcForVoting();
+            const results = await Promise.all(calls.map(async (c, i) => {
+                try {
+                    const data = encodeFunctionData({
+                        abi: earnedAbi,
+                        functionName: 'earned',
+                        args: [c.token as Address, BigInt(c.veNFTId)],
+                    });
+
+                    const result = await rpcCall<string>(
+                        'eth_call',
+                        [{ to: c.feeReward, data }, 'latest'],
+                        rpc
+                    );
+
+                    if (!result || result === '0x') return { ...c, earned: BigInt(0) };
+
+                    const resultHex = result as `0x${string}`;
+
+                    const decoded = decodeFunctionResult({
+                        abi: earnedAbi,
+                        functionName: 'earned',
+                        data: resultHex,
+                    });
+
+                    return { ...c, earned: decoded as unknown as bigint };
+                } catch {
+                    return { ...c, earned: BigInt(0) };
+                }
             }));
 
-            // Execute batch RPC call
-            const response = await fetch(getRpcForVoting(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(rpcCalls.map((call, i) => ({
-                    jsonrpc: '2.0',
-                    method: call.method,
-                    params: call.params,
-                    id: i + 1,
-                }))),
-            });
-
-            const results = await response.json();
-            const earnedResults = Array.isArray(results) ? results.map(r => r.result || '0x0') : [];
-
-            // Parse results into votingRewards structure
+            // Step 4: Aggregate results into votingRewards structure
             const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
 
-            earnedResults.forEach((result, idx) => {
-                const call = calls[idx];
-                if (!call) return;
+            for (const r of results) {
+                if (r.earned <= BigInt(0)) continue;
 
-                const earned = result && result !== '0x' && result.length > 2
-                    ? BigInt(result)
-                    : BigInt(0);
+                const tokenId = r.veNFTId;
+                const poolId = r.poolId.toLowerCase();
+                const tokenAddr = r.token.toLowerCase();
 
-                if (earned > BigInt(0)) {
-                    if (!newRewards[call.tokenId]) newRewards[call.tokenId] = {};
-                    if (!newRewards[call.tokenId][call.pool]) newRewards[call.tokenId][call.pool] = {};
-                    newRewards[call.tokenId][call.pool][call.token] = earned;
-                }
-            });
+                if (!newRewards[tokenId]) newRewards[tokenId] = {};
+                if (!newRewards[tokenId][poolId]) newRewards[tokenId][poolId] = {};
+                newRewards[tokenId][poolId][tokenAddr] = r.earned;
+            }
 
             setVotingRewards(newRewards);
+
+            rewardsFetchRef.current.lastKey = key;
+            rewardsFetchRef.current.lastTs = now;
         } catch (err) {
-            console.error('Error fetching voting rewards:', err);
+            console.error('Error fetching voting rewards (on-chain earned):', err);
+        } finally {
+            rewardsFetchRef.current.inFlight = false;
+            setIsLoadingVotingRewards(false);
         }
-        setIsLoadingVotingRewards(false);
-    }, [positions, gauges]);
+    }, [positions, address, positionsTokenIdsKey, gauges]);
+
+
+    const fetchVeNftVoteStatus = useCallback(async () => {
+        if (positions.length === 0) {
+            setVeNftHasVotes({});
+            return;
+        }
+
+        const FIVE_MINUTES = 5 * 60 * 1000;
+        const key = positionsTokenIdsKey;
+        const now = Date.now();
+
+        if (voteStatusFetchRef.current.inFlight) return;
+        if (voteStatusFetchRef.current.lastKey === key && now - voteStatusFetchRef.current.lastTs < FIVE_MINUTES) return;
+
+        voteStatusFetchRef.current.inFlight = true;
+
+        try {
+            const tokenIds = positions.map(p => p.tokenId.toString());
+            const query = `query VeVoteStatus($tokenIds: [ID!]) {
+                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, orderBy: epoch, orderDirection: desc, first: 1000) {
+                    epoch
+                    veNFT { id }
+                }
+            }`;
+
+            const response = await fetch(SUBGRAPH_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, variables: { tokenIds } }),
+            });
+            const json = await readSubgraphJson(response, 'veVotes(vote status)');
+            if (json.errors) throw new Error(json.errors[0]?.message || 'Subgraph error');
+
+            const rows: Array<any> = json.data?.veVotes || [];
+            const next: Record<string, boolean> = {};
+            for (const p of positions) next[p.tokenId.toString()] = false;
+
+            // Mark true if there is at least one active vote row for the veNFT.
+            for (const r of rows) {
+                const tid = String(r.veNFT?.id || '');
+                if (!tid) continue;
+                next[tid] = true;
+            }
+
+            setVeNftHasVotes(next);
+
+            voteStatusFetchRef.current.lastKey = key;
+            voteStatusFetchRef.current.lastTs = now;
+        } catch (err) {
+            console.error('Error fetching veNFT vote status (subgraph):', err);
+        } finally {
+            voteStatusFetchRef.current.inFlight = false;
+        }
+    }, [positions, positionsTokenIdsKey]);
 
     // Fetch voting rewards when positions or gauges change
     useEffect(() => {
         fetchVotingRewards();
     }, [fetchVotingRewards]);
+
+    useEffect(() => {
+        fetchVeNftVoteStatus();
+    }, [fetchVeNftVoteStatus]);
 
     // Claim voting rewards for a specific veNFT and gauge
     const [isClaimingVotingRewards, setIsClaimingVotingRewards] = useState<string | null>(null);
@@ -519,6 +659,37 @@ export default function VotePage() {
         { key: 'vote' as const, label: 'Vote', icon: '', description: 'Choose pools' },
         { key: 'rewards' as const, label: 'Rewards', icon: '', description: 'Claim earnings' },
     ];
+
+    // Filter and sort gauges
+    const sortedGauges = [...gauges]
+        .filter(gauge => {
+            if (!gaugeSearchQuery) return true;
+            const query = gaugeSearchQuery.toLowerCase();
+            return (
+                gauge.symbol0.toLowerCase().includes(query) ||
+                gauge.symbol1.toLowerCase().includes(query) ||
+                gauge.pool.toLowerCase().includes(query)
+            );
+        })
+        .sort((a, b) => {
+            // Primary sort by user preference
+            if (gaugeSortBy === 'rewards') {
+                const aRewards = a.rewardTokens?.reduce((sum, r) => sum + Number(formatUnits(r.amount, r.decimals)), 0) || 0;
+                const bRewards = b.rewardTokens?.reduce((sum, r) => sum + Number(formatUnits(r.amount, r.decimals)), 0) || 0;
+                if (bRewards !== aRewards) return bRewards - aRewards;
+            } else if (gaugeSortBy === 'votes') {
+                const aWeight = Number(a.weight || 0);
+                const bWeight = Number(b.weight || 0);
+                if (bWeight !== aWeight) return bWeight - aWeight;
+            }
+
+            // Secondary sort: Active gauges first, then alive gauges
+            if (a.gauge && !b.gauge) return -1;
+            if (!a.gauge && b.gauge) return 1;
+            if (a.isAlive && !b.isAlive) return -1;
+            if (!a.isAlive && b.isAlive) return 1;
+            return 0;
+        });
 
     return (
         <div className="container mx-auto px-3 sm:px-6 py-4">
@@ -966,13 +1137,13 @@ export default function VotePage() {
                                                                                                     </div>
                                                                                                 </div>
                                                                                             </div>
-                                                                                            {p.hasVoted ? (
+                                                                                            {(veNftHasVotes[p.tokenId.toString()] ?? p.hasVoted) ? (
                                                                                                 <div className="text-xs text-red-400">Voted</div>
                                                                                             ) : mergeTarget === p.tokenId ? (
                                                                                                 <div className="text-purple-400 text-sm font-bold">Selected</div>
                                                                                             ) : null}
                                                                                         </button>
-                                                                                        {p.hasVoted && (
+                                                                                        {(veNftHasVotes[p.tokenId.toString()] ?? p.hasVoted) && (
                                                                                             <button
                                                                                                 onClick={(e) => {
                                                                                                     e.stopPropagation();
@@ -1141,9 +1312,37 @@ export default function VotePage() {
 
                                 {/* Pools List */}
                                 <div className="glass-card overflow-hidden">
-                                    <div className="p-3 border-b border-white/5 flex justify-between items-center">
-                                        <span className="font-semibold text-sm">Pools ({gauges.length})</span>
-                                        <span className="text-xs text-gray-400">{parseFloat(formatUnits(totalWeight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} votes</span>
+                                    <div className="p-3 border-b border-white/5">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                            <span className="font-semibold text-sm">Pools ({sortedGauges.length}/{gauges.length})</span>
+
+                                            {/* Search and Sort Controls */}
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search pools..."
+                                                    value={gaugeSearchQuery}
+                                                    onChange={(e) => setGaugeSearchQuery(e.target.value)}
+                                                    className="flex-1 sm:w-40 px-3 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
+                                                />
+                                                <div className="relative">
+                                                    <select
+                                                        value={gaugeSortBy}
+                                                        onChange={(e) => setGaugeSortBy(e.target.value as 'rewards' | 'votes')}
+                                                        className="pl-3 pr-7 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
+                                                    >
+                                                        <option value="rewards">Rewards</option>
+                                                        <option value="votes">Votes</option>
+                                                    </select>
+                                                    <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </div>
+                                                <span className="hidden sm:block text-xs text-gray-400 whitespace-nowrap">
+                                                    {parseFloat(formatUnits(totalWeight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} votes
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {/* Loading State */}
@@ -1156,16 +1355,19 @@ export default function VotePage() {
 
                                     {/* Pools - Compact Mobile Layout */}
                                     <div className="divide-y divide-white/5">
-                                        {/* Sort: Active gauges (with gauge address) first, then by isAlive */}
-                                        {[...gauges].sort((a, b) => {
-                                            // First priority: has gauge address
-                                            if (a.gauge && !b.gauge) return -1;
-                                            if (!a.gauge && b.gauge) return 1;
-                                            // Second priority: isAlive
-                                            if (a.isAlive && !b.isAlive) return -1;
-                                            if (!a.isAlive && b.isAlive) return 1;
-                                            return 0;
-                                        }).map((gauge) => (
+                                        {sortedGauges.length === 0 ? (
+                                            <div className="p-6 text-center">
+                                                <p className="text-gray-400 text-sm mb-2">No pools found{gaugeSearchQuery && ` matching "${gaugeSearchQuery}"`}</p>
+                                                {gaugeSearchQuery && (
+                                                    <button
+                                                        onClick={() => setGaugeSearchQuery('')}
+                                                        className="text-xs text-primary hover:underline"
+                                                    >
+                                                        Clear search
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : sortedGauges.map((gauge) => (
                                             <div key={gauge.pool} className="p-2 sm:p-3">
                                                 {/* Row 1: Pool info + share */}
                                                 <div className="flex items-center justify-between gap-2 mb-2">

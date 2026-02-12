@@ -1,29 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getRpcForPoolData } from '@/utils/rpc';
+import { WIND, WSEI } from '@/config/tokens';
 
-// Pool addresses for price discovery
-const WIND_USDC_POOL = '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0'; // WIND/USDC
-const USDC_WSEI_POOL = '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1'; // USDC/WSEI
-
-/**
- * Helper to decode tick from slot0 response
- */
-function decodeTickFromSlot0(result: string): number | null {
-    if (!result || result === '0x' || result.length < 130) return null;
-
-    const tickSlot = result.slice(66, 130);
-    const lastSix = tickSlot.slice(-6);
-    let tick = parseInt(lastSix, 16);
-
-    // Handle negative tick (signed int24)
-    if (tick > 0x7fffff) {
-        tick = tick - 0x1000000;
-    }
-
-    return tick;
-}
+// Goldsky GraphQL endpoint (v3.0.6)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
 
 /**
  * Hook to get WIND and SEI prices in USD from DEX pools
@@ -34,60 +15,65 @@ export function useWindPrice() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const fetchPrices = async () => {
+        const fetchPricesFromSubgraph = async (): Promise<{ windPrice?: number; seiPrice?: number } | null> => {
             try {
-                // Batch fetch both pools' slot0
-                const response = await fetch(getRpcForPoolData(), {
+                const query = `query Prices($ids: [String!]) {
+                    tokens(where: { id_in: $ids }) {
+                        id
+                        symbol
+                        priceUSD
+                    }
+                }`;
+
+                const variables = {
+                    ids: [WIND.address.toLowerCase(), WSEI.address.toLowerCase()],
+                };
+
+                const response = await fetch(SUBGRAPH_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify([
-                        { jsonrpc: '2.0', method: 'eth_call', params: [{ to: WIND_USDC_POOL, data: '0x3850c7bd' }, 'latest'], id: 1 },
-                        { jsonrpc: '2.0', method: 'eth_call', params: [{ to: USDC_WSEI_POOL, data: '0x3850c7bd' }, 'latest'], id: 2 },
-                    ]),
+                    body: JSON.stringify({ query, variables }),
                 });
 
-                const results = await response.json();
-
-                // Parse WIND price from WIND/USDC pool
-                // WIND is token0 (18 decimals), USDC is token1 (6 decimals)
-                if (results[0]?.result) {
-                    const tick = decodeTickFromSlot0(results[0].result);
-                    if (tick !== null) {
-                        // price = 1.0001^tick * 10^(18-6) = 1.0001^tick * 10^12
-                        const rawPrice = Math.pow(1.0001, tick);
-                        const price = rawPrice * Math.pow(10, 12);
-                        if (price > 0 && price < 1000) {
-                            setWindPrice(price);
-                        }
-                    }
+                const json = await response.json();
+                if (json.errors) {
+                    return null;
                 }
 
-                // Parse SEI price from USDC/WSEI pool
-                // USDC is token0 (6 decimals), WSEI is token1 (18 decimals)
-                if (results[1]?.result) {
-                    const tick = decodeTickFromSlot0(results[1].result);
-                    if (tick !== null) {
-                        // raw price = 1.0001^tick = WSEI per USDC (raw units)
-                        const rawPrice = Math.pow(1.0001, tick);
-                        // Adjust for decimals: WSEI per USDC = rawPrice * 10^(6-18)
-                        const wseiPerUsdc = rawPrice * Math.pow(10, -12);
-                        // SEI price in USD = 1 / wseiPerUsdc
-                        const price = 1 / wseiPerUsdc;
-                        if (price > 0 && price < 100) {
-                            setSeiPrice(price);
-                        }
-                    }
-                }
+                const tokens: Array<{ id: string; symbol: string; priceUSD: string }> = json.data?.tokens || [];
+                const byId = new Map(tokens.map(t => [String(t.id).toLowerCase(), t]));
+
+                const wind = byId.get(WIND.address.toLowerCase());
+                const wsei = byId.get(WSEI.address.toLowerCase());
+
+                const windUsd = wind ? parseFloat(wind.priceUSD || '0') : 0;
+                const seiUsd = wsei ? parseFloat(wsei.priceUSD || '0') : 0;
+
+                return {
+                    windPrice: windUsd > 0 ? windUsd : undefined,
+                    seiPrice: seiUsd > 0 ? seiUsd : undefined,
+                };
+            } catch {
+                return null;
+            }
+        };
+
+        const fetchPrices = async () => {
+            try {
+                const subgraph = await fetchPricesFromSubgraph();
+                if (subgraph?.windPrice) setWindPrice(subgraph.windPrice);
+                if (subgraph?.seiPrice) setSeiPrice(subgraph.seiPrice);
             } catch (err) {
                 console.error('[useWindPrice] Error fetching prices:', err);
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
         };
 
         fetchPrices();
 
-        // Refresh prices every 60 seconds
-        const interval = setInterval(fetchPrices, 60000);
+        // Refresh prices every 5 minutes
+        const interval = setInterval(fetchPrices, 5 * 60 * 1000);
         return () => clearInterval(interval);
     }, []);
 

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
-import { parseUnits, Address, formatUnits } from 'viem';
+import { formatUnits, parseUnits, Address } from 'viem';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC, USDT0 } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { TokenSelector } from '@/components/common/TokenSelector';
@@ -21,11 +21,38 @@ import { useToast } from '@/providers/ToastProvider';
 import { haptic } from '@/hooks/useHaptic';
 import {
     calculateOptimalAmounts,
-    getRequiredTokens,
-    priceToTick,
-    MAX_TICK,
+    getRequiredTokens, 
+    priceToTick, 
+    tickToPrice, 
+    MAX_TICK, 
+    MIN_TICK 
 } from '@/utils/liquidityMath';
 
+// Smart price formatter for displaying very small or large prices
+function formatSmartPrice(price: number): string {
+    if (price === 0) return '0';
+
+    const absPrice = Math.abs(price);
+
+    // For very small numbers (< 0.0001), use significant digits
+    if (absPrice < 0.0001) {
+        // Find first non-zero digit and show 4 significant digits
+        return price.toPrecision(4);
+    }
+
+    // For small numbers (< 1), show up to 6 decimals
+    if (absPrice < 1) {
+        return price.toFixed(6).replace(/\.?0+$/, '');
+    }
+
+    // For normal numbers (1-10000), show 4 decimals
+    if (absPrice < 10000) {
+        return price.toFixed(4).replace(/\.?0+$/, '');
+    }
+
+    // For large numbers, use compact notation
+    return price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
 
 type PoolType = 'v2' | 'cl';
 type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'approving_nft' | 'staking' | 'done' | 'error';
@@ -270,18 +297,16 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     return;
                 }
 
-                const sqrtPriceX96 = BigInt('0x' + slot0Result.result.slice(2, 66));
-                if (sqrtPriceX96 === BigInt(0)) {
-                    // Pool exists but has no price set (not initialized)
-                    setClPoolPrice(null);
-                    return;
-                }
+                // Prefer tick-based price conversion to avoid precision issues from sqrtPriceX96 squaring.
+                // slot0 is ABI-encoded: each return value takes 32 bytes (64 hex chars)
+                // sqrtPriceX96 (chars 2-65), tick (chars 66-129), ...
+                // tick is int24, so we need the last 6 hex chars of the 32-byte word
+                const slot0TickHex = slot0Result.result.slice(124, 130);
+                let tick = parseInt(slot0TickHex, 16);
+                if (tick >= 0x800000) tick -= 0x1000000; // sign extend int24
 
-                const Q96 = BigInt(2) ** BigInt(96);
-                const priceRaw = Number(sqrtPriceX96 * sqrtPriceX96 * BigInt(10 ** token0.decimals)) / Number(Q96 * Q96 * BigInt(10 ** token1.decimals));
-                const price = actualTokenA.address.toLowerCase() === token0.address.toLowerCase()
-                    ? priceRaw
-                    : 1 / priceRaw;
+                const isToken0Base = actualTokenA.address.toLowerCase() === token0.address.toLowerCase();
+                const price = tickToPrice(tick, token0.decimals, token1.decimals, isToken0Base);
 
                 setClPoolPrice(price);
 
@@ -1248,7 +1273,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             </div>
                                             {poolType === 'cl' && clPoolPrice && (
                                                 <div className="text-[10px] text-gray-400 flex-shrink-0">
-                                                    <span className="text-green-400">●</span> 1={clPoolPrice.toFixed(4)}
+                                                    <span className="text-green-400">●</span> 1={formatSmartPrice(clPoolPrice)}
                                                 </div>
                                             )}
                                         </div>
@@ -1751,9 +1776,19 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 0.95).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
-                                                            <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceLower ? parseFloat(priceLower).toFixed(4) : '0'}
-                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={priceLower || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                                                        setPriceLower(val);
+                                                                    }
+                                                                }}
+                                                                className="font-bold text-lg min-w-[80px] max-w-[120px] text-center bg-transparent border border-white/10 rounded-lg px-1 py-0.5 focus:border-primary/50 focus:outline-none"
+                                                                placeholder="0"
+                                                            />
                                                             <button
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 1.05).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
@@ -1778,9 +1813,19 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '999999') * 0.95).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
-                                                            <span className="font-bold text-lg min-w-[80px]">
-                                                                {priceUpper ? parseFloat(priceUpper).toFixed(4) : 'Max'}
-                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={priceUpper || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                                                        setPriceUpper(val);
+                                                                    }
+                                                                }}
+                                                                className="font-bold text-lg min-w-[80px] max-w-[120px] text-center bg-transparent border border-white/10 rounded-lg px-1 py-0.5 focus:border-primary/50 focus:outline-none"
+                                                                placeholder="Max"
+                                                            />
                                                             <button
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '1') * 1.05).toFixed(6))}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-// Goldsky GraphQL endpoint (v2.0.0 with user data)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
+// Goldsky GraphQL endpoint (v3.0.6 with user data)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
 
 // Types matching subgraph schema
 export interface SubgraphToken {
@@ -18,7 +18,9 @@ export interface SubgraphPool {
     token0: SubgraphToken;
     token1: SubgraphToken;
     tickSpacing: number;
+    tick: number;  // Current pool tick from subgraph
     liquidity: string;
+    sqrtPriceX96?: string;
     totalValueLockedToken0: string;
     totalValueLockedToken1: string;
     totalValueLockedUSD: string;
@@ -46,6 +48,16 @@ export interface SubgraphProtocol {
     totalTVLUSD: string;
     totalPools: string;
     totalSwaps: string;
+    epochCount: string;
+    activePeriod: string;
+    epochEnd: string;
+    weeklyEmissions: string;
+    totalEmissions: string;
+    tailEmissionRate: string;
+    totalVotingWeight: string;
+    proposalThreshold: string;
+    votingDelay: string;
+    votingPeriod: string;
 }
 
 export interface SubgraphPoolDayData {
@@ -84,6 +96,7 @@ const POOLS_QUERY = `
                 decimals
             }
             tickSpacing
+            tick
             liquidity
             totalValueLockedToken0
             totalValueLockedToken1
@@ -100,6 +113,16 @@ const POOLS_QUERY = `
             totalTVLUSD
             totalPools
             totalSwaps
+            epochCount
+            activePeriod
+            epochEnd
+            weeklyEmissions
+            totalEmissions
+            tailEmissionRate
+            totalVotingWeight
+            proposalThreshold
+            votingDelay
+            votingPeriod
         }
     }
 `;
@@ -181,8 +204,8 @@ export function useSubgraph(): UseSubgraphResult {
     useEffect(() => {
         fetchData();
 
-        // Refresh every 30 seconds
-        const interval = setInterval(fetchData, 30000);
+        // Refresh every 5 minutes
+        const interval = setInterval(fetchData, 5 * 60 * 1000);
         return () => clearInterval(interval);
     }, [fetchData]);
 
@@ -236,68 +259,144 @@ export function usePoolDayData(poolId: string) {
 }
 
 // ============================================
-// USER DATA TYPES (from subgraph schema)
+// USER DATA TYPES (from subgraph schema v3.0.6)
 // ============================================
 
 export interface SubgraphPosition {
     id: string;
     tokenId: string;
-    owner: { id: string };
-    pool: SubgraphPool;
+    pool: {
+        id: string;
+        token0: { id: string; symbol: string; decimals: number; priceUSD: string };
+        token1: { id: string; symbol: string; decimals: number; priceUSD: string };
+        tickSpacing: number;
+        tick: number;  // Current pool tick
+    };
     tickLower: number;
     tickUpper: number;
     liquidity: string;
-    depositedToken0: string;
-    depositedToken1: string;
+    amount0: string;  // Token0 balance in position
+    amount1: string;  // Token1 balance in position
+    amountUSD: string;  // Total USD value of position
+    tokensOwed0: string;  // Uncollected fees in token0
+    tokensOwed1: string;  // Uncollected fees in token1
     staked: boolean;
-    stakedGauge: string | null;
-    createdAtTimestamp: string;
+
+    depositedToken0?: string;
+    depositedToken1?: string;
+    withdrawnToken0?: string;
+    withdrawnToken1?: string;
+    collectedToken0?: string;
+    collectedToken1?: string;
 }
 
 export interface SubgraphVeNFT {
     id: string;
     tokenId: string;
-    owner: { id: string };
     lockedAmount: string;
     lockEnd: string;
     votingPower: string;
     isPermanent: boolean;
-    createdAtTimestamp: string;
+    claimableRewards: string;
+    hasVoted: boolean;
+    lastVoted: string;
+    lastVotedEpoch: string;
+    totalClaimed: string;
+}
+
+export interface SubgraphStakedPosition {
+    id: string;
+    gauge: {
+        id: string;
+        pool: {
+            id: string;
+            token0: { id: string; symbol: string; decimals: number; priceUSD: string };
+            token1: { id: string; symbol: string; decimals: number; priceUSD: string };
+            tickSpacing: number;
+            tick: number;
+        };
+    };
+    position: {
+        tokenId: string;
+        staked: boolean;
+        tickLower: number;
+        tickUpper: number;
+        liquidity: string;
+        amount0: string;
+        amount1: string;
+        amountUSD: string;
+    };
+    tokenId: string;
+    amount: string;
+    tickLower: number;
+    tickUpper: number;
+    earned: string;
+    totalClaimed: string;
+    isActive: boolean;
 }
 
 export interface SubgraphUser {
     id: string;
     positions: SubgraphPosition[];
     veNFTs: SubgraphVeNFT[];
-    totalPositions: string;
-    totalVeNFTs: string;
+    profile?: {
+        id: string;
+        totalPositionsValueUSD: string;
+        totalStakedValueUSD: string;
+        totalVeNFTValueUSD: string;
+        totalRewardsClaimedUSD: string;
+        totalFeesEarnedUSD: string;
+        totalSwaps: number;
+        totalProvides: number;
+        totalWithdraws: number;
+        firstActivityTimestamp: string;
+        lastActivityTimestamp: string;
+    } | null;
 }
 
-// User positions query
-const USER_POSITIONS_QUERY = `
-    query GetUserPositions($userId: ID!) {
+// Comprehensive user data query - replaces all RPC calls for user data
+const USER_DATA_QUERY = `
+    query GetUserData($userId: ID!) {
         user(id: $userId) {
             id
-            totalPositions
-            totalVeNFTs
+            profile {
+                id
+                totalPositionsValueUSD
+                totalStakedValueUSD
+                totalVeNFTValueUSD
+                totalRewardsClaimedUSD
+                totalFeesEarnedUSD
+                totalSwaps
+                totalProvides
+                totalWithdraws
+                firstActivityTimestamp
+                lastActivityTimestamp
+            }
             positions(first: 100) {
                 id
                 tokenId
                 pool {
                     id
-                    token0 { id symbol name decimals }
-                    token1 { id symbol name decimals }
+                    token0 { id symbol decimals priceUSD }
+                    token1 { id symbol decimals priceUSD }
                     tickSpacing
-                    liquidity
+                    tick
                 }
                 tickLower
                 tickUpper
                 liquidity
+                amount0
+                amount1
+                amountUSD
+                tokensOwed0
+                tokensOwed1
+                staked
                 depositedToken0
                 depositedToken1
-                staked
-                stakedGauge
-                createdAtTimestamp
+                withdrawnToken0
+                withdrawnToken1
+                collectedToken0
+                collectedToken1
             }
             veNFTs(first: 50) {
                 id
@@ -306,19 +405,59 @@ const USER_POSITIONS_QUERY = `
                 lockEnd
                 votingPower
                 isPermanent
-                createdAtTimestamp
+                claimableRewards
+                hasVoted
+                lastVoted
+                lastVotedEpoch
+                totalClaimed
             }
+        }
+        gaugeStakedPositions(where: { userId: $userId }, first: 1000) {
+            id
+            gauge {
+                id
+                pool {
+                    id
+                    token0 { id symbol decimals priceUSD }
+                    token1 { id symbol decimals priceUSD }
+                    tickSpacing
+                    tick
+                }
+            }
+            position {
+                tokenId
+                staked
+                tickLower
+                tickUpper
+                liquidity
+                amount0
+                amount1
+                amountUSD
+            }
+            tokenId
+            amount
+            tickLower
+            tickUpper
+            earned
+            totalClaimed
+            isActive
         }
     }
 `;
 
+// Legacy query for backwards compatibility
+const USER_POSITIONS_QUERY = USER_DATA_QUERY;
+
 /**
- * Hook to fetch user positions and veNFTs from subgraph
+ * Hook to fetch all user data from subgraph
  * Replaces multiple RPC calls with a single GraphQL query
+ * Returns: positions, veNFTs, stakedPositions
  */
 export function useUserPositions(userAddress: string | undefined) {
     const [positions, setPositions] = useState<SubgraphPosition[]>([]);
     const [veNFTs, setVeNFTs] = useState<SubgraphVeNFT[]>([]);
+    const [stakedPositions, setStakedPositions] = useState<SubgraphStakedPosition[]>([]);
+    const [profile, setProfile] = useState<SubgraphUser['profile']>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -326,6 +465,8 @@ export function useUserPositions(userAddress: string | undefined) {
         if (!userAddress) {
             setPositions([]);
             setVeNFTs([]);
+            setStakedPositions([]);
+            setProfile(null);
             return;
         }
 
@@ -333,19 +474,28 @@ export function useUserPositions(userAddress: string | undefined) {
         setError(null);
 
         try {
-            const data = await fetchGraphQL<{ user: SubgraphUser | null }>(
-                USER_POSITIONS_QUERY,
+            const data = await fetchGraphQL<{
+                user: SubgraphUser | null;
+                gaugeStakedPositions: SubgraphStakedPosition[];
+            }>(
+                USER_DATA_QUERY,
                 { userId: userAddress.toLowerCase() }
             );
 
             if (data.user) {
                 setPositions(data.user.positions || []);
                 setVeNFTs(data.user.veNFTs || []);
-                console.log(`[useUserPositions] Found ${data.user.positions?.length || 0} positions, ${data.user.veNFTs?.length || 0} veNFTs`);
+                setProfile(data.user.profile || null);
             } else {
                 setPositions([]);
                 setVeNFTs([]);
+                setProfile(null);
             }
+
+            // Staked positions are a top-level query result
+            setStakedPositions(data.gaugeStakedPositions || []);
+
+            console.log(`[useUserPositions] Found ${data.user?.positions?.length || 0} positions, ${data.user?.veNFTs?.length || 0} veNFTs, ${data.gaugeStakedPositions?.length || 0} staked`);
         } catch (err) {
             console.error('[useUserPositions] Error:', err);
             setError(err instanceof Error ? err.message : 'Failed to fetch user data');
@@ -361,6 +511,8 @@ export function useUserPositions(userAddress: string | undefined) {
     return {
         positions,
         veNFTs,
+        stakedPositions,
+        profile,
         isLoading,
         error,
         refetch: fetchUserData,
@@ -369,3 +521,4 @@ export function useUserPositions(userAddress: string | undefined) {
 
 // Export the subgraph URL for direct use
 export { SUBGRAPH_URL };
+
