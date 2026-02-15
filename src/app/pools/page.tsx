@@ -1,23 +1,19 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
-import { formatUnits, Address } from 'viem';
 import { usePoolData } from '@/providers/PoolDataProvider';
-import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { haptic } from '@/hooks/useHaptic';
 
 // Lazy load AddLiquidityModal - only loads when user opens it
 const AddLiquidityModal = dynamic(
     () => import('@/components/pools/AddLiquidityModal').then(mod => mod.AddLiquidityModal),
     { ssr: false }
 );
-import { Token, SEI, WSEI } from '@/config/tokens';
+import { Token, SEI } from '@/config/tokens';
 import { getTokenByAddress } from '@/utils/tokens';
-import { formatTVL } from '@/utils/format';
 import { calculatePoolAPRFallback, formatAPR } from '@/utils/aprCalculator';
 
 type PoolType = 'all' | 'v2' | 'cl';
@@ -42,6 +38,21 @@ interface PoolConfig {
     stable?: boolean;
 }
 
+// Top pool addresses (specific pools, not just token pairs)
+const TOP_POOL_ADDRESSES: Record<string, boolean> = {
+    '0x3c2567b15fd9133cf9101e043c58e2b444af900b': true, // USDT_USDC
+    '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0': true, // WIND_USDC
+    '0xc7035a2ef7c685fc853475744623a0f164541b69': true, // WIND_WSEI
+    '0x587b82b8ed109d8587a58f9476a8d4268ae945b1': true, // USDC_WSEI
+};
+
+const TOP_POOL_PRIORITY: Record<string, number> = {
+    '0x3c2567b15fd9133cf9101e043c58e2b444af900b': 1,
+    '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0': 2,
+    '0xc7035a2ef7c685fc853475744623a0f164541b69': 3,
+    '0x587b82b8ed109d8587a58f9476a8d4268ae945b1': 4,
+};
+
 // Helper to find token by address - use SEI for WSEI in UI
 const findTokenForUI = (addr: string): Token | undefined => {
     const token = getTokenByAddress(addr);
@@ -50,11 +61,20 @@ const findTokenForUI = (addr: string): Token | undefined => {
     return token || undefined;
 };
 
+// Format compact number (e.g. $245K, $1.2M)
+const formatCompact = (value: number): string => {
+    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+    if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+    if (value > 0) return `$${value.toFixed(0)}`;
+    return '';
+};
+
 export default function PoolsPage() {
     const [poolType, setPoolType] = useState<PoolType>('all');
     const [category, setCategory] = useState<Category>('all');
     const [sortBy, setSortBy] = useState<SortBy>('default');
     const [search, setSearch] = useState('');
+    const [searchOpen, setSearchOpen] = useState(false);
 
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
@@ -66,6 +86,7 @@ export default function PoolsPage() {
     // Pull-to-refresh for mobile
     const [isRefreshing, setIsRefreshing] = useState(false);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
@@ -81,54 +102,49 @@ export default function PoolsPage() {
         threshold: 80,
     });
 
-    // Calculate APR for a pool using staked liquidity for accurate staker APR
-    const getPoolAPR = (pool: typeof allPools[0]): number | null => {
-        const rewardRate = poolRewards.get(pool.address.toLowerCase());
+    // Pre-compute APR for all pools with useMemo
+    const poolAPRs = useMemo(() => {
+        const aprMap = new Map<string, number | null>();
+        for (const pool of allPools) {
+            const rewardRate = poolRewards.get(pool.address.toLowerCase());
+            if (!rewardRate || rewardRate === BigInt(0)) {
+                aprMap.set(pool.address, null);
+                continue;
+            }
 
-        if (!rewardRate || rewardRate === BigInt(0)) return null;
+            const s0 = pool.token0.symbol.toUpperCase();
+            const s1 = pool.token1.symbol.toUpperCase();
 
-        const s0 = pool.token0.symbol.toUpperCase();
-        const s1 = pool.token1.symbol.toUpperCase();
+            let tvlUsd = parseFloat(pool.tvl) || 0;
 
-        // PREFER pool.tvl from subgraph - it's more reliable
-        // Reserve-based calculation has token order mismatch issues
-        let tvlUsd = parseFloat(pool.tvl) || 0;
+            if (tvlUsd <= 0) {
+                const r0 = parseFloat(pool.reserve0) || 0;
+                const r1 = parseFloat(pool.reserve1) || 0;
+                const d0 = pool.token0.decimals || 18;
+                const d1 = pool.token1.decimals || 18;
+                const adj0 = r0 > 1e12 ? r0 / Math.pow(10, d0) : r0;
+                const adj1 = r1 > 1e12 ? r1 / Math.pow(10, d1) : r1;
 
-        // Only fall back to reserves if TVL is not available
-        if (tvlUsd <= 0) {
-            const r0 = parseFloat(pool.reserve0) || 0;
-            const r1 = parseFloat(pool.reserve1) || 0;
+                const getTokenValue = (symbol: string, amount: number): number => {
+                    if (symbol === 'USDC' || symbol === 'USDT' || symbol === 'USDT0' || symbol === 'USDC.N') return amount;
+                    if (symbol === 'WSEI' || symbol === 'SEI') return amount * seiPrice;
+                    if (symbol === 'WIND') return amount * windPrice;
+                    if (symbol.includes('BTC') || symbol.includes('WBTC')) return amount * 95000;
+                    if (symbol.includes('ETH') || symbol.includes('WETH')) return amount * 3500;
+                    return amount * seiPrice;
+                };
 
-            const d0 = pool.token0.decimals || 18;
-            const d1 = pool.token1.decimals || 18;
-            const adj0 = r0 > 1e12 ? r0 / Math.pow(10, d0) : r0;
-            const adj1 = r1 > 1e12 ? r1 / Math.pow(10, d1) : r1;
+                tvlUsd = getTokenValue(s0, adj0) + getTokenValue(s1, adj1);
+            }
 
-            // Calculate value of each token
-            const getTokenValue = (symbol: string, amount: number): number => {
-                if (symbol === 'USDC' || symbol === 'USDT' || symbol === 'USDT0' || symbol === 'USDC.N') return amount;
-                if (symbol === 'WSEI' || symbol === 'SEI') return amount * seiPrice;
-                if (symbol === 'WIND') return amount * windPrice;
-                if (symbol.includes('BTC') || symbol.includes('WBTC')) return amount * 95000;
-                if (symbol.includes('ETH') || symbol.includes('WETH')) return amount * 3500;
-                return amount * seiPrice;
-            };
+            if (tvlUsd <= 0) tvlUsd = 1;
 
-            tvlUsd = getTokenValue(s0, adj0) + getTokenValue(s1, adj1);
+            const stakedLiq = stakedLiquidity.get(pool.address.toLowerCase());
+            const apr = calculatePoolAPRFallback(rewardRate, windPrice, tvlUsd, stakedLiq, undefined, pool.tickSpacing);
+            aprMap.set(pool.address, apr);
         }
-
-        // For pools with rewards but no TVL data, use minimum $1 to show very high APR
-        // Better to show "1000K%+" than "—" when rewards are active
-        if (tvlUsd <= 0) tvlUsd = 1;
-
-        // Get staked liquidity for more accurate APR calculation
-        // This represents the actual TVL earning rewards (staked in gauge)
-        const stakedLiq = stakedLiquidity.get(pool.address.toLowerCase());
-
-        // Use staked liquidity if available, otherwise fall back to total TVL
-        return calculatePoolAPRFallback(rewardRate, windPrice, tvlUsd, stakedLiq, undefined, pool.tickSpacing);
-    };
-
+        return aprMap;
+    }, [allPools, poolRewards, stakedLiquidity, windPrice, seiPrice]);
 
     // Open modal for a specific pool
     const openAddLiquidityModal = (pool: typeof allPools[0]) => {
@@ -148,22 +164,6 @@ export default function PoolsPage() {
     const openCreatePoolModal = () => {
         setSelectedPool(undefined);
         setModalOpen(true);
-    };
-
-
-    // Format weekly WIND rewards
-    const formatWeeklyRewards = (poolAddress: string) => {
-        const rewardRate = poolRewards.get(poolAddress.toLowerCase());
-        if (!rewardRate || rewardRate === BigInt(0)) return null;
-
-        // rewardRate is WIND per second, convert to per week (7 * 24 * 60 * 60 = 604800)
-        const weeklyRewards = rewardRate * BigInt(604800);
-        const weeklyFloat = parseFloat(formatUnits(weeklyRewards, 18));
-
-        if (weeklyFloat >= 1000000) return `${(weeklyFloat / 1000000).toFixed(1)}M`;
-        if (weeklyFloat >= 1000) return `${(weeklyFloat / 1000).toFixed(0)}K`;
-        if (weeklyFloat >= 1) return weeklyFloat.toFixed(0);
-        return weeklyFloat.toFixed(2);
     };
 
     // Helper to check if pool is in a category
@@ -186,7 +186,6 @@ export default function PoolsPage() {
         if (poolType === 'v2' && pool.poolType !== 'V2') return false;
         if (poolType === 'cl' && pool.poolType !== 'CL') return false;
 
-        // Category filter
         if (category === 'stable' && !isStablePool(pool)) return false;
         if (category === 'wind' && !isWindPool(pool)) return false;
         if (category === 'btc' && !isBtcPool(pool)) return false;
@@ -203,34 +202,15 @@ export default function PoolsPage() {
         return true;
     });
 
-    // Top pool addresses (specific pools, not just token pairs)
-    const TOP_POOL_ADDRESSES = {
-        USDT_USDC: '0x3C2567b15FD9133Cf9101E043C58e2B444aF900b'.toLowerCase(),
-        WIND_USDC: '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0'.toLowerCase(),
-        WIND_WSEI: '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase(),
-        USDC_WSEI: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1'.toLowerCase(),
-    };
-
-    // Sort pools - Top pools first, then by volume by default!
+    // Sort pools - Top pools first, then by volume by default
     const sortedPools = [...filteredPools].sort((a, b) => {
-        // Priority order based on specific pool addresses
-        const getPriority = (pool: typeof allPools[0]) => {
-            const poolAddr = pool.address.toLowerCase();
-            if (poolAddr === TOP_POOL_ADDRESSES.USDT_USDC) return 1;
-            if (poolAddr === TOP_POOL_ADDRESSES.WIND_USDC) return 2;
-            if (poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI) return 3;
-            if (poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI) return 4;
-            return 999;
-        };
-
-        const priorityA = getPriority(a);
-        const priorityB = getPriority(b);
+        const priorityA = TOP_POOL_PRIORITY[a.address.toLowerCase()] ?? 999;
+        const priorityB = TOP_POOL_PRIORITY[b.address.toLowerCase()] ?? 999;
 
         if (priorityA !== priorityB) return priorityA - priorityB;
 
         if (sortBy === 'tvl') return parseFloat(b.tvl) - parseFloat(a.tvl);
 
-        // Default: sort by 24h volume (highest first)
         const volA = parseFloat(a.volume24h || '0');
         const volB = parseFloat(b.volume24h || '0');
         return volB - volA;
@@ -246,40 +226,31 @@ export default function PoolsPage() {
 
     return (
         <div className="container mx-auto px-3 sm:px-6">
-            {/* Page Header - Compact for mobile */}
+            {/* Row 1: Title + New Pool button */}
             <motion.div
-                className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4 sm:mb-6"
+                className="flex items-center justify-between mb-3 sm:mb-4"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-2xl sm:text-3xl font-bold">
+                <h1 className="text-xl sm:text-3xl font-bold">
                     <span className="gradient-text">Pools</span>
                     <span className="text-sm sm:text-base font-normal text-gray-400 ml-2">
                         {totalPoolCount > 0 && `(${totalPoolCount})`}
                     </span>
                 </h1>
-                <motion.button
+                <button
                     onClick={openCreatePoolModal}
-                    className="btn-primary px-4 py-2 text-sm font-medium"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    className="btn-primary px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium"
                 >
                     + New Pool
-                </motion.button>
+                </button>
             </motion.div>
 
-            {/* Zap functionality now integrated into AddLiquidityModal as a tab */}
-
-            {/* Filters Row - Compact */}
-            <motion.div
-                className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4 mb-4 sm:mb-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-            >
+            {/* Row 2: Filters + Search */}
+            <div className="flex items-center justify-between gap-2 mb-4 sm:mb-6">
                 <div className="flex gap-2 items-center">
-                    {/* Pool Type Toggle - Compact */}
-                    <div className="glass p-0.5 sm:p-1 rounded-lg inline-flex flex-1 sm:flex-none">
+                    {/* Pool Type Toggle */}
+                    <div className="glass p-0.5 rounded-lg inline-flex">
                         {[
                             { key: 'all' as PoolType, label: 'All' },
                             { key: 'v2' as PoolType, label: 'V2' },
@@ -288,7 +259,7 @@ export default function PoolsPage() {
                             <button
                                 key={type.key}
                                 onClick={() => setPoolType(type.key)}
-                                className={`flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg font-medium transition text-xs sm:text-sm ${poolType === type.key
+                                className={`px-3 py-1.5 rounded-md font-medium transition text-xs sm:text-sm ${poolType === type.key
                                     ? type.key === 'cl'
                                         ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
                                         : 'bg-primary text-white'
@@ -300,7 +271,7 @@ export default function PoolsPage() {
                         ))}
                     </div>
 
-                    {/* Sort & Category - Combined Dropdown */}
+                    {/* Sort & Category Dropdown */}
                     <select
                         value={category === 'all' ? sortBy : `cat_${category}`}
                         onChange={(e) => {
@@ -313,41 +284,56 @@ export default function PoolsPage() {
                                 setSortBy(val as SortBy);
                             }
                         }}
-                        className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 text-xs sm:text-sm outline-none focus:border-primary cursor-pointer text-white [&_option]:text-black [&_option]:bg-white [&_optgroup]:text-gray-600 [&_optgroup]:font-semibold"
+                        className="px-2 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-white/5 border border-white/10 text-xs sm:text-sm outline-none focus:border-primary cursor-pointer text-white [&_option]:text-black [&_option]:bg-white [&_optgroup]:text-gray-600 [&_optgroup]:font-semibold"
                     >
                         <optgroup label="Sort">
-                            <option value="default">Default Order</option>
-                            <option value="tvl">Sort by TVL</option>
+                            <option value="default">Default</option>
+                            <option value="tvl">By TVL</option>
                         </optgroup>
                         <optgroup label="Category">
-                            <option value="cat_stable">💎 Stable Pairs</option>
-                            <option value="cat_wind">🌀 WIND Pairs</option>
-                            <option value="cat_btc">₿ BTC Pairs</option>
-                            <option value="cat_eth">Ξ ETH Pairs</option>
-                            <option value="cat_other">Other Pairs</option>
+                            <option value="cat_stable">Stable</option>
+                            <option value="cat_wind">WIND</option>
+                            <option value="cat_btc">BTC</option>
+                            <option value="cat_eth">ETH</option>
+                            <option value="cat_other">Other</option>
                         </optgroup>
                     </select>
                 </div>
 
-                {/* Search - full width on mobile */}
-                <div className="relative w-full sm:w-auto">
-                    <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search..."
-                        className="w-full sm:w-48 pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm outline-none focus:border-primary"
-                    />
+                {/* Search: icon on mobile, expands on tap */}
+                <div className="flex items-center">
+                    {searchOpen ? (
+                        <div className="relative">
+                            <svg className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onBlur={() => { if (!search) setSearchOpen(false); }}
+                                placeholder="Search..."
+                                autoFocus
+                                className="w-36 sm:w-48 pl-8 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm outline-none focus:border-primary"
+                            />
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setSearchOpen(true)}
+                            className="p-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white transition"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </button>
+                    )}
                 </div>
-            </motion.div>
-
+            </div>
 
             {/* Pull to Refresh Indicator */}
             <div className="md:hidden flex justify-center items-center h-0 overflow-visible relative z-10">
-                <motion.div
+                <div
                     className="absolute -top-8"
                     style={{
                         opacity: isPulling ? Math.min(pullProgress * 2, 1) : 0,
@@ -359,213 +345,263 @@ export default function PoolsPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </div>
-                </motion.div>
+                </div>
             </div>
 
-            {/* Pools Table with Pull-to-Refresh */}
-            <motion.div
+            {/* Pool List */}
+            <div
                 ref={scrollContainerRef}
-                className="glass-card overflow-hidden md:overflow-visible"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
                 {...handlers}
                 style={{
                     transform: isPulling ? `translateY(${pullProgress * 40}px)` : undefined,
                     transition: isPulling ? 'none' : 'transform 0.3s ease-out',
                 }}
             >
-                {/* Table Header - Desktop only */}
-                <div className="hidden md:grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">
-                    <div className="col-span-4">Pool</div>
-                    <div className="col-span-2 text-center">APR</div>
-                    <div className="col-span-2 text-center">24h Vol</div>
-                    <div className="col-span-2 text-right">TVL</div>
-                    <div className="col-span-2 text-center">Action</div>
+                {/* Desktop Table Header */}
+                <div className="hidden md:block glass-card overflow-hidden">
+                    <div className="grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">
+                        <div className="col-span-4">Pool</div>
+                        <div className="col-span-2 text-center">APR</div>
+                        <div className="col-span-2 text-center">24h Vol</div>
+                        <div className="col-span-2 text-right">TVL</div>
+                        <div className="col-span-2 text-center">Action</div>
+                    </div>
+
+                    {/* Desktop Table Body */}
+                    {sortedPools.length === 0 ? (
+                        <div className="p-12">
+                            {isLoading ? (
+                                <div className="text-center">
+                                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                                    <p className="text-gray-400">Loading pools...</p>
+                                </div>
+                            ) : (
+                                <EmptyState
+                                    icon="🔍"
+                                    title="No pools found"
+                                    description="Try a different search term or clear filters"
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        sortedPools.map((pool) => {
+                            const isTopPool = TOP_POOL_ADDRESSES[pool.address.toLowerCase()] ?? false;
+                            const apr = poolAPRs.get(pool.address) ?? null;
+
+                            return (
+                                <div
+                                    key={pool.address}
+                                    className={`grid grid-cols-12 gap-4 p-5 border-b transition ${isTopPool
+                                        ? 'border-l-4 border-l-green-500/60 border-b-white/5 bg-green-500/5'
+                                        : 'border-white/5 hover:bg-white/5'
+                                        }`}
+                                >
+                                    {/* Pool Info */}
+                                    <div className="col-span-4 flex items-center gap-2">
+                                        <div className="relative flex-shrink-0">
+                                            {pool.token0.logoURI ? (
+                                                <img src={pool.token0.logoURI} alt={pool.token0.symbol} className="w-10 h-10 rounded-full" />
+                                            ) : (
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${pool.poolType === 'CL'
+                                                    ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
+                                                    : 'bg-gradient-to-br from-primary to-secondary'
+                                                    }`}>
+                                                    {pool.token0.symbol[0]}
+                                                </div>
+                                            )}
+                                            {pool.token1.logoURI ? (
+                                                <img src={pool.token1.logoURI} alt={pool.token1.symbol} className="w-10 h-10 rounded-full absolute left-6 top-0 border-2 border-[var(--bg-primary)]" />
+                                            ) : (
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold absolute left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                                    ? 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                                    : 'bg-gradient-to-br from-secondary to-accent'
+                                                    }`}>
+                                                    {pool.token1.symbol[0]}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="ml-4 flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold text-lg truncate">
+                                                    {pool.token0.symbol}/{pool.token1.symbol}
+                                                </span>
+                                                {isTopPool && (
+                                                    <span className="text-yellow-400 text-sm">&#11088;</span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-1 text-xs">
+                                                {pool.poolType === 'CL' && pool.tickSpacing && (
+                                                    <span className="text-cyan-400">{getFeeTier(pool.tickSpacing)}</span>
+                                                )}
+                                                {pool.poolType === 'V2' && (
+                                                    <span className="text-gray-500">{pool.stable ? 'Stable' : 'Volatile'}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* APR */}
+                                    <div className="col-span-2 flex items-center justify-center">
+                                        {apr !== null && apr > 0 ? (
+                                            <span className="text-sm font-semibold text-green-400">{formatAPR(apr)}</span>
+                                        ) : (
+                                            <span className="text-sm font-medium text-gray-500">&mdash;</span>
+                                        )}
+                                    </div>
+
+                                    {/* 24h Volume */}
+                                    <div className="col-span-2 flex items-center justify-center">
+                                        {pool.volume24h && parseFloat(pool.volume24h) > 0.01 ? (
+                                            <span className="text-sm font-medium">
+                                                ${parseFloat(pool.volume24h).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm font-medium text-gray-500">&mdash;</span>
+                                        )}
+                                    </div>
+
+                                    {/* TVL */}
+                                    <div className="col-span-2 flex items-center justify-end">
+                                        {parseFloat(pool.tvl) > 0 ? (
+                                            <span className="text-sm font-semibold">
+                                                ${parseFloat(pool.tvl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm text-gray-500">New Pool</span>
+                                        )}
+                                    </div>
+
+                                    {/* Action */}
+                                    <div className="col-span-2 flex items-center justify-center">
+                                        <button
+                                            onClick={() => openAddLiquidityModal(pool)}
+                                            className={`px-4 py-2 rounded-xl font-medium text-sm transition-all hover:scale-[1.02] active:scale-[0.98] ${pool.poolType === 'CL'
+                                                ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
+                                                : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
+                                                }`}
+                                        >
+                                            + Add LP
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
 
-                {/* Table Body */}
-                {sortedPools.length === 0 ? (
-                    <div className="p-12">
-                        {isLoading ? (
-                            <div className="text-center">
-                                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                                <p className="text-gray-400">Loading pools...</p>
-                            </div>
-                        ) : (
-                            <EmptyState
-                                icon="🔍"
-                                title="No pools found"
-                                description="Try a different search term or clear filters"
-                            />
-                        )}
-                    </div>
-                ) : (
-                    sortedPools.map((pool, index) => {
-                        // Check if this is one of the specific top pools (by address, not just token pair)
-                        const poolAddr = pool.address.toLowerCase();
-                        const isTopPool = poolAddr === TOP_POOL_ADDRESSES.USDT_USDC ||
-                            poolAddr === TOP_POOL_ADDRESSES.WIND_USDC ||
-                            poolAddr === TOP_POOL_ADDRESSES.WIND_WSEI ||
-                            poolAddr === TOP_POOL_ADDRESSES.USDC_WSEI;
+                {/* Mobile Cards */}
+                <div className="md:hidden flex flex-col gap-2">
+                    {sortedPools.length === 0 ? (
+                        <div className="glass-card p-10">
+                            {isLoading ? (
+                                <div className="text-center">
+                                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                                    <p className="text-gray-400">Loading pools...</p>
+                                </div>
+                            ) : (
+                                <EmptyState
+                                    icon="🔍"
+                                    title="No pools found"
+                                    description="Try a different search term or clear filters"
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        sortedPools.map((pool) => {
+                            const isTopPool = TOP_POOL_ADDRESSES[pool.address.toLowerCase()] ?? false;
+                            const apr = poolAPRs.get(pool.address) ?? null;
+                            const tvl = parseFloat(pool.tvl);
+                            const vol = parseFloat(pool.volume24h || '0');
 
-                        return (
-                            <motion.div
-                                key={pool.address}
-                                className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b transition ${isTopPool
-                                    ? 'border-2 border-green-500/50 bg-gradient-to-r from-green-500/10 via-emerald-500/5 to-transparent rounded-xl my-1'
-                                    : 'border-white/5 hover:bg-white/5'
-                                    }`}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 + index * 0.02 }}
-                            >
-                                {/* Pool Info */}
-                                <div className="md:col-span-4 flex items-center gap-2">
-                                    <div className="relative flex-shrink-0">
-                                        {pool.token0.logoURI ? (
-                                            <img src={pool.token0.logoURI} alt={pool.token0.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full" />
-                                        ) : (
-                                            <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
-                                                ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
-                                                : 'bg-gradient-to-br from-primary to-secondary'
-                                                }`}>
-                                                {pool.token0.symbol[0]}
-                                            </div>
-                                        )}
-                                        {pool.token1.logoURI ? (
-                                            <img src={pool.token1.logoURI} alt={pool.token1.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)]" />
-                                        ) : (
-                                            <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
-                                                ? 'bg-gradient-to-br from-blue-500 to-purple-500'
-                                                : 'bg-gradient-to-br from-secondary to-accent'
-                                                }`}>
-                                                {pool.token1.symbol[0]}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="ml-4 md:ml-4 flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-semibold text-sm md:text-lg truncate">
-                                                {pool.token0.symbol}/{pool.token1.symbol}
-                                            </span>
-                                            {/* Mobile APR inline with pool name */}
-                                            {(() => {
-                                                const apr = getPoolAPR(pool);
-                                                if (apr !== null && apr > 0) {
-                                                    return <span className="md:hidden text-xs font-bold px-2 py-1 rounded-lg bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40 shadow-[0_0_8px_rgba(34,197,94,0.3)]">🔥 APR {formatAPR(apr)}</span>;
-                                                }
-                                                return null;
-                                            })()}
-                                        </div>
-                                        <div className="flex items-center gap-1 text-[10px] md:text-xs">
-                                            {pool.poolType === 'CL' && pool.tickSpacing && (
-                                                <span className="text-cyan-400">
-                                                    {getFeeTier(pool.tickSpacing)}
-                                                </span>
+                            return (
+                                <div
+                                    key={pool.address}
+                                    onClick={() => openAddLiquidityModal(pool)}
+                                    className={`rounded-xl border bg-white/[0.03] p-3.5 active:bg-white/[0.06] transition-colors cursor-pointer ${isTopPool
+                                        ? 'border-l-4 border-l-green-500/60 border-t-white/10 border-r-white/10 border-b-white/10'
+                                        : 'border-white/10'
+                                        }`}
+                                >
+                                    {/* Top row: logos, pair, fee, badge */}
+                                    <div className="flex items-center gap-2.5 mb-2">
+                                        {/* Overlapping token logos */}
+                                        <div className="relative flex-shrink-0 w-[38px] h-[26px]">
+                                            {pool.token0.logoURI ? (
+                                                <img src={pool.token0.logoURI} alt={pool.token0.symbol} className="w-[26px] h-[26px] rounded-full absolute left-0 top-0" />
+                                            ) : (
+                                                <div className={`w-[26px] h-[26px] rounded-full flex items-center justify-center text-[10px] font-bold absolute left-0 top-0 ${pool.poolType === 'CL'
+                                                    ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
+                                                    : 'bg-gradient-to-br from-primary to-secondary'
+                                                    }`}>
+                                                    {pool.token0.symbol[0]}
+                                                </div>
                                             )}
-                                            {pool.poolType === 'V2' && (
-                                                <span className="text-gray-500">
-                                                    {pool.stable ? 'Stable' : 'Volatile'}
-                                                </span>
-                                            )}
-                                            {/* Rewards badge for top pools */}
-                                            {isTopPool && (
-                                                <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-bold animate-pulse">
-                                                    ⭐ Top Pool
-                                                </span>
+                                            {pool.token1.logoURI ? (
+                                                <img src={pool.token1.logoURI} alt={pool.token1.symbol} className="w-[26px] h-[26px] rounded-full absolute left-[14px] top-0 border-2 border-[var(--bg-primary)]" />
+                                            ) : (
+                                                <div className={`w-[26px] h-[26px] rounded-full flex items-center justify-center text-[10px] font-bold absolute left-[14px] top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                                    ? 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                                    : 'bg-gradient-to-br from-secondary to-accent'
+                                                    }`}>
+                                                    {pool.token1.symbol[0]}
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
-                                </div>
 
-                                {/* Desktop: APR */}
-                                <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                    {(() => {
-                                        const apr = getPoolAPR(pool);
-                                        if (apr !== null && apr > 0) {
-                                            return (
-                                                <span className="text-sm font-semibold text-green-400">
-                                                    {formatAPR(apr)}
-                                                </span>
-                                            );
-                                        }
-                                        return <span className="text-sm font-medium text-gray-500">—</span>;
-                                    })()}
-                                </div>
-
-                                {/* Desktop: 24h Volume (from subgraph) */}
-                                <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                    {pool.volume24h && parseFloat(pool.volume24h) > 0.01 ? (
-                                        <span className="text-sm font-medium">
-                                            ${parseFloat(pool.volume24h).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                        <span className="font-bold text-sm truncate">
+                                            {pool.token0.symbol}/{pool.token1.symbol}
                                         </span>
-                                    ) : (
-                                        <span className="text-sm font-medium text-gray-500">—</span>
-                                    )}
-                                </div>
 
-                                {/* Desktop: TVL (USD) */}
-                                <div className="hidden md:flex md:col-span-2 items-center justify-end">
-                                    <div className="text-right text-sm">
-                                        {parseFloat(pool.tvl) > 0 ? (
-                                            <div className="font-semibold">
-                                                ${parseFloat(pool.tvl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                            </div>
+                                        {/* Fee tier pill */}
+                                        {pool.poolType === 'CL' && pool.tickSpacing ? (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400">
+                                                {getFeeTier(pool.tickSpacing)}
+                                            </span>
+                                        ) : pool.poolType === 'V2' ? (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-gray-500">
+                                                {pool.stable ? 'Stable' : 'V2'}
+                                            </span>
+                                        ) : null}
+
+                                        {isTopPool && (
+                                            <span className="text-yellow-400 text-xs ml-auto">&#11088;</span>
+                                        )}
+                                    </div>
+
+                                    {/* Stats row: TVL + Volume inline */}
+                                    <div className="text-xs text-gray-400 mb-2.5 pl-0.5">
+                                        {tvl > 0 && <span>TVL {formatCompact(tvl)}</span>}
+                                        {tvl > 0 && vol > 0.01 && <span className="mx-1.5">&middot;</span>}
+                                        {vol > 0.01 && <span>Vol {formatCompact(vol)}</span>}
+                                        {tvl <= 0 && vol <= 0.01 && <span className="text-gray-500">New Pool</span>}
+                                    </div>
+
+                                    {/* Bottom row: APR + Add LP button */}
+                                    <div className="flex items-center justify-between">
+                                        {apr !== null && apr > 0 ? (
+                                            <span className="text-base font-bold text-green-400">
+                                                APR {formatAPR(apr)}
+                                            </span>
                                         ) : (
-                                            <span className="text-gray-500">New Pool</span>
+                                            <span className="text-sm text-gray-500">&mdash;</span>
                                         )}
+
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                openAddLiquidityModal(pool);
+                                            }}
+                                            className="px-3.5 py-1.5 rounded-lg font-semibold text-xs bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
+                                        >
+                                            Add LP
+                                        </button>
                                     </div>
                                 </div>
-
-                                {/* Mobile: Stats + Action Row */}
-                                <div className="flex md:hidden items-center justify-between gap-2">
-                                    <div className="flex items-center gap-3 text-[10px] min-w-0 flex-1">
-                                        {/* TVL in USD */}
-                                        <div className="min-w-0">
-                                            <div className="text-[9px] text-gray-500">TVL</div>
-                                            <div className="font-semibold">
-                                                {parseFloat(pool.tvl) > 0
-                                                    ? `$${parseFloat(pool.tvl).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                                                    : 'New'
-                                                }
-                                            </div>
-                                        </div>
-                                        {/* 24h Volume */}
-                                        {pool.volume24h && parseFloat(pool.volume24h) > 0.01 && (
-                                            <div className="flex-shrink-0">
-                                                <div className="text-[9px] text-gray-500">24h Vol</div>
-                                                <div className="font-semibold text-blue-400">${parseFloat(pool.volume24h).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <button
-                                        onClick={() => openAddLiquidityModal(pool)}
-                                        className="px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 bg-gradient-to-r from-cyan-500 to-blue-500 text-white whitespace-nowrap"
-                                    >
-                                        Add LP
-                                    </button>
-                                </div>
-
-                                {/* Desktop: Action */}
-                                <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                    <motion.button
-                                        onClick={() => openAddLiquidityModal(pool)}
-                                        className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
-                                            ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
-                                            : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
-                                            }`}
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                    >
-                                        + Add LP
-                                    </motion.button>
-                                </div>
-                            </motion.div>
-                        );
-                    })
-                )}
-            </motion.div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
 
             {/* Add Liquidity Modal */}
             <AddLiquidityModal

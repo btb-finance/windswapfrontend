@@ -2,19 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useReadContract, usePublicClient } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { formatUnits, Address, encodeFunctionData, decodeFunctionResult } from 'viem';
-import Link from 'next/link';
 import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
 import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { getTokenLogo } from '@/utils/tokens';
-import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
+import { V2_CONTRACTS } from '@/config/contracts';
 import { getRpcForVoting, rpcCall } from '@/utils/rpc';
-import { Tooltip } from '@/components/common/Tooltip';
-import { InfoCard, EmptyState } from '@/components/common/InfoCard';
+import { EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 import { usePoolData } from '@/providers/PoolDataProvider';
@@ -137,7 +135,7 @@ export default function VotePage() {
     // Distribute state
     const [isDistributing, setIsDistributing] = useState(false);
     const { writeContractAsync } = useWriteContract();
-    const publicClient = usePublicClient();
+
 
     // Claimable voting rewards state: { tokenId: { gaugePool: { token: amount } } }
     const [votingRewards, setVotingRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
@@ -438,7 +436,7 @@ export default function VotePage() {
         setIsDistributing(true);
 
         const totalPools = Number(voterPoolCount);
-        const batchSize = 10;
+        const batchSize = 2;
 
         try {
             for (let start = 0; start < totalPools; start += batchSize) {
@@ -708,80 +706,58 @@ export default function VotePage() {
             </motion.div>
 
             {/* Visual Step Flow - hidden on mobile */}
-            <motion.div
-                className="hidden md:block mb-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 }}
-            >
+            <div className="hidden md:block mb-8">
                 <div className="glass-card p-6">
                     <LockVoteEarnSteps currentStep={getCurrentStep()} />
                 </div>
-            </motion.div>
+            </div>
 
             {/* Epoch Info Banner */}
-            <motion.div
-                className={`mb-4 p-3 rounded-xl border ${epochHasEnded
-                    ? 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'
-                    : 'bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-500/20'}`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
+            <div
+                className={`mb-3 p-2.5 sm:p-3 rounded-xl border ${epochHasEnded
+                    ? 'bg-green-500/5 border-green-500/20'
+                    : 'bg-blue-500/5 border-blue-500/20'}`}
             >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <div className="text-xl">{epochHasEnded ? '🎉' : '📅'}</div>
-                        <div>
-                            <div className="text-xs text-gray-400">Current Epoch</div>
-                            <div className={`font-bold ${epochHasEnded ? 'text-green-400' : 'text-blue-400'}`}>
-                                Epoch {epochCount !== undefined ? epochCount.toString() : '...'}
-                            </div>
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <div className={`text-xs font-bold ${epochHasEnded ? 'text-green-400' : 'text-blue-400'}`}>
+                            Epoch {epochCount !== undefined ? epochCount.toString() : '...'}
+                        </div>
+                        <span className="text-gray-600">&middot;</span>
+                        <div className="hidden sm:flex items-center gap-2 text-[10px] text-gray-400">
+                            <span>{epochStartDate ? epochStartDate.toLocaleDateString() : '...'}</span>
+                            <span>-</span>
+                            <span>{epochEndDate ? epochEndDate.toLocaleDateString() : '...'}</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs">
-                        <div className="text-center hidden sm:block">
-                            <div className="text-gray-400">Started</div>
-                            <div className="font-medium text-white">
-                                {epochStartDate ? epochStartDate.toLocaleDateString() : '...'}
-                            </div>
+                    {epochHasEnded ? (
+                        <button
+                            onClick={handleDistributeRewards}
+                            disabled={isDistributing || !voterPoolCount || Number(voterPoolCount) === 0}
+                            className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] sm:text-xs font-bold hover:opacity-90 transition disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
+                        >
+                            {isDistributing ? (
+                                <>
+                                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span className="hidden sm:inline">Distributing...</span>
+                                    <span className="sm:hidden">...</span>
+                                </>
+                            ) : (
+                                'Distribute'
+                            )}
+                        </button>
+                    ) : (
+                        <div className="text-xs font-bold text-blue-400 flex-shrink-0">
+                            {daysRemaining}d {hoursRemaining}h left
                         </div>
-                        <div className="text-center hidden sm:block">
-                            <div className="text-gray-400">Ends</div>
-                            <div className="font-medium text-white">
-                                {epochEndDate ? epochEndDate.toLocaleDateString() : '...'}
-                            </div>
-                        </div>
-                        {epochHasEnded ? (
-                            <button
-                                onClick={handleDistributeRewards}
-                                disabled={isDistributing || !voterPoolCount || Number(voterPoolCount) === 0}
-                                className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {isDistributing ? (
-                                    <>
-                                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                        Distributing...
-                                    </>
-                                ) : (
-                                    <>Distribute Rewards</>
-                                )}
-                            </button>
-                        ) : (
-                            <div className="text-center px-3 py-1 rounded-lg bg-blue-500/20">
-                                <div className="text-gray-400">Time Left</div>
-                                <div className="font-bold text-blue-400">
-                                    {daysRemaining}d {hoursRemaining}h
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
                 {epochHasEnded && (
-                    <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-gray-400">
-                        Epoch ended! Anyone can trigger reward distribution to send fees to voters.
+                    <div className="mt-1.5 pt-1.5 border-t border-white/10 text-[10px] text-gray-500">
+                        Epoch ended - anyone can trigger reward distribution.
                     </div>
                 )}
-            </motion.div>
+            </div>
 
 
             {/* Stats Row - Compact */}
@@ -803,20 +779,18 @@ export default function VotePage() {
                 </div>
             </div>
 
-            {/* Tabs - Prominent Buttons */}
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+            {/* Tabs */}
+            <div className="flex gap-1.5 mb-3">
                 {tabConfig.map((tab) => (
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`flex-1 min-w-0 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2 flex items-center justify-center gap-2 ${activeTab === tab.key
-                            ? 'bg-gradient-to-r from-primary to-secondary text-white border-primary shadow-lg shadow-primary/30'
-                            : 'bg-white/5 text-gray-300 border-white/10 hover:border-primary/50 hover:bg-white/10 hover:text-white'
+                        className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition border ${activeTab === tab.key
+                            ? 'bg-gradient-to-r from-primary to-secondary text-white border-primary/50'
+                            : 'bg-white/5 text-gray-400 border-white/10 hover:text-white'
                             }`}
                     >
-                        <span className="text-base">{tab.icon}</span>
-                        <span className="hidden sm:inline">{tab.label}</span>
-                        <span className="sm:hidden">{tab.key === 'lock' ? 'Lock' : tab.key === 'vote' ? 'Vote' : 'Earn'}</span>
+                        {tab.key === 'lock' ? 'Lock' : tab.key === 'vote' ? 'Vote' : 'Rewards'}
                     </button>
                 ))}
             </div>
@@ -824,8 +798,8 @@ export default function VotePage() {
 
             {/* Error Display */}
             {error && (
-                <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm max-w-md mx-auto text-center flex items-center gap-2 justify-center">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="mb-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center flex items-center gap-2 justify-center">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {error}
@@ -834,26 +808,22 @@ export default function VotePage() {
 
             {/* Success Display */}
             {txHash && (
-                <motion.div
-                    className="mb-4 p-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm max-w-md mx-auto text-center"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                >
+                <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm max-w-md mx-auto text-center">
                     <div className="flex items-center justify-center gap-2 mb-1">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                         Transaction submitted!
                     </div>
-                    <a href={`https://seiscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline text-sm">
-                        View on SeiScan →
+                    <a href={`https://seiscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline text-xs">
+                        View on SeiScan
                     </a>
-                </motion.div>
+                </div>
             )}
 
             {/* Lock Tab */}
             {activeTab === 'lock' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <div>
                     <div className="glass-card p-3 sm:p-4">
                         {/* Amount Input */}
                         <div className="mb-3">
@@ -1246,13 +1216,13 @@ export default function VotePage() {
                         </div>
                     )}
 
-                </motion.div>
+                </div>
             )}
 
             {/* Vote Tab */}
             {
                 activeTab === 'vote' && (
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                    <div>
                         {!isConnected ? (
                             <EmptyState
                                 icon="🔗"
@@ -1353,7 +1323,7 @@ export default function VotePage() {
                                         </div>
                                     )}
 
-                                    {/* Pools - Compact Mobile Layout */}
+                                    {/* Pool Gauge Rows */}
                                     <div className="divide-y divide-white/5">
                                         {sortedGauges.length === 0 ? (
                                             <div className="p-6 text-center">
@@ -1368,41 +1338,40 @@ export default function VotePage() {
                                                 )}
                                             </div>
                                         ) : sortedGauges.map((gauge) => (
-                                            <div key={gauge.pool} className="p-2 sm:p-3">
-                                                {/* Row 1: Pool info + share */}
-                                                <div className="flex items-center justify-between gap-2 mb-2">
+                                            <div key={gauge.pool} className="p-2.5 sm:p-3">
+                                                {/* Row 1: Pool info + vote share */}
+                                                <div className="flex items-center justify-between gap-2 mb-1.5">
                                                     <div className="flex items-center gap-2 min-w-0">
-                                                        <div className="relative w-10 h-6 flex-shrink-0">
+                                                        <div className="relative w-[34px] h-[22px] flex-shrink-0">
                                                             {getTokenLogo(gauge.token0) ? (
-                                                                <img src={getTokenLogo(gauge.token0)} alt={gauge.symbol0} className="absolute left-0 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                                <img src={getTokenLogo(gauge.token0)} alt={gauge.symbol0} className="absolute left-0 w-[22px] h-[22px] rounded-full border border-[var(--bg-primary)]" />
                                                             ) : (
-                                                                <div className="absolute left-0 w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                <div className="absolute left-0 w-[22px] h-[22px] rounded-full bg-primary/30 flex items-center justify-center text-[9px] font-bold border border-[var(--bg-primary)]">
                                                                     {gauge.symbol0.slice(0, 2)}
                                                                 </div>
                                                             )}
                                                             {getTokenLogo(gauge.token1) ? (
-                                                                <img src={getTokenLogo(gauge.token1)} alt={gauge.symbol1} className="absolute left-3 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                                <img src={getTokenLogo(gauge.token1)} alt={gauge.symbol1} className="absolute left-[12px] w-[22px] h-[22px] rounded-full border border-[var(--bg-primary)]" />
                                                             ) : (
-                                                                <div className="absolute left-3 w-6 h-6 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                <div className="absolute left-[12px] w-[22px] h-[22px] rounded-full bg-secondary/30 flex items-center justify-center text-[9px] font-bold border border-[var(--bg-primary)]">
                                                                     {gauge.symbol1.slice(0, 2)}
                                                                 </div>
                                                             )}
                                                         </div>
                                                         <div className="min-w-0">
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="font-semibold text-sm truncate">{gauge.symbol0}/{gauge.symbol1}</span>
-                                                                <span className={`text-[8px] px-1 py-0.5 rounded ${gauge.poolType === 'CL' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-primary/20 text-primary'}`}>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="font-bold text-xs sm:text-sm truncate">{gauge.symbol0}/{gauge.symbol1}</span>
+                                                                <span className={`text-[9px] px-1 py-0.5 rounded-full ${gauge.poolType === 'CL' ? 'bg-cyan-500/15 text-cyan-400' : 'bg-white/5 text-gray-500'}`}>
                                                                     {gauge.poolType}
                                                                 </span>
                                                                 {!gauge.isAlive && (
-                                                                    <span className="text-[8px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Off</span>
+                                                                    <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Off</span>
                                                                 )}
                                                             </div>
-                                                            {/* Pool Fees Display */}
-                                                            <div className="text-[10px] flex items-center gap-1 mt-0.5">
-                                                                <span className="text-gray-400">Fees:</span>
+                                                            {/* Fees inline */}
+                                                            <div className="text-[10px] text-gray-400 mt-0.5 truncate">
                                                                 {gauge.rewardTokens && gauge.rewardTokens.length > 0 ? (
-                                                                    <span className="text-green-400">
+                                                                    <span className="text-green-400/80">
                                                                         {gauge.rewardTokens.map((reward, idx) => (
                                                                             <span key={reward.address}>
                                                                                 {parseFloat(formatUnits(reward.amount, reward.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} {reward.symbol}
@@ -1411,30 +1380,27 @@ export default function VotePage() {
                                                                         ))}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-gray-500">No fees yet this epoch</span>
+                                                                    <span className="text-gray-600">No fees yet</span>
                                                                 )}
                                                             </div>
                                                         </div>
                                                     </div>
                                                     <div className="text-right flex-shrink-0">
                                                         <div className="text-xs font-bold text-primary">{gauge.weightPercent.toFixed(1)}%</div>
-                                                        <div className="text-[10px] text-gray-400">{parseFloat(formatUnits(gauge.weight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                                                     </div>
                                                 </div>
 
-                                                {/* Row 2: Vote controls or status */}
-                                                <div className="flex items-center flex-wrap gap-1 sm:gap-2">
-                                                    {/* Already voted indicator */}
+                                                {/* Row 2: Vote controls */}
+                                                <div className="flex items-center flex-wrap gap-1.5">
                                                     {existingVotes[gauge.pool.toLowerCase()] && existingVotes[gauge.pool.toLowerCase()] > BigInt(0) && (
-                                                        <span className="text-[10px] px-2 py-1 rounded bg-green-500/20 text-green-400 flex items-center gap-1">
-                                                            Voted ({parseFloat(formatUnits(existingVotes[gauge.pool.toLowerCase()], 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                                                            Voted
                                                         </span>
                                                     )}
 
                                                     {!gauge.gauge ? (
-                                                        /* No gauge exists yet - show Coming Soon */
-                                                        <span className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 flex items-center gap-1">
-                                                            Voting Coming Soon
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                                                            Coming Soon
                                                         </span>
                                                     ) : positions.length > 0 ? (
                                                         <>
@@ -1463,29 +1429,27 @@ export default function VotePage() {
                                                                 className="w-10 h-6 py-0 px-1 rounded bg-white/5 text-center text-[10px] leading-6 outline-none focus:ring-1 focus:ring-primary disabled:opacity-40 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                                                             />
                                                             {voteWeights[gauge.pool] > 0 && (
-                                                                <span className="text-[10px] text-cyan-400 min-w-[60px] text-right">
-                                                                    ≈{getActualVotePower(voteWeights[gauge.pool]).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                                                <span className="text-[10px] text-cyan-400">
+                                                                    ={getActualVotePower(voteWeights[gauge.pool]).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                                 </span>
                                                             )}
                                                         </>
                                                     ) : (
-                                                        <span className={`text-[10px] px-2 py-1 rounded ${gauge.isAlive ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${gauge.isAlive ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
                                                             {gauge.isAlive ? 'Active' : 'Inactive'}
                                                         </span>
                                                     )}
 
-                                                    {/* Add Incentive button */}
                                                     {gauge.gauge && (
                                                         <button
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                console.log('Opening incentive modal for pool:', gauge.pool, gauge.symbol0, gauge.symbol1);
                                                                 setIncentivePool({ pool: gauge.pool, symbol0: gauge.symbol0, symbol1: gauge.symbol1 });
                                                             }}
-                                                            className="px-2 py-1 text-[10px] rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition flex items-center gap-1"
+                                                            className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition ml-auto"
                                                         >
-                                                            Add Incentive
+                                                            + Incentive
                                                         </button>
                                                     )}
                                                 </div>
@@ -1494,30 +1458,30 @@ export default function VotePage() {
                                     </div>
                                 </div>
 
-                                {/* Vote Summary + Submit - Compact */}
+                                {/* Vote Summary + Submit */}
                                 {positions.length > 0 && (
-                                    <div className="p-3 bg-primary/5 border-t border-primary/20">
+                                    <div className="sticky bottom-0 p-2.5 sm:p-3 bg-[var(--bg-primary)]/95 backdrop-blur border-t border-primary/20">
                                         <div className="flex items-center justify-between gap-2">
-                                            <div className="text-xs">
-                                                <span className="text-gray-400">Pools: </span>
+                                            <div className="text-[10px] sm:text-xs min-w-0">
                                                 <span className="font-bold text-white">{Object.values(voteWeights).filter(w => w > 0).length}</span>
-                                                <span className="text-gray-400 mx-2">|</span>
-                                                <span className="text-gray-400">Power: </span>
-                                                <span className="font-bold text-primary">{selectedVotingPower.toLocaleString(undefined, { maximumFractionDigits: 2 })} veWIND</span>
+                                                <span className="text-gray-500"> pools</span>
+                                                <span className="text-gray-600 mx-1">&middot;</span>
+                                                <span className="font-bold text-primary">{selectedVotingPower.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                                <span className="text-gray-500"> veWIND</span>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-1.5 flex-shrink-0">
                                                 <button
                                                     onClick={handleVoteForAll}
                                                     disabled={!selectedVeNFT}
-                                                    className="px-3 py-1.5 text-[10px] rounded bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 hover:from-blue-500/30 hover:to-cyan-500/30 transition disabled:opacity-50"
+                                                    className="px-2.5 py-1.5 text-[10px] rounded-lg bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition disabled:opacity-50"
                                                 >
-                                                    Vote All
+                                                    All
                                                 </button>
                                                 {selectedVeNFT && (
                                                     <button
                                                         onClick={() => handleResetVotes()}
                                                         disabled={isVoting}
-                                                        className="px-3 py-1.5 text-[10px] rounded bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+                                                        className="px-2.5 py-1.5 text-[10px] rounded-lg bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
                                                     >
                                                         Reset
                                                     </button>
@@ -1525,7 +1489,7 @@ export default function VotePage() {
                                                 <button
                                                     onClick={handleVote}
                                                     disabled={!selectedVeNFT || totalVoteWeight === 0 || isVoting}
-                                                    className="px-4 py-1.5 text-xs font-bold rounded bg-gradient-to-r from-primary to-secondary text-white disabled:opacity-50"
+                                                    className="px-4 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-primary to-secondary text-white disabled:opacity-50"
                                                 >
                                                     {isVoting ? '...' : 'Vote'}
                                                 </button>
@@ -1535,14 +1499,14 @@ export default function VotePage() {
                                 )}
                             </>
                         )}
-                    </motion.div>
+                    </div>
                 )
             }
 
             {/* Rewards Tab */}
             {
                 activeTab === 'rewards' && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div>
                         {!isConnected ? (
                             <div className="glass-card p-4 text-center">
                                 <p className="text-sm text-gray-400">Connect wallet to view rewards</p>
@@ -1658,7 +1622,7 @@ export default function VotePage() {
                                 </div>
                             </>
                         )}
-                    </motion.div>
+                    </div>
                 )
             }
 
@@ -1666,11 +1630,7 @@ export default function VotePage() {
             {
                 incentivePool && (
                     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                        <motion.div
-                            className="glass-card p-4 sm:p-6 max-w-md w-full"
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                        >
+                        <div className="glass-card p-4 sm:p-6 max-w-md w-full">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-bold">Add Incentive</h3>
                                 <button
@@ -1753,10 +1713,10 @@ export default function VotePage() {
                                     '🎁 Add Incentive'
                                 )}
                             </button>
-                        </motion.div>
+                        </div>
                     </div>
                 )
             }
-        </div >
+        </div>
     );
 }
