@@ -217,6 +217,130 @@ const isPositionInRange = (currentTick: number, tickLower: number, tickUpper: nu
     return currentTick >= tickLower && currentTick < tickUpper;
 };
 
+// Visual range bar - shows where current price sits relative to your position range
+const PriceRangeBar = ({
+    currentPrice,
+    priceLower,
+    priceUpper,
+    isFullRange,
+    compact = false,
+}: {
+    currentPrice: number | null;
+    priceLower: number;
+    priceUpper: number;
+    isFullRange: boolean;
+    compact?: boolean;
+    token0Symbol?: string;
+    token1Symbol?: string;
+}) => {
+    if (isFullRange || currentPrice === null) return null;
+
+    const rangeSpan = priceUpper - priceLower;
+    if (rangeSpan <= 0) return null;
+
+    // 20% padding so out-of-range dots still appear on the bar
+    const padding = rangeSpan * 0.20;
+    const displayMin = priceLower - padding;
+    const displaySpan = (priceUpper + padding) - displayMin;
+
+    const rawPct = ((currentPrice - displayMin) / displaySpan) * 100;
+    const pct = Math.max(3, Math.min(97, rawPct));
+
+    const inRange = currentPrice >= priceLower && currentPrice < priceUpper;
+    const rangeStart = ((priceLower - displayMin) / displaySpan) * 100;
+    const rangeEnd = ((priceUpper - displayMin) / displaySpan) * 100;
+
+    // proximity: 1 = center, 0 = edge
+    let proximity = 1;
+    if (inRange) {
+        const d = Math.min(currentPrice - priceLower, priceUpper - currentPrice);
+        proximity = d / (rangeSpan / 2);
+    }
+
+    const outLeft = currentPrice < priceLower;
+    const outRight = currentPrice >= priceUpper;
+
+    // Dot: green = safe, yellow = near edge, orange = out of range
+    const color = !inRange ? '#fb923c' : proximity < 0.15 ? '#facc15' : '#4ade80';
+
+    if (compact) {
+        return (
+            <div className="w-full mt-1.5 mb-0.5">
+                <div className="relative h-[5px] rounded-full bg-white/[0.04]">
+                    {/* Active range zone */}
+                    <div
+                        className="absolute top-0 h-full rounded-full"
+                        style={{
+                            left: `${rangeStart}%`,
+                            width: `${rangeEnd - rangeStart}%`,
+                            background: inRange
+                                ? 'linear-gradient(90deg, rgba(74,222,128,0.2), rgba(74,222,128,0.08))'
+                                : 'rgba(255,255,255,0.04)',
+                        }}
+                    />
+                    {/* Price dot */}
+                    <div
+                        className="absolute top-1/2"
+                        style={{
+                            left: `${pct}%`,
+                            transform: 'translate(-50%, -50%)',
+                            width: 7,
+                            height: 7,
+                            borderRadius: '50%',
+                            background: color,
+                            boxShadow: `0 0 6px ${color}66`,
+                        }}
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    // Full version
+    return (
+        <div className="mt-1">
+            {/* Bar */}
+            <div className="relative h-2 rounded-full bg-white/[0.04]">
+                {/* Range zone */}
+                <div
+                    className="absolute top-0 h-full rounded-full"
+                    style={{
+                        left: `${rangeStart}%`,
+                        width: `${rangeEnd - rangeStart}%`,
+                        background: inRange
+                            ? 'linear-gradient(90deg, rgba(74,222,128,0.25), rgba(74,222,128,0.10))'
+                            : 'rgba(255,255,255,0.05)',
+                        borderLeft: '1px solid rgba(255,255,255,0.1)',
+                        borderRight: '1px solid rgba(255,255,255,0.1)',
+                    }}
+                />
+                {/* Price dot */}
+                <div
+                    className="absolute top-1/2"
+                    style={{
+                        left: `${pct}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        background: color,
+                        boxShadow: `0 0 8px ${color}55`,
+                        border: '1.5px solid rgba(13,13,20,0.8)',
+                    }}
+                />
+            </div>
+            {/* Labels row */}
+            <div className="flex items-center justify-between mt-1">
+                <span className="text-[10px] text-gray-600">{formatPrice(priceLower)}</span>
+                <span className={`text-[10px] font-medium ${inRange ? 'text-green-400/80' : 'text-orange-400/80'}`}>
+                    {outLeft ? '← out' : outRight ? 'out →' : formatPrice(currentPrice)}
+                </span>
+                <span className="text-[10px] text-gray-600">{formatPrice(priceUpper)}</span>
+            </div>
+        </div>
+    );
+};
+
 export default function PortfolioPage() {
     const { isConnected, address } = useAccount();
     const toast = useToast();
@@ -306,6 +430,9 @@ export default function PortfolioPage() {
     // V2 position management state
     const [expandedV2Position, setExpandedV2Position] = useState<string | null>(null);
     const [v2RemovePercent, setV2RemovePercent] = useState<number>(100);
+
+    // Expanded CL position (toggle detail view)
+    const [expandedCLPosition, setExpandedCLPosition] = useState<string | null>(null);
 
     // State to store current ticks for each position (keyed by tokenId)
     // NOTE: currentTick is now included in CLPosition from subgraph, use pos.currentTick directly
@@ -1401,122 +1528,188 @@ export default function PortfolioPage() {
                     transition: isPulling ? 'none' : 'transform 0.3s ease-out',
                 }}
             >
-                {/* Overview Tab - Compact summary */}
+                {/* Overview Tab */}
                 {activeTab === 'overview' && (
-                    <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        {/* Stats Grid */}
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="glass-card p-3">
-                                <div className="text-[10px] text-gray-400">LP Positions</div>
-                                <div className="text-lg font-bold gradient-text">{clPositions.length + v2Positions.length}</div>
-                                <div className="text-[10px] text-gray-500">{clPositions.length} CL · {v2Positions.length} V2</div>
+                    <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        {/* Portfolio Value Hero */}
+                        <div className="glass-card p-5">
+                            <div className="text-xs text-gray-400 mb-1">Total Portfolio Value</div>
+                            <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
+                                {formatPrice(totalClValueUsd + pendingRewardsUsd + totalUncollectedFeesUsd)}
                             </div>
-                            <div className="glass-card p-3">
-                                <div className="text-[10px] text-gray-400">Staked</div>
-                                <div className="text-lg font-bold text-yellow-400">{stakedPositions.length}</div>
-                                <div className="text-[10px] text-gray-500">earning rewards</div>
-                            </div>
-                            <div className="glass-card p-3">
-                                <div className="text-[10px] text-gray-400">Locked WIND</div>
-                                <div className="text-lg font-bold text-primary">
-                                    {parseFloat(formatUnits(totalLockedWind, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            <div className="flex flex-wrap gap-3 mt-3 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-primary"></div>
+                                    <span className="text-gray-400">Positions</span>
+                                    <span className="font-medium">{formatPrice(totalClValueUsd)}</span>
                                 </div>
-                                <div className="text-[10px] text-gray-500">{veNFTs.length} veNFT{veNFTs.length !== 1 ? 's' : ''}</div>
-                            </div>
-                            <div className="glass-card p-3">
-                                <div className="text-[10px] text-gray-400">Claimable</div>
-                                <div className="text-lg font-bold text-green-400">
-                                    {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(2)}
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                                    <span className="text-gray-400">Fees</span>
+                                    <span className="font-medium text-green-400">{formatPrice(totalUncollectedFeesUsd)}</span>
                                 </div>
-                                <div className="text-[10px] text-gray-500">WIND rewards</div>
-                            </div>
-
-                            <div className="glass-card p-3">
-                                <div className="text-[10px] text-gray-400">CL Value</div>
-                                <div className="text-lg font-bold gradient-text">{formatPrice(totalClValueUsd)}</div>
-                                <div className="text-[10px] text-gray-500">estimated</div>
-                            </div>
-
-                            <div className="glass-card p-3">
-                                <div className="text-[10px] text-gray-400">Uncollected Fees</div>
-                                <div className="text-lg font-bold text-green-400">{formatPrice(totalUncollectedFeesUsd)}</div>
-                                <div className="text-[10px] text-gray-500">estimated</div>
-                            </div>
-
-                            <div className="glass-card p-3">
-                                <div className="text-[10px] text-gray-400">Rewards (USD)</div>
-                                <div className="text-lg font-bold text-yellow-400">{formatPrice(pendingRewardsUsd)}</div>
-                                <div className="text-[10px] text-gray-500">WIND × price</div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
+                                    <span className="text-gray-400">Rewards</span>
+                                    <span className="font-medium text-yellow-400">{formatPrice(pendingRewardsUsd)}</span>
+                                </div>
                             </div>
                         </div>
 
-                        {userProfile && (
+                        {/* Quick Stats Row */}
+                        <div className="grid grid-cols-4 gap-2">
+                            <button onClick={() => setActiveTab('positions')} className="glass-card p-3 text-left hover:border-primary/30 transition-colors">
+                                <div className="text-xs text-gray-400 mb-1">Positions</div>
+                                <div className="text-lg font-bold">{clPositions.length + v2Positions.length}</div>
+                            </button>
+                            <button onClick={() => setActiveTab('staked')} className="glass-card p-3 text-left hover:border-yellow-500/30 transition-colors">
+                                <div className="text-xs text-gray-400 mb-1">Staked</div>
+                                <div className="text-lg font-bold text-yellow-400">{stakedPositions.length}</div>
+                            </button>
+                            <button onClick={() => setActiveTab('locks')} className="glass-card p-3 text-left hover:border-primary/30 transition-colors">
+                                <div className="text-xs text-gray-400 mb-1">Locks</div>
+                                <div className="text-lg font-bold text-primary">{veNFTs.length}</div>
+                            </button>
                             <div className="glass-card p-3">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-[10px] text-gray-400">Profile Analytics</div>
-                                        <div className="text-sm font-bold">{formatPrice(userProfile.totalRewardsClaimedUSD)} claimed</div>
-                                        <div className="text-[10px] text-gray-500">
-                                            Swaps {userProfile.totalSwaps} · Provides {userProfile.totalProvides} · Withdraws {userProfile.totalWithdraws}
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] text-gray-400">First activity</div>
-                                        <div className="text-xs font-medium">
-                                            {userProfile.firstActivityTimestamp > BigInt(0)
-                                                ? new Date(Number(userProfile.firstActivityTimestamp) * 1000).toLocaleDateString()
-                                                : '—'}
-                                        </div>
-                                    </div>
+                                <div className="text-xs text-gray-400 mb-1">Locked</div>
+                                <div className="text-base font-bold text-primary truncate">
+                                    {parseFloat(formatUnits(totalLockedWind, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </div>
                             </div>
-                        )}
+                        </div>
 
-                        {/* Quick Actions */}
+                        {/* Claim Rewards CTA */}
                         {totalPendingRewards > BigInt(0) && (
                             <button
                                 onClick={handleClaimAllRewards}
                                 disabled={actionLoading}
-                                className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50"
+                                className="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 hover:border-green-500/40 transition disabled:opacity-50"
                             >
-                                {actionLoading ? 'Claiming...' : `Claim ${parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND`}
+                                <div className="text-left">
+                                    <div className="text-sm font-bold text-green-400">
+                                        {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
+                                    </div>
+                                    <div className="text-xs text-gray-400">
+                                        from {stakedPositions.filter(p => p.pendingRewards > BigInt(0)).length} position{stakedPositions.filter(p => p.pendingRewards > BigInt(0)).length !== 1 ? 's' : ''}
+                                    </div>
+                                </div>
+                                <span className="px-4 py-2 rounded-xl bg-green-500 text-white text-sm font-bold">
+                                    {actionLoading ? '...' : 'Claim All'}
+                                </span>
                             </button>
                         )}
 
-                        {/* Recent Positions Preview */}
-                        {clPositions.length > 0 && (
-                            <div className="glass-card p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium">Recent Positions</span>
-                                    <button onClick={() => setActiveTab('positions')} className="text-[10px] text-primary">View All →</button>
+                        {/* Profile Stats */}
+                        {userProfile && (
+                            <div className="glass-card p-4">
+                                <div className="text-xs text-gray-400 mb-3">Activity Summary</div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    <div>
+                                        <div className="text-sm font-bold">{formatPrice(userProfile.totalRewardsClaimedUSD)}</div>
+                                        <div className="text-xs text-gray-500">Rewards Claimed</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-bold">{userProfile.totalSwaps}</div>
+                                        <div className="text-xs text-gray-500">Swaps</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-bold">{userProfile.totalProvides}</div>
+                                        <div className="text-xs text-gray-500">Provides</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-bold">
+                                            {userProfile.firstActivityTimestamp > BigInt(0)
+                                                ? new Date(Number(userProfile.firstActivityTimestamp) * 1000).toLocaleDateString()
+                                                : '—'}
+                                        </div>
+                                        <div className="text-xs text-gray-500">Since</div>
+                                    </div>
                                 </div>
-                                <div className="space-y-1.5">
+                            </div>
+                        )}
+
+                        {/* Positions Preview */}
+                        {clPositions.length > 0 && (
+                            <div className="glass-card p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Top Positions</span>
+                                    <button onClick={() => setActiveTab('positions')} className="text-xs text-primary hover:text-primary/80 transition">View All</button>
+                                </div>
+                                <div className="space-y-2">
                                     {clPositions.slice(0, 3).map((pos, i) => {
                                         const t0 = getTokenInfo(pos.token0);
                                         const t1 = getTokenInfo(pos.token1);
+                                        const currentPoolTick = positionTicks[pos.tokenId.toString()];
+                                        const hasTickData = currentPoolTick !== undefined;
+                                        const inRange = hasTickData && isPositionInRange(currentPoolTick, pos.tickLower, pos.tickUpper);
                                         return (
-                                            <div key={i} className="flex items-center justify-between p-2 rounded bg-white/5 text-xs">
-                                                <span className="font-medium">{t0.symbol}/{t1.symbol}</span>
-                                                <span className="text-gray-400">#{pos.tokenId.toString()}</span>
-                                            </div>
+                                            <button key={i} onClick={() => { setActiveTab('positions'); setExpandedCLPosition(pos.tokenId.toString()); }} className="w-full flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/[0.07] transition text-left">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="relative w-8 h-8 flex-shrink-0">
+                                                        {getTokenLogo(pos.token0) ? (
+                                                            <img src={getTokenLogo(pos.token0)} alt={t0.symbol} className="absolute left-0 top-0 w-5 h-5 rounded-full border border-[#0d0d14]" />
+                                                        ) : (
+                                                            <div className="absolute left-0 top-0 w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[7px] font-bold border border-[#0d0d14]">{t0.symbol.slice(0, 2)}</div>
+                                                        )}
+                                                        {getTokenLogo(pos.token1) ? (
+                                                            <img src={getTokenLogo(pos.token1)} alt={t1.symbol} className="absolute left-3 top-3 w-5 h-5 rounded-full border border-[#0d0d14]" />
+                                                        ) : (
+                                                            <div className="absolute left-3 top-3 w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[7px] font-bold border border-[#0d0d14]">{t1.symbol.slice(0, 2)}</div>
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <span className="font-semibold text-sm">{t0.symbol}/{t1.symbol}</span>
+                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                            <span className="text-xs text-gray-500">#{pos.tokenId.toString()}</span>
+                                                            <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+                                                                isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'bg-purple-500/15 text-purple-400' :
+                                                                !hasTickData ? 'bg-gray-500/15 text-gray-400' :
+                                                                inRange ? 'bg-green-500/15 text-green-400' : 'bg-orange-500/15 text-orange-400'
+                                                            }`}>
+                                                                {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'Full' :
+                                                                    !hasTickData ? '...' : inRange ? 'In Range' : 'Out'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right flex-shrink-0">
+                                                    <div className="text-sm font-bold">{formatPrice(pos.amountUSD || 0)}</div>
+                                                </div>
+                                            </button>
                                         );
                                     })}
                                 </div>
                             </div>
                         )}
 
-                        {/* Staked Positions Preview */}
+                        {/* Staked Preview */}
                         {stakedPositions.length > 0 && (
-                            <div className="glass-card p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium">Staked Positions</span>
-                                    <button onClick={() => setActiveTab('staked')} className="text-[10px] text-primary">View All →</button>
+                            <div className="glass-card p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Earning Rewards</span>
+                                    <button onClick={() => setActiveTab('staked')} className="text-xs text-primary hover:text-primary/80 transition">View All</button>
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-2">
                                     {stakedPositions.slice(0, 3).map((pos, i) => (
-                                        <div key={i} className="flex items-center justify-between p-2 rounded bg-yellow-500/10 text-xs">
-                                            <span className="font-medium">{pos.token0Symbol}/{pos.token1Symbol}</span>
-                                            <span className="text-green-400">{parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND</span>
+                                        <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/10">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="relative w-8 h-8 flex-shrink-0">
+                                                    {getTokenLogo(pos.token0) ? (
+                                                        <img src={getTokenLogo(pos.token0)} alt={pos.token0Symbol} className="absolute left-0 top-0 w-5 h-5 rounded-full border border-[#0d0d14]" />
+                                                    ) : (
+                                                        <div className="absolute left-0 top-0 w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[7px] font-bold border border-[#0d0d14]">{pos.token0Symbol.slice(0, 2)}</div>
+                                                    )}
+                                                    {getTokenLogo(pos.token1) ? (
+                                                        <img src={getTokenLogo(pos.token1)} alt={pos.token1Symbol} className="absolute left-3 top-3 w-5 h-5 rounded-full border border-[#0d0d14]" />
+                                                    ) : (
+                                                        <div className="absolute left-3 top-3 w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[7px] font-bold border border-[#0d0d14]">{pos.token1Symbol.slice(0, 2)}</div>
+                                                    )}
+                                                </div>
+                                                <span className="font-semibold text-sm">{pos.token0Symbol}/{pos.token1Symbol}</span>
+                                            </div>
+                                            <div className="text-sm font-bold text-green-400">
+                                                {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} <span className="text-xs font-normal text-green-400/60">WIND</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -1525,16 +1718,22 @@ export default function PortfolioPage() {
 
                         {/* Locks Preview */}
                         {veNFTs.length > 0 && (
-                            <div className="glass-card p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium">Your Locks</span>
-                                    <button onClick={() => setActiveTab('locks')} className="text-[10px] text-primary">View All →</button>
+                            <div className="glass-card p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Locks</span>
+                                    <button onClick={() => setActiveTab('locks')} className="text-xs text-primary hover:text-primary/80 transition">View All</button>
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-2">
                                     {veNFTs.slice(0, 2).map((nft, i) => (
-                                        <div key={i} className="flex items-center justify-between p-2 rounded bg-white/5 text-xs">
-                                            <span className="font-medium">veNFT #{nft.tokenId.toString()}</span>
-                                            <span className="text-primary">{parseFloat(formatUnits(nft.votingPower, 18)).toFixed(0)} veWIND</span>
+                                        <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                                            <div>
+                                                <span className="font-semibold text-sm">veNFT #{nft.tokenId.toString()}</span>
+                                                {nft.isPermanent && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary">Permanent</span>}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-sm font-bold text-primary">{parseFloat(formatUnits(nft.votingPower, 18)).toFixed(0)} veWIND</div>
+                                                <div className="text-xs text-gray-500">{parseFloat(formatUnits(nft.amount, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} locked</div>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -1546,683 +1745,775 @@ export default function PortfolioPage() {
 
                 {/* Positions Tab */}
                 {activeTab === 'positions' && (
-                    <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <div className="glass-card p-6">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-                                <h3 className="font-semibold">All LP Positions</h3>
-
-                                {/* Search and Sort Controls */}
-                                <div className="flex items-center gap-2 w-full sm:w-auto">
-                                    {/* Search Input */}
-                                    <input
-                                        type="text"
-                                        placeholder="Search pools..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="flex-1 sm:flex-none sm:w-48 px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
-                                    />
-
-                                    {/* Sort Dropdown */}
-                                    <div className="relative">
-                                        <select
-                                            value={sortBy}
-                                            onChange={(e) => setSortBy(e.target.value as 'value' | 'pnl' | 'recent')}
-                                            className="pl-3 pr-8 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
-                                        >
-                                            <option value="value">Value</option>
-                                            <option value="pnl">PnL</option>
-                                            <option value="recent">Recent</option>
-                                        </select>
-                                        <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                    </div>
-                                </div>
+                    <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        {/* Search and Sort Controls */}
+                        <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    placeholder="Search by token or ID..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 text-sm rounded-xl bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
+                                />
                             </div>
+                            <div className="relative">
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value as 'value' | 'pnl' | 'recent')}
+                                    className="pl-3 pr-8 py-2 text-sm rounded-xl bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
+                                >
+                                    <option value="value">Value</option>
+                                    <option value="pnl">PnL</option>
+                                    <option value="recent">Recent</option>
+                                </select>
+                                <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
 
-                            {/* CL Positions */}
-                            {filteredAndSortedCLPositions.length > 0 && (
-                                <div className="mb-6">
-                                    <h4 className="text-sm text-gray-400 mb-3">Concentrated Liquidity (V3)</h4>
-                                    <div className="space-y-3">
-                                        {filteredAndSortedCLPositions.map((pos, i) => {
-                                            const t0 = getTokenInfo(pos.token0);
-                                            const t1 = getTokenInfo(pos.token1);
-                                            const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
+                        {/* CL Positions */}
+                        {filteredAndSortedCLPositions.length > 0 && (
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Concentrated Liquidity</span>
+                                    <span className="text-xs text-gray-600">{filteredAndSortedCLPositions.length}</span>
+                                </div>
+                                <div className="space-y-2">
+                                    {filteredAndSortedCLPositions.map((pos, i) => {
+                                        const t0 = getTokenInfo(pos.token0);
+                                        const t1 = getTokenInfo(pos.token1);
+                                        const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
+                                        const isExpanded = expandedCLPosition === pos.tokenId.toString();
 
-                                            const depositedUsd = (pos.depositedToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.depositedToken1 || 0) * (pos.token1PriceUSD || 0);
-                                            const withdrawnUsd = (pos.withdrawnToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.withdrawnToken1 || 0) * (pos.token1PriceUSD || 0);
-                                            const collectedUsd = (pos.collectedToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.collectedToken1 || 0) * (pos.token1PriceUSD || 0);
-                                            const pnlUsd = (pos.amountUSD || 0) + withdrawnUsd + collectedUsd - depositedUsd;
-                                            const pnlPct = depositedUsd > 0 ? (pnlUsd / depositedUsd) * 100 : 0;
-                                            return (
-                                                <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/10">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="relative w-12 h-7 flex-shrink-0">
+                                        const depositedUsd = (pos.depositedToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.depositedToken1 || 0) * (pos.token1PriceUSD || 0);
+                                        const withdrawnUsd = (pos.withdrawnToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.withdrawnToken1 || 0) * (pos.token1PriceUSD || 0);
+                                        const collectedUsd = (pos.collectedToken0 || 0) * (pos.token0PriceUSD || 0) + (pos.collectedToken1 || 0) * (pos.token1PriceUSD || 0);
+                                        const pnlUsd = (pos.amountUSD || 0) + withdrawnUsd + collectedUsd - depositedUsd;
+                                        const pnlPct = depositedUsd > 0 ? (pnlUsd / depositedUsd) * 100 : 0;
+
+                                        const currentPoolTick = positionTicks[pos.tokenId.toString()];
+                                        const hasTickData = currentPoolTick !== undefined;
+                                        const inRange = hasTickData && isPositionInRange(currentPoolTick, pos.tickLower, pos.tickUpper);
+                                        const amounts = hasTickData
+                                            ? calculateTokenAmounts(pos.liquidity, pos.tickLower, pos.tickUpper, currentPoolTick, t0.decimals, t1.decimals)
+                                            : { amount0: 0, amount1: 0 };
+                                        const priceLower = tickToPrice(pos.tickLower, t0.decimals, t1.decimals);
+                                        const priceUpper = tickToPrice(pos.tickUpper, t0.decimals, t1.decimals);
+                                        const currentPrice = hasTickData ? tickToPrice(currentPoolTick, t0.decimals, t1.decimals) : null;
+
+                                        const uncollectedFees0Usd = pos.token0PriceUSD > 0
+                                            ? parseFloat(formatUnits(pos.tokensOwed0, t0.decimals)) * pos.token0PriceUSD : 0;
+                                        const uncollectedFees1Usd = pos.token1PriceUSD > 0
+                                            ? parseFloat(formatUnits(pos.tokensOwed1, t1.decimals)) * pos.token1PriceUSD : 0;
+                                        const totalFeesUsd = uncollectedFees0Usd + uncollectedFees1Usd;
+
+                                        return (
+                                            <div key={i} className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden hover:border-white/20 transition-colors">
+                                                {/* Clickable Summary Row */}
+                                                <button
+                                                    onClick={() => setExpandedCLPosition(isExpanded ? null : pos.tokenId.toString())}
+                                                    className="w-full p-4 text-left"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            {/* Token logos */}
+                                                            <div className="relative w-10 h-10 flex-shrink-0">
                                                                 {getTokenLogo(pos.token0) ? (
-                                                                    <img src={getTokenLogo(pos.token0)} alt={t0.symbol} className="absolute left-0 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                                    <img src={getTokenLogo(pos.token0)} alt={t0.symbol} className="absolute left-0 top-0 w-7 h-7 rounded-full border-2 border-[#0d0d14]" />
                                                                 ) : (
-                                                                    <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t0.symbol.slice(0, 2)}</div>
+                                                                    <div className="absolute left-0 top-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border-2 border-[#0d0d14]">{t0.symbol.slice(0, 2)}</div>
                                                                 )}
                                                                 {getTokenLogo(pos.token1) ? (
-                                                                    <img src={getTokenLogo(pos.token1)} alt={t1.symbol} className="absolute left-4 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                                    <img src={getTokenLogo(pos.token1)} alt={t1.symbol} className="absolute left-4 top-3 w-7 h-7 rounded-full border-2 border-[#0d0d14]" />
                                                                 ) : (
-                                                                    <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t1.symbol.slice(0, 2)}</div>
+                                                                    <div className="absolute left-4 top-3 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border-2 border-[#0d0d14]">{t1.symbol.slice(0, 2)}</div>
                                                                 )}
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <div className="font-semibold text-sm truncate">{t0.symbol}/{t1.symbol}</div>
-                                                                <div className="text-[10px] text-gray-400">#{pos.tokenId.toString()} · {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}</div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-bold text-sm">{t0.symbol}/{t1.symbol}</span>
+                                                                    <span className="text-xs px-1.5 py-0.5 rounded-md bg-white/5 text-gray-400">{feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    <span className="text-xs text-gray-500">#{pos.tokenId.toString()}</span>
+                                                                    <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${
+                                                                        isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'bg-purple-500/15 text-purple-400' :
+                                                                        !hasTickData ? 'bg-gray-500/15 text-gray-400' :
+                                                                        inRange ? 'bg-green-500/15 text-green-400' : 'bg-orange-500/15 text-orange-400'
+                                                                    }`}>
+                                                                        {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'Full Range' :
+                                                                            !hasTickData ? '...' : inRange ? 'In Range' : 'Out of Range'}
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">CL</span>
-                                                    </div>
-
-                                                    {/* Stake to Earn Banner - for unstaked positions */}
-                                                    <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-cyan-500/10 border border-green-500/30 mb-2">
-                                                        <span className="text-lg"></span>
-                                                        <div className="flex-1">
-                                                            <div className="text-xs font-medium text-green-400">Earning trading fees!</div>
-                                                            <div className="text-[10px] text-gray-400">Already earning more than DragonSwap • Stake for extra WIND rewards</div>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => handleStakePosition(pos)}
-                                                            disabled={actionLoading}
-                                                            className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-yellow-500 text-black hover:bg-yellow-400 transition disabled:opacity-50"
-                                                        >
-                                                            Stake Now
-                                                        </button>
-                                                    </div>
-                                                    {/* Token Balances */}
-                                                    {(() => {
-                                                        const currentPoolTick = positionTicks[pos.tokenId.toString()];
-                                                        const hasTickData = currentPoolTick !== undefined;
-                                                        const inRange = hasTickData && isPositionInRange(currentPoolTick, pos.tickLower, pos.tickUpper);
-                                                        const amounts = hasTickData
-                                                            ? calculateTokenAmounts(pos.liquidity, pos.tickLower, pos.tickUpper, currentPoolTick, t0.decimals, t1.decimals)
-                                                            : { amount0: 0, amount1: 0 };
-
-                                                        // Calculate prices from ticks
-                                                        const priceLower = tickToPrice(pos.tickLower, t0.decimals, t1.decimals);
-                                                        const priceUpper = tickToPrice(pos.tickUpper, t0.decimals, t1.decimals);
-                                                        const currentPrice = hasTickData ? tickToPrice(currentPoolTick, t0.decimals, t1.decimals) : null;
-
-                                                        return (
-                                                            <>
-                                                                <div className="grid grid-cols-2 gap-2 text-sm mb-2">
-                                                                    <div className="p-2 rounded-lg bg-white/5">
-                                                                        <div className="text-[10px] text-gray-400 mb-0.5">{t0.symbol} Balance</div>
-                                                                        <div className="font-medium text-sm">
-                                                                            {hasTickData ? amounts.amount0.toFixed(amounts.amount0 < 0.01 ? 6 : 4) : <span className="text-gray-500">Loading...</span>}
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="p-2 rounded-lg bg-white/5">
-                                                                        <div className="text-[10px] text-gray-400 mb-0.5">{t1.symbol} Balance</div>
-                                                                        <div className="font-medium text-sm">
-                                                                            {hasTickData ? amounts.amount1.toFixed(amounts.amount1 < 0.01 ? 6 : 4) : <span className="text-gray-500">Loading...</span>}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* Price Range */}
-                                                                <div className="p-2 rounded-lg bg-white/5 mb-2">
-                                                                    <div className="flex items-center justify-between mb-1">
-                                                                        <span className="text-[10px] text-gray-400">Price Range ({t1.symbol}/{t0.symbol})</span>
-                                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'bg-purple-500/20 text-purple-400' :
-                                                                            !hasTickData ? 'bg-gray-500/20 text-gray-400' :
-                                                                                inRange ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                                                                            }`}>
-                                                                            {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'Full Range' :
-                                                                                !hasTickData ? 'Loading' : inRange ? 'In Range' : 'Out of Range'}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 text-sm">
-                                                                        {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? (
-                                                                            <span className="font-medium text-purple-300">0 to max (covers all prices)</span>
-                                                                        ) : (
-                                                                            <>
-                                                                                <span className="font-medium">{formatPrice(priceLower)}</span>
-                                                                                <span className="text-gray-500">→</span>
-                                                                                <span className="font-medium">{formatPrice(priceUpper)}</span>
-                                                                            </>
-                                                                        )}
-                                                                    </div>
-                                                                    {currentPrice !== null && !isExtremeTickRange(pos.tickLower, pos.tickUpper) && (
-                                                                        <div className="text-[10px] text-gray-400 mt-1">
-                                                                            Current: {formatPrice(currentPrice)}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-
-                                                                {/* Uncollected Fees */}
-                                                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                                                    <div>
-                                                                        <div className="text-[10px] text-gray-400">Uncollected {t0.symbol}</div>
-                                                                        <div className="font-medium text-green-400">
-                                                                            {parseFloat(formatUnits(pos.tokensOwed0, t0.decimals)).toFixed(6)}
-                                                                        </div>
-                                                                    </div>
-                                                                    <div>
-                                                                        <div className="text-[10px] text-gray-400">Uncollected {t1.symbol}</div>
-                                                                        <div className="font-medium text-green-400">
-                                                                            {parseFloat(formatUnits(pos.tokensOwed1, t1.decimals)).toFixed(6)}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/10">
-                                                                    <div className="p-2 rounded-lg bg-white/5">
-                                                                        <div className="text-[10px] text-gray-400 mb-0.5">Cost Basis (USD)</div>
-                                                                        <div className="font-semibold text-sm">{formatPrice(depositedUsd)}</div>
-                                                                        <div className="text-[10px] text-gray-500">deposited</div>
-                                                                    </div>
-                                                                    <div className="p-2 rounded-lg bg-white/5">
-                                                                        <div className="text-[10px] text-gray-400 mb-0.5">PnL (USD)</div>
-                                                                        <div className={`font-semibold text-sm ${pnlUsd >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatPrice(pnlUsd)}</div>
-                                                                        <div className={`text-[10px] ${pnlUsd >= 0 ? 'text-green-400/70' : 'text-red-400/70'}`}>{pnlUsd >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</div>
-                                                                    </div>
-                                                                    <div className="p-2 rounded-lg bg-white/5">
-                                                                        <div className="text-[10px] text-gray-400 mb-0.5">Fees Collected (USD)</div>
-                                                                        <div className="font-semibold text-sm text-green-400">{formatPrice(collectedUsd)}</div>
-                                                                        <div className="text-[10px] text-gray-500">collected</div>
-                                                                    </div>
-                                                                    <div className="p-2 rounded-lg bg-white/5">
-                                                                        <div className="text-[10px] text-gray-400 mb-0.5">Withdrawn (USD)</div>
-                                                                        <div className="font-semibold text-sm">{formatPrice(withdrawnUsd)}</div>
-                                                                        <div className="text-[10px] text-gray-500">withdrawn</div>
-                                                                    </div>
-                                                                </div>
-                                                            </>
-                                                        );
-                                                    })()}
-                                                    {/* Action Buttons - 2x2 grid on mobile, row on larger screens */}
-                                                    <div className="grid grid-cols-2 sm:flex gap-2 mt-4 pt-3 border-t border-white/10">
-                                                        <button
-                                                            onClick={() => openIncreaseLiquidityModal(pos)}
-                                                            disabled={actionLoading}
-                                                            className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
-                                                        >
-                                                            {actionLoading ? '...' : 'Increase'}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleCollectFees(pos)}
-                                                            disabled={actionLoading || (pos.tokensOwed0 <= BigInt(0) && pos.tokensOwed1 <= BigInt(0))}
-                                                            className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition disabled:opacity-50"
-                                                        >
-                                                            {actionLoading ? '...' : 'Collect'}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleRemoveLiquidity(pos)}
-                                                            disabled={actionLoading || pos.liquidity <= BigInt(0)}
-                                                            className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
-                                                        >
-                                                            {actionLoading ? '...' : 'Remove'}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleStakePosition(pos)}
-                                                            disabled={actionLoading}
-                                                            className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-50"
-                                                        >
-                                                            {actionLoading ? '...' : 'Stake'}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* V2 Positions */}
-                            {filteredAndSortedV2Positions.length > 0 && (
-                                <div>
-                                    <h4 className="text-sm text-gray-400 mb-3">V2 Pools</h4>
-                                    <div className="space-y-3">
-                                        {filteredAndSortedV2Positions.map((pos, i) => {
-                                            const t0 = getTokenInfo(pos.token0);
-                                            const t1 = getTokenInfo(pos.token1);
-                                            const logo0 = getTokenLogo(pos.token0);
-                                            const logo1 = getTokenLogo(pos.token1);
-                                            const isExpanded = expandedV2Position === pos.poolAddress;
-
-                                            return (
-                                                <div key={i} className="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
-                                                    {/* Clickable Header */}
-                                                    <button
-                                                        onClick={() => setExpandedV2Position(isExpanded ? null : pos.poolAddress)}
-                                                        className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            {/* Token pair logos */}
-                                                            <div className="relative w-12 h-7 flex-shrink-0">
-                                                                {logo0 ? (
-                                                                    <img src={logo0} alt={t0.symbol} className="absolute left-0 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
-                                                                ) : (
-                                                                    <div className="absolute left-0 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                                        {t0.symbol.slice(0, 2)}
-                                                                    </div>
-                                                                )}
-                                                                {logo1 ? (
-                                                                    <img src={logo1} alt={t1.symbol} className="absolute left-4 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
-                                                                ) : (
-                                                                    <div className="absolute left-4 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                                        {t1.symbol.slice(0, 2)}
+                                                        <div className="flex items-center gap-3 flex-shrink-0">
+                                                            <div className="text-right">
+                                                                <div className="font-bold text-sm">{formatPrice(pos.amountUSD || 0)}</div>
+                                                                {pnlUsd !== 0 && (
+                                                                    <div className={`text-xs ${pnlUsd >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                                        {pnlUsd >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
                                                                     </div>
                                                                 )}
                                                             </div>
-                                                            <div className="text-left">
-                                                                <div className="font-semibold">{t0.symbol}/{t1.symbol}</div>
-                                                                <div className="text-xs text-gray-400">
-                                                                    {pos.stable ? 'Stable' : 'Volatile'} • {parseFloat(formatUnits(pos.lpBalance, 18)).toFixed(6)} LP
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">V2</span>
-                                                            <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <svg className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                             </svg>
                                                         </div>
-                                                    </button>
-
-                                                    {/* Expanded Actions */}
-                                                    {isExpanded && (
-                                                        <div className="px-4 pb-4 border-t border-white/10">
-                                                            {/* Remove Liquidity Section */}
-                                                            <div className="mt-3">
-                                                                <div className="text-xs text-gray-400 mb-2">Withdraw Liquidity</div>
-                                                                <div className="grid grid-cols-4 gap-2">
-                                                                    <button
-                                                                        onClick={() => handleRemoveV2Liquidity(pos, 25)}
-                                                                        disabled={actionLoading}
-                                                                        className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
-                                                                    >
-                                                                        {actionLoading ? '...' : '25%'}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleRemoveV2Liquidity(pos, 50)}
-                                                                        disabled={actionLoading}
-                                                                        className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
-                                                                    >
-                                                                        {actionLoading ? '...' : '50%'}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleRemoveV2Liquidity(pos, 75)}
-                                                                        disabled={actionLoading}
-                                                                        className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
-                                                                    >
-                                                                        {actionLoading ? '...' : '75%'}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleRemoveV2Liquidity(pos, 100)}
-                                                                        disabled={actionLoading}
-                                                                        className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
-                                                                    >
-                                                                        {actionLoading ? '...' : 'MAX'}
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Info note */}
-                                                            <div className="mt-3 text-xs text-gray-500 text-center">
-                                                                V2 pools are deprecated unless you're trading tax tokens.
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {filteredAndSortedCLPositions.length === 0 && filteredAndSortedV2Positions.length === 0 && (
-                                <div className="text-center py-12">
-                                    {searchQuery ? (
-                                        <>
-                                            <p className="text-gray-400 mb-2">No positions found matching "{searchQuery}"</p>
-                                            <button
-                                                onClick={() => setSearchQuery('')}
-                                                className="text-sm text-primary hover:underline"
-                                            >
-                                                Clear search
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <p className="text-gray-400 mb-4">No LP positions found</p>
-                                            <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* Staked Tab */}
-                {activeTab === 'staked' && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        {/* Staked Positions List */}
-                        <div className="glass-card p-3 sm:p-4">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
-                                <div className="flex items-center justify-between w-full sm:w-auto">
-                                    <h3 className="font-semibold text-sm">Your Staked NFTs</h3>
-                                    {stakedPositions.length > 0 && (
-                                        <span className="text-xs text-green-400 sm:hidden">
-                                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Search and Sort Controls */}
-                                {stakedPositions.length > 0 && (
-                                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                                        {/* Search Input */}
-                                        <input
-                                            type="text"
-                                            placeholder="Search staked..."
-                                            value={stakedSearchQuery}
-                                            onChange={(e) => setStakedSearchQuery(e.target.value)}
-                                            className="flex-1 sm:flex-none sm:w-40 px-3 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
-                                        />
-
-                                        {/* Sort Dropdown */}
-                                        <div className="relative">
-                                            <select
-                                                value={stakedSortBy}
-                                                onChange={(e) => setStakedSortBy(e.target.value as 'value' | 'rewards' | 'recent')}
-                                                className="pl-3 pr-7 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
-                                            >
-                                                <option value="value">Value</option>
-                                                <option value="rewards">Rewards</option>
-                                                <option value="recent">Recent</option>
-                                            </select>
-                                            <svg className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                            </svg>
-                                        </div>
-
-                                        {/* Desktop rewards display */}
-                                        <span className="hidden sm:block text-xs text-green-400 whitespace-nowrap">
-                                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                            {loadingStaked ? (
-                                <div className="text-center py-8 text-gray-400">
-                                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                                    Loading...
-                                </div>
-                            ) : filteredAndSortedStakedPositions.length === 0 ? (
-                                <div className="text-center py-8">
-                                    {stakedSearchQuery ? (
-                                        <>
-                                            <p className="text-gray-400 text-sm mb-2">No staked positions found matching "{stakedSearchQuery}"</p>
-                                            <button
-                                                onClick={() => setStakedSearchQuery('')}
-                                                className="text-xs text-primary hover:underline"
-                                            >
-                                                Clear search
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <p className="text-gray-400 text-sm mb-3">No staked positions</p>
-                                            <Link href="/pools" className="btn-primary px-4 py-2 text-sm rounded-lg">Stake LP</Link>
-                                        </>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {filteredAndSortedStakedPositions.map((pos, i) => {
-                                        const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
-
-                                        return (
-                                            <div key={i} className="p-3 rounded-xl bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border border-yellow-500/20">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="relative w-12 h-7 flex-shrink-0">
-                                                            {getTokenLogo(pos.token0) ? (
-                                                                <img src={getTokenLogo(pos.token0)} alt={pos.token0Symbol} className="absolute left-0 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
-                                                            ) : (
-                                                                <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                                    {pos.token0Symbol.slice(0, 2)}
-                                                                </div>
-                                                            )}
-                                                            {getTokenLogo(pos.token1) ? (
-                                                                <img src={getTokenLogo(pos.token1)} alt={pos.token1Symbol} className="absolute left-4 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
-                                                            ) : (
-                                                                <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                                    {pos.token1Symbol.slice(0, 2)}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <div className="font-bold text-sm truncate">{pos.token0Symbol}/{pos.token1Symbol}</div>
-                                                            <div className="text-[10px] text-gray-400">
-                                                                #{pos.tokenId.toString()} · {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}
-                                                            </div>
-                                                        </div>
                                                     </div>
-                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-medium">
-                                                        Staked
-                                                    </span>
-                                                </div>
+                                                    {/* Mini range bar - always visible */}
+                                                    {!isExtremeTickRange(pos.tickLower, pos.tickUpper) && (
+                                                        <PriceRangeBar
+                                                            currentPrice={currentPrice}
+                                                            priceLower={priceLower}
+                                                            priceUpper={priceUpper}
+                                                            isFullRange={isExtremeTickRange(pos.tickLower, pos.tickUpper)}
+                                                            compact={true}
+                                                        />
+                                                    )}
+                                                </button>
 
-                                                {/* Token Amounts */}
-                                                {(() => {
-                                                    const amounts = calculateTokenAmounts(
-                                                        pos.liquidity,
-                                                        pos.tickLower,
-                                                        pos.tickUpper,
-                                                        pos.currentTick,
-                                                        pos.token0Decimals,
-                                                        pos.token1Decimals
-                                                    );
-                                                    const inRange = pos.currentTick >= pos.tickLower && pos.currentTick < pos.tickUpper;
-
-                                                    return (
-                                                        <div className="text-xs mb-2 px-1 space-y-1">
-                                                            {/* Token balances */}
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                                <div className="p-1.5 rounded bg-white/5">
-                                                                    <div className="text-[9px] text-gray-400">{pos.token0Symbol}</div>
-                                                                    <div className="font-medium text-sm">
-                                                                        {amounts.amount0.toFixed(amounts.amount0 < 0.01 ? 6 : 2)}
-                                                                    </div>
+                                                {/* Expanded Details */}
+                                                {isExpanded && (
+                                                    <div className="px-4 pb-4 space-y-3 border-t border-white/5">
+                                                        {/* Token Balances */}
+                                                        <div className="grid grid-cols-2 gap-2 pt-3">
+                                                            <div className="p-3 rounded-xl bg-white/5">
+                                                                <div className="flex items-center gap-1.5 mb-1">
+                                                                    {getTokenLogo(pos.token0) ? (
+                                                                        <img src={getTokenLogo(pos.token0)} alt={t0.symbol} className="w-4 h-4 rounded-full" />
+                                                                    ) : (
+                                                                        <div className="w-4 h-4 rounded-full bg-secondary/30 flex items-center justify-center text-[7px] font-bold">{t0.symbol.slice(0, 2)}</div>
+                                                                    )}
+                                                                    <span className="text-xs text-gray-400">{t0.symbol}</span>
                                                                 </div>
-                                                                <div className="p-1.5 rounded bg-white/5">
-                                                                    <div className="text-[9px] text-gray-400">{pos.token1Symbol}</div>
-                                                                    <div className="font-medium text-sm">
-                                                                        {amounts.amount1.toFixed(amounts.amount1 < 0.01 ? 6 : 2)}
+                                                                <div className="font-semibold text-sm">
+                                                                    {hasTickData ? amounts.amount0.toFixed(amounts.amount0 < 0.01 ? 6 : 4) : <span className="text-gray-500">...</span>}
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3 rounded-xl bg-white/5">
+                                                                <div className="flex items-center gap-1.5 mb-1">
+                                                                    {getTokenLogo(pos.token1) ? (
+                                                                        <img src={getTokenLogo(pos.token1)} alt={t1.symbol} className="w-4 h-4 rounded-full" />
+                                                                    ) : (
+                                                                        <div className="w-4 h-4 rounded-full bg-primary/30 flex items-center justify-center text-[7px] font-bold">{t1.symbol.slice(0, 2)}</div>
+                                                                    )}
+                                                                    <span className="text-xs text-gray-400">{t1.symbol}</span>
+                                                                </div>
+                                                                <div className="font-semibold text-sm">
+                                                                    {hasTickData ? amounts.amount1.toFixed(amounts.amount1 < 0.01 ? 6 : 4) : <span className="text-gray-500">...</span>}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Price Range */}
+                                                        <div className="p-3 rounded-xl bg-white/5">
+                                                            <div className="flex items-center justify-between mb-0.5">
+                                                                <span className="text-xs text-gray-400">Price Range</span>
+                                                                <span className="text-[10px] text-gray-600">{t1.symbol}/{t0.symbol}</span>
+                                                            </div>
+                                                            {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? (
+                                                                <div className="text-xs font-medium text-purple-300 mt-1">Full Range (all prices)</div>
+                                                            ) : (
+                                                                <PriceRangeBar
+                                                                    currentPrice={currentPrice}
+                                                                    priceLower={priceLower}
+                                                                    priceUpper={priceUpper}
+                                                                    isFullRange={false}
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        {/* Uncollected Fees */}
+                                                        {(pos.tokensOwed0 > BigInt(0) || pos.tokensOwed1 > BigInt(0)) && (
+                                                            <div className="p-3 rounded-xl bg-green-500/5 border border-green-500/10">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <span className="text-xs text-gray-400">Uncollected Fees</span>
+                                                                    <span className="text-xs font-semibold text-green-400">{formatPrice(totalFeesUsd)}</span>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-gray-500">{t0.symbol}</span>
+                                                                        <span className="text-green-400 font-medium">{parseFloat(formatUnits(pos.tokensOwed0, t0.decimals)).toFixed(6)}</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-gray-500">{t1.symbol}</span>
+                                                                        <span className="text-green-400 font-medium">{parseFloat(formatUnits(pos.tokensOwed1, t1.decimals)).toFixed(6)}</span>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            {/* Range status */}
-                                                            <div className="flex justify-between items-center">
-                                                                <span className="text-gray-400">Range:</span>
-                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isFullRangePosition(pos.tickLower, pos.tickUpper)
-                                                                    ? 'bg-purple-500/20 text-purple-400'
-                                                                    : inRange
-                                                                        ? 'bg-green-500/20 text-green-400'
-                                                                        : 'bg-yellow-500/20 text-yellow-400'
-                                                                    }`}>
-                                                                    {isFullRangePosition(pos.tickLower, pos.tickUpper)
-                                                                        ? 'Full Range'
-                                                                        : inRange
-                                                                            ? 'In Range'
-                                                                            : 'Out of Range'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()}
-
-                                                {/* Pending rewards */}
-                                                <div className="text-xs mb-2 px-1">
-                                                    <span className="text-green-400 font-medium">
-                                                        {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND pending
-                                                    </span>
-                                                </div>
-
-
-                                                {/* Action Buttons - Compact */}
-                                                <div className="flex gap-1.5">
-                                                    <button
-                                                        onClick={() => handleClaimRewards(pos)}
-                                                        disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
-                                                        className="flex-1 py-1.5 text-[10px] rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50 font-medium"
-                                                    >
-                                                        Claim
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUnstakePosition(pos)}
-                                                        disabled={actionLoading}
-                                                        className="flex-1 py-1.5 text-[10px] rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition disabled:opacity-50 font-medium"
-                                                    >
-                                                        Unstake
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleBatchExitPosition(pos)}
-                                                        disabled={actionLoading}
-                                                        className="flex-1 py-1.5 text-[10px] rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 font-medium"
-                                                        title="Unstake (auto-claims rewards), remove liquidity & collect fees"
-                                                    >
-                                                        Unstake & Remove
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* Locks Tab */}
-                {activeTab === 'locks' && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <div className="glass-card p-3 sm:p-4">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="font-semibold text-sm">Your veNFT Locks</h3>
-                                <Link href="/vote" className="text-[10px] text-primary font-medium">
-                                    Lock More →
-                                </Link>
-                            </div>
-                            {loadingVeNFTs ? (
-                                <div className="text-center py-6 text-gray-400 text-sm">Loading...</div>
-                            ) : veNFTs.length === 0 ? (
-                                <div className="text-center py-6">
-                                    <p className="text-gray-400 text-sm mb-3">No WIND locked yet</p>
-                                    <Link href="/vote" className="btn-primary px-4 py-2 text-xs rounded-lg">Lock WIND</Link>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {veNFTs.map((nft, i) => {
-                                        const lockEndDate = new Date(Number(nft.end) * 1000);
-                                        const isExpired = !nft.isPermanent && Number(nft.end) < Date.now() / 1000;
-                                        return (
-                                            <div key={i} className="p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="font-semibold text-sm">veNFT #{nft.tokenId.toString()}</div>
-                                                    {nft.isPermanent && (
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">Permanent</span>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs">
-                                                    <div>
-                                                        <span className="text-gray-400">Locked: </span>
-                                                        <span className="font-medium">{parseFloat(formatUnits(nft.amount, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} WIND</span>
-                                                    </div>
-                                                    <div className="text-primary font-medium">
-                                                        {parseFloat(formatUnits(nft.votingPower, 18)).toFixed(0)} veWIND
-                                                    </div>
-                                                </div>
-                                                {!nft.isPermanent && (
-                                                    <div className="text-[10px] text-gray-400 mt-1">
-                                                        {isExpired ? (
-                                                            <span className="text-yellow-400">Unlocked - go to Vote page to withdraw</span>
-                                                        ) : (
-                                                            <>Unlocks {lockEndDate.toLocaleDateString()}</>
                                                         )}
+
+                                                        {/* PnL Details */}
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div className="p-3 rounded-xl bg-white/5">
+                                                                <div className="text-xs text-gray-500 mb-1">Deposited</div>
+                                                                <div className="font-semibold text-sm">{formatPrice(depositedUsd)}</div>
+                                                            </div>
+                                                            <div className="p-3 rounded-xl bg-white/5">
+                                                                <div className="text-xs text-gray-500 mb-1">PnL</div>
+                                                                <div className={`font-semibold text-sm ${pnlUsd >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                                    {pnlUsd >= 0 ? '+' : ''}{formatPrice(pnlUsd)}
+                                                                </div>
+                                                                <div className={`text-xs ${pnlUsd >= 0 ? 'text-green-400/60' : 'text-red-400/60'}`}>
+                                                                    {pnlUsd >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-3 rounded-xl bg-white/5">
+                                                                <div className="text-xs text-gray-500 mb-1">Fees Earned</div>
+                                                                <div className="font-semibold text-sm text-green-400">{formatPrice(collectedUsd)}</div>
+                                                            </div>
+                                                            <div className="p-3 rounded-xl bg-white/5">
+                                                                <div className="text-xs text-gray-500 mb-1">Withdrawn</div>
+                                                                <div className="font-semibold text-sm">{formatPrice(withdrawnUsd)}</div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Stake CTA - subtle inline */}
+                                                        <div className="flex items-center justify-between p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/15">
+                                                            <div className="text-xs">
+                                                                <span className="text-gray-300">Earning fees</span>
+                                                                <span className="text-gray-500"> · Stake for bonus WIND</span>
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleStakePosition(pos); }}
+                                                                disabled={actionLoading}
+                                                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition disabled:opacity-50"
+                                                            >
+                                                                Stake
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Action Buttons */}
+                                                        <div className="grid grid-cols-3 gap-2 pt-1">
+                                                            <button
+                                                                onClick={() => openIncreaseLiquidityModal(pos)}
+                                                                disabled={actionLoading}
+                                                                className="py-2.5 text-xs font-medium rounded-xl bg-white/5 text-gray-300 hover:bg-white/10 transition disabled:opacity-50"
+                                                            >
+                                                                {actionLoading ? '...' : 'Increase'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleCollectFees(pos)}
+                                                                disabled={actionLoading || (pos.tokensOwed0 <= BigInt(0) && pos.tokensOwed1 <= BigInt(0))}
+                                                                className="py-2.5 text-xs font-medium rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
+                                                            >
+                                                                {actionLoading ? '...' : 'Collect Fees'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRemoveLiquidity(pos)}
+                                                                disabled={actionLoading || pos.liquidity <= BigInt(0)}
+                                                                className="py-2.5 text-xs font-medium rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                            >
+                                                                {actionLoading ? '...' : 'Remove'}
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
                                         );
                                     })}
-                                    {/* Manage on Vote Page */}
-                                    <Link
-                                        href="/vote"
-                                        className="block w-full py-2 text-center text-xs text-primary hover:bg-primary/10 rounded-lg transition"
-                                    >
-                                        Manage Locks on Vote Page →
-                                    </Link>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
+
+                        {/* V2 Positions */}
+                        {filteredAndSortedV2Positions.length > 0 && (
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">V2 Pools</span>
+                                    <span className="text-xs text-gray-600">{filteredAndSortedV2Positions.length}</span>
+                                </div>
+                                <div className="space-y-2">
+                                    {filteredAndSortedV2Positions.map((pos, i) => {
+                                        const t0 = getTokenInfo(pos.token0);
+                                        const t1 = getTokenInfo(pos.token1);
+                                        const logo0 = getTokenLogo(pos.token0);
+                                        const logo1 = getTokenLogo(pos.token1);
+                                        const isExpanded = expandedV2Position === pos.poolAddress;
+
+                                        return (
+                                            <div key={i} className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden hover:border-white/20 transition-colors">
+                                                {/* Clickable Header */}
+                                                <button
+                                                    onClick={() => setExpandedV2Position(isExpanded ? null : pos.poolAddress)}
+                                                    className="w-full p-4 flex items-center justify-between"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="relative w-10 h-10 flex-shrink-0">
+                                                            {logo0 ? (
+                                                                <img src={logo0} alt={t0.symbol} className="absolute left-0 top-0 w-7 h-7 rounded-full border-2 border-[#0d0d14]" />
+                                                            ) : (
+                                                                <div className="absolute left-0 top-0 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border-2 border-[#0d0d14]">
+                                                                    {t0.symbol.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                            {logo1 ? (
+                                                                <img src={logo1} alt={t1.symbol} className="absolute left-4 top-3 w-7 h-7 rounded-full border-2 border-[#0d0d14]" />
+                                                            ) : (
+                                                                <div className="absolute left-4 top-3 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border-2 border-[#0d0d14]">
+                                                                    {t1.symbol.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-left">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-sm">{t0.symbol}/{t1.symbol}</span>
+                                                                <span className="text-xs px-1.5 py-0.5 rounded-md bg-primary/15 text-primary">V2</span>
+                                                            </div>
+                                                            <div className="text-xs text-gray-400 mt-0.5">
+                                                                {pos.stable ? 'Stable' : 'Volatile'} · {parseFloat(formatUnits(pos.lpBalance, 18)).toFixed(6)} LP
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <svg className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </button>
+
+                                                {/* Expanded Actions */}
+                                                {isExpanded && (
+                                                    <div className="px-4 pb-4 border-t border-white/5">
+                                                        <div className="pt-3">
+                                                            <div className="text-xs text-gray-400 mb-2">Withdraw Liquidity</div>
+                                                            <div className="grid grid-cols-4 gap-2">
+                                                                {[25, 50, 75].map(pct => (
+                                                                    <button
+                                                                        key={pct}
+                                                                        onClick={() => handleRemoveV2Liquidity(pos, pct)}
+                                                                        disabled={actionLoading}
+                                                                        className="py-2.5 text-xs font-medium rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                                    >
+                                                                        {actionLoading ? '...' : `${pct}%`}
+                                                                    </button>
+                                                                ))}
+                                                                <button
+                                                                    onClick={() => handleRemoveV2Liquidity(pos, 100)}
+                                                                    disabled={actionLoading}
+                                                                    className="py-2.5 text-xs font-medium rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                                >
+                                                                    {actionLoading ? '...' : 'MAX'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-3 text-xs text-gray-500 text-center">
+                                                            V2 pools are deprecated unless you're trading tax tokens.
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {filteredAndSortedCLPositions.length === 0 && filteredAndSortedV2Positions.length === 0 && (
+                            <div className="glass-card text-center py-16 px-6">
+                                {searchQuery ? (
+                                    <>
+                                        <p className="text-gray-400 mb-2">No positions found matching &ldquo;{searchQuery}&rdquo;</p>
+                                        <button
+                                            onClick={() => setSearchQuery('')}
+                                            className="text-sm text-primary hover:underline"
+                                        >
+                                            Clear search
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-gray-400 mb-4">No LP positions yet</p>
+                                        <Link href="/pools" className="btn-primary px-6 py-2.5 rounded-xl text-sm">Add Liquidity</Link>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+
+                {/* Staked Tab */}
+                {activeTab === 'staked' && (
+                    <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        {/* Total Rewards Banner */}
+                        {stakedPositions.length > 0 && totalPendingRewards > BigInt(0) && (
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-0.5">Total Pending Rewards</div>
+                                    <div className="text-lg font-bold text-green-400">
+                                        {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
+                                    </div>
+                                    {windPrice > 0 && (
+                                        <div className="text-xs text-gray-500">{formatPrice(pendingRewardsUsd)}</div>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={handleClaimAllRewards}
+                                    disabled={actionLoading}
+                                    className="px-5 py-2.5 text-sm font-bold rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50 hover:brightness-110 transition"
+                                >
+                                    {actionLoading ? '...' : 'Claim All'}
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Search and Sort */}
+                        {stakedPositions.length > 0 && (
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    <input
+                                        type="text"
+                                        placeholder="Search staked positions..."
+                                        value={stakedSearchQuery}
+                                        onChange={(e) => setStakedSearchQuery(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-2 text-sm rounded-xl bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none"
+                                    />
+                                </div>
+                                <div className="relative">
+                                    <select
+                                        value={stakedSortBy}
+                                        onChange={(e) => setStakedSortBy(e.target.value as 'value' | 'rewards' | 'recent')}
+                                        className="pl-3 pr-8 py-2 text-sm rounded-xl bg-white/5 border border-white/10 focus:border-primary/50 focus:outline-none cursor-pointer appearance-none"
+                                    >
+                                        <option value="value">Value</option>
+                                        <option value="rewards">Rewards</option>
+                                        <option value="recent">Recent</option>
+                                    </select>
+                                    <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Staked Positions List */}
+                        {loadingStaked ? (
+                            <div className="glass-card text-center py-12 text-gray-400">
+                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                <div className="text-sm">Loading staked positions...</div>
+                            </div>
+                        ) : filteredAndSortedStakedPositions.length === 0 ? (
+                            <div className="glass-card text-center py-16 px-6">
+                                {stakedSearchQuery ? (
+                                    <>
+                                        <p className="text-gray-400 text-sm mb-2">No staked positions matching &ldquo;{stakedSearchQuery}&rdquo;</p>
+                                        <button onClick={() => setStakedSearchQuery('')} className="text-xs text-primary hover:underline">
+                                            Clear search
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-gray-400 text-sm mb-4">No staked positions yet</p>
+                                        <Link href="/pools" className="btn-primary px-6 py-2.5 rounded-xl text-sm">Stake LP</Link>
+                                    </>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {filteredAndSortedStakedPositions.map((pos, i) => {
+                                    const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
+                                    const amounts = calculateTokenAmounts(pos.liquidity, pos.tickLower, pos.tickUpper, pos.currentTick, pos.token0Decimals, pos.token1Decimals);
+                                    const inRange = pos.currentTick >= pos.tickLower && pos.currentTick < pos.tickUpper;
+                                    const rewardsAmount = parseFloat(formatUnits(pos.pendingRewards, 18));
+                                    const stakedPriceLower = tickToPrice(pos.tickLower, pos.token0Decimals, pos.token1Decimals);
+                                    const stakedPriceUpper = tickToPrice(pos.tickUpper, pos.token0Decimals, pos.token1Decimals);
+                                    const stakedCurrentPrice = tickToPrice(pos.currentTick, pos.token0Decimals, pos.token1Decimals);
+                                    const stakedIsFullRange = isFullRangePosition(pos.tickLower, pos.tickUpper);
+
+                                    return (
+                                        <div key={i} className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden hover:border-white/20 transition-colors">
+                                            {/* Header */}
+                                            <div className="p-4">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        {/* Token logos */}
+                                                        <div className="relative w-10 h-10 flex-shrink-0">
+                                                            {getTokenLogo(pos.token0) ? (
+                                                                <img src={getTokenLogo(pos.token0)} alt={pos.token0Symbol} className="absolute left-0 top-0 w-7 h-7 rounded-full border-2 border-[#0d0d14]" />
+                                                            ) : (
+                                                                <div className="absolute left-0 top-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border-2 border-[#0d0d14]">
+                                                                    {pos.token0Symbol.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                            {getTokenLogo(pos.token1) ? (
+                                                                <img src={getTokenLogo(pos.token1)} alt={pos.token1Symbol} className="absolute left-4 top-3 w-7 h-7 rounded-full border-2 border-[#0d0d14]" />
+                                                            ) : (
+                                                                <div className="absolute left-4 top-3 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border-2 border-[#0d0d14]">
+                                                                    {pos.token1Symbol.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-sm">{pos.token0Symbol}/{pos.token1Symbol}</span>
+                                                                <span className="text-xs px-1.5 py-0.5 rounded-md bg-white/5 text-gray-400">{feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className="text-xs text-gray-500">#{pos.tokenId.toString()}</span>
+                                                                <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${
+                                                                    isFullRangePosition(pos.tickLower, pos.tickUpper) ? 'bg-purple-500/15 text-purple-400' :
+                                                                    inRange ? 'bg-green-500/15 text-green-400' : 'bg-orange-500/15 text-orange-400'
+                                                                }`}>
+                                                                    {isFullRangePosition(pos.tickLower, pos.tickUpper) ? 'Full Range' : inRange ? 'In Range' : 'Out of Range'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-xs px-2 py-1 rounded-lg bg-yellow-500/15 text-yellow-400 font-medium flex-shrink-0">
+                                                        Staked
+                                                    </span>
+                                                </div>
+
+                                                {/* Range visualization */}
+                                                {!stakedIsFullRange && (
+                                                    <div className="mb-2">
+                                                        <PriceRangeBar
+                                                            currentPrice={stakedCurrentPrice}
+                                                            priceLower={stakedPriceLower}
+                                                            priceUpper={stakedPriceUpper}
+                                                            isFullRange={stakedIsFullRange}
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* Token Amounts & Rewards Row */}
+                                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                                    <div className="p-2.5 rounded-xl bg-white/5">
+                                                        <div className="flex items-center gap-1 mb-1">
+                                                            {getTokenLogo(pos.token0) ? (
+                                                                <img src={getTokenLogo(pos.token0)} alt={pos.token0Symbol} className="w-3.5 h-3.5 rounded-full" />
+                                                            ) : null}
+                                                            <span className="text-xs text-gray-400">{pos.token0Symbol}</span>
+                                                        </div>
+                                                        <div className="font-semibold text-sm">
+                                                            {amounts.amount0.toFixed(amounts.amount0 < 0.01 ? 4 : 2)}
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-2.5 rounded-xl bg-white/5">
+                                                        <div className="flex items-center gap-1 mb-1">
+                                                            {getTokenLogo(pos.token1) ? (
+                                                                <img src={getTokenLogo(pos.token1)} alt={pos.token1Symbol} className="w-3.5 h-3.5 rounded-full" />
+                                                            ) : null}
+                                                            <span className="text-xs text-gray-400">{pos.token1Symbol}</span>
+                                                        </div>
+                                                        <div className="font-semibold text-sm">
+                                                            {amounts.amount1.toFixed(amounts.amount1 < 0.01 ? 4 : 2)}
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-2.5 rounded-xl bg-green-500/5 border border-green-500/10">
+                                                        <div className="text-xs text-gray-400 mb-1">Rewards</div>
+                                                        <div className="font-bold text-sm text-green-400">
+                                                            {rewardsAmount.toFixed(rewardsAmount < 0.01 ? 6 : 4)}
+                                                        </div>
+                                                        <div className="text-[10px] text-green-400/60">WIND</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Action Buttons */}
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <button
+                                                        onClick={() => handleClaimRewards(pos)}
+                                                        disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
+                                                        className="py-2 text-xs font-medium rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-40"
+                                                    >
+                                                        {actionLoading ? '...' : 'Claim'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleUnstakePosition(pos)}
+                                                        disabled={actionLoading}
+                                                        className="py-2 text-xs font-medium rounded-xl bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-40"
+                                                    >
+                                                        {actionLoading ? '...' : 'Unstake'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleBatchExitPosition(pos)}
+                                                        disabled={actionLoading}
+                                                        className="py-2 text-xs font-medium rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-40"
+                                                        title="Unstake + remove liquidity + collect fees"
+                                                    >
+                                                        {actionLoading ? '...' : 'Exit'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+
+                {/* Locks Tab */}
+                {activeTab === 'locks' && (
+                    <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        {/* Summary */}
+                        {veNFTs.length > 0 && (
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                <div>
+                                    <div className="text-xs text-gray-400 mb-0.5">Total Locked</div>
+                                    <div className="text-lg font-bold text-primary">
+                                        {parseFloat(formatUnits(totalLockedWind, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} WIND
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {parseFloat(formatUnits(totalVotingPower, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} veWIND voting power
+                                    </div>
+                                </div>
+                                <Link href="/vote" className="px-4 py-2 text-sm font-medium rounded-xl bg-primary/20 text-primary hover:bg-primary/30 transition">
+                                    Lock More
+                                </Link>
+                            </div>
+                        )}
+
+                        {loadingVeNFTs ? (
+                            <div className="glass-card text-center py-12 text-gray-400">
+                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                <div className="text-sm">Loading locks...</div>
+                            </div>
+                        ) : veNFTs.length === 0 ? (
+                            <div className="glass-card text-center py-16 px-6">
+                                <p className="text-gray-400 text-sm mb-4">No WIND locked yet</p>
+                                <Link href="/vote" className="btn-primary px-6 py-2.5 rounded-xl text-sm">Lock WIND</Link>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {veNFTs.map((nft, i) => {
+                                    const lockEndDate = new Date(Number(nft.end) * 1000);
+                                    const isExpired = !nft.isPermanent && Number(nft.end) < Date.now() / 1000;
+                                    return (
+                                        <div key={i} className="rounded-2xl bg-white/[0.03] border border-white/10 p-4 hover:border-white/20 transition-colors">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-sm">veNFT #{nft.tokenId.toString()}</span>
+                                                    {nft.isPermanent && (
+                                                        <span className="text-xs px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium">Permanent</span>
+                                                    )}
+                                                    {isExpired && !nft.isPermanent && (
+                                                        <span className="text-xs px-1.5 py-0.5 rounded-md bg-yellow-500/15 text-yellow-400 font-medium">Unlocked</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="p-3 rounded-xl bg-white/5">
+                                                    <div className="text-xs text-gray-400 mb-1">Locked Amount</div>
+                                                    <div className="font-bold text-sm">
+                                                        {parseFloat(formatUnits(nft.amount, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} WIND
+                                                    </div>
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-primary/5 border border-primary/10">
+                                                    <div className="text-xs text-gray-400 mb-1">Voting Power</div>
+                                                    <div className="font-bold text-sm text-primary">
+                                                        {parseFloat(formatUnits(nft.votingPower, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} veWIND
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {!nft.isPermanent && (
+                                                <div className="mt-2 text-xs text-gray-500">
+                                                    {isExpired ? (
+                                                        <span className="text-yellow-400">Expired - withdraw on Vote page</span>
+                                                    ) : (
+                                                        <>Unlocks {lockEndDate.toLocaleDateString()}</>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                <Link
+                                    href="/vote"
+                                    className="block w-full py-3 text-center text-xs text-primary hover:bg-primary/5 rounded-xl transition font-medium"
+                                >
+                                    Manage Locks on Vote Page
+                                </Link>
+                            </div>
+                        )}
                     </motion.div>
                 )}
 
                 {/* Rewards Tab */}
                 {activeTab === 'rewards' && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <div className="glass-card p-3 sm:p-4">
-                            {/* Header with Claim All */}
-                            <div className="flex items-center justify-between mb-3">
-                                <div>
-                                    <div className="text-xl sm:text-2xl font-bold text-green-400">
-                                        {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
-                                    </div>
-                                    <div className="text-[10px] text-gray-400">
-                                        From {stakedPositions.length} position{stakedPositions.length !== 1 ? 's' : ''}
-                                    </div>
+                    <motion.div className="space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        {/* Rewards Hero */}
+                        <div className="flex items-center justify-between p-5 rounded-2xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                            <div>
+                                <div className="text-xs text-gray-400 mb-1">Total Claimable</div>
+                                <div className="text-2xl font-bold text-green-400">
+                                    {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
                                 </div>
-                                <button
-                                    onClick={handleClaimAllRewards}
-                                    disabled={actionLoading || totalPendingRewards <= BigInt(0)}
-                                    className="px-3 py-2 text-xs font-bold rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50"
-                                >
-                                    {actionLoading ? '...' : 'Claim All'}
-                                </button>
+                                {windPrice > 0 && (
+                                    <div className="text-xs text-gray-500 mt-0.5">{formatPrice(pendingRewardsUsd)}</div>
+                                )}
                             </div>
+                            <button
+                                onClick={handleClaimAllRewards}
+                                disabled={actionLoading || totalPendingRewards <= BigInt(0)}
+                                className="px-5 py-2.5 text-sm font-bold rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50 hover:brightness-110 transition"
+                            >
+                                {actionLoading ? '...' : 'Claim All'}
+                            </button>
+                        </div>
 
-                            {/* Rewards List */}
-                            {loadingStaked ? (
-                                <div className="text-center py-6 text-gray-400 text-sm">Loading...</div>
-                            ) : stakedPositions.length === 0 ? (
-                                <div className="text-center py-6">
-                                    <p className="text-gray-400 text-sm mb-2">No staked positions</p>
-                                    <Link href="/pools" className="btn-primary px-4 py-2 text-xs rounded-lg">Stake LP</Link>
-                                </div>
-                            ) : (
-                                <div className="space-y-1.5">
-                                    {stakedPositions.map((pos, i) => (
-                                        <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-white/5">
-                                            <div className="min-w-0">
-                                                <div className="font-medium text-sm truncate">{pos.token0Symbol}/{pos.token1Symbol}</div>
-                                                <div className="text-[10px] text-gray-400">#{pos.tokenId.toString()}</div>
+                        {/* Rewards by Position */}
+                        {loadingStaked ? (
+                            <div className="glass-card text-center py-12 text-gray-400">
+                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                <div className="text-sm">Loading...</div>
+                            </div>
+                        ) : stakedPositions.length === 0 ? (
+                            <div className="glass-card text-center py-16 px-6">
+                                <p className="text-gray-400 text-sm mb-4">Stake positions to earn WIND rewards</p>
+                                <Link href="/pools" className="btn-primary px-6 py-2.5 rounded-xl text-sm">Stake LP</Link>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {stakedPositions
+                                    .sort((a, b) => Number(b.pendingRewards - a.pendingRewards))
+                                    .map((pos, i) => {
+                                    const rewardsAmount = parseFloat(formatUnits(pos.pendingRewards, 18));
+                                    return (
+                                        <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-colors">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="relative w-8 h-8 flex-shrink-0">
+                                                    {getTokenLogo(pos.token0) ? (
+                                                        <img src={getTokenLogo(pos.token0)} alt={pos.token0Symbol} className="absolute left-0 top-0 w-5 h-5 rounded-full border border-[#0d0d14]" />
+                                                    ) : (
+                                                        <div className="absolute left-0 top-0 w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[7px] font-bold border border-[#0d0d14]">{pos.token0Symbol.slice(0, 2)}</div>
+                                                    )}
+                                                    {getTokenLogo(pos.token1) ? (
+                                                        <img src={getTokenLogo(pos.token1)} alt={pos.token1Symbol} className="absolute left-3 top-3 w-5 h-5 rounded-full border border-[#0d0d14]" />
+                                                    ) : (
+                                                        <div className="absolute left-3 top-3 w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[7px] font-bold border border-[#0d0d14]">{pos.token1Symbol.slice(0, 2)}</div>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="font-semibold text-sm">{pos.token0Symbol}/{pos.token1Symbol}</div>
+                                                    <div className="text-xs text-gray-500">#{pos.tokenId.toString()}</div>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-semibold text-green-400">
-                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)}
-                                                </span>
+                                            <div className="flex items-center gap-3 flex-shrink-0">
+                                                <div className="text-right">
+                                                    <div className="text-sm font-bold text-green-400">{rewardsAmount.toFixed(4)}</div>
+                                                    <div className="text-[10px] text-green-400/60">WIND</div>
+                                                </div>
                                                 <button
                                                     onClick={() => handleClaimRewards(pos)}
                                                     disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
-                                                    className="px-2 py-1 text-[10px] rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
+                                                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25 transition disabled:opacity-40"
                                                 >
                                                     Claim
                                                 </button>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </motion.div>
                 )}
 
