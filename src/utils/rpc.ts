@@ -1,7 +1,7 @@
 // Centralized RPC configuration for Sei network
 // Single RPC endpoint (Alchemy) for all categories
 
-const DEFAULT_ALCHEMY_SEI_RPC = 'https://sei-mainnet.g.alchemy.com/v2/INhvk7-hUrgf5niZBGbae';
+const DEFAULT_ALCHEMY_SEI_RPC = 'https://sei-evm-rpc.publicnode.com';
 
 function getAlchemyRpc(): string {
     // Prefer explicit env var. Next.js exposes NEXT_PUBLIC_* to the client.
