@@ -473,6 +473,27 @@ export const CL_FACTORY_ABI = [
         stateMutability: 'view',
         type: 'function',
     },
+    {
+        inputs: [{ name: 'tickSpacing', type: 'int24' }, { name: 'fee', type: 'uint24' }],
+        name: 'enableTickSpacing',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'owner',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tickSpacing', type: 'int24' }],
+        name: 'tickSpacingToFee',
+        outputs: [{ name: '', type: 'uint24' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
 ] as const;
 
 // Pool ABI
@@ -1482,6 +1503,13 @@ export const MINTER_ABI = [
     },
     {
         inputs: [],
+        name: 'weekly',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
         name: 'tailEmissionRate',
         outputs: [{ name: '', type: 'uint256' }],
         stateMutability: 'view',
@@ -1492,6 +1520,126 @@ export const MINTER_ABI = [
         name: 'activePeriod',
         outputs: [{ name: '', type: 'uint256' }],
         stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'epochCount',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'teamRate',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'initialized',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'team',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'updatePeriod',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+] as const;
+
+// Voter ABI (for admin operations)
+export const VOTER_ABI = [
+    {
+        inputs: [{ name: '_token', type: 'address' }, { name: '_bool', type: 'bool' }],
+        name: 'whitelistToken',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }, { name: '_bool', type: 'bool' }],
+        name: 'whitelistNFT',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_poolFactory', type: 'address' }, { name: '_pool', type: 'address' }],
+        name: 'createGauge',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_token', type: 'address' }],
+        name: 'isWhitelistedToken',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'governor',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_gauge', type: 'address' }],
+        name: 'killGauge',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_pool', type: 'address' }],
+        name: 'gauges',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'length',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_start', type: 'uint256' }, { name: '_finish', type: 'uint256' }],
+        name: 'distribute',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+] as const;
+
+// Fee Reward ABI (for voting rewards)
+export const FEE_REWARD_ABI = [
+    {
+        inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
+        name: 'earned',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }, { name: 'tokens', type: 'address[]' }],
+        name: 'getReward',
+        outputs: [],
+        stateMutability: 'nonpayable',
         type: 'function',
     },
 ] as const;

@@ -16,7 +16,7 @@ import { EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 import { SUBGRAPH_URL, readSubgraphJson } from '@/config/subgraph';
 import { usePoolData } from '@/providers/PoolDataProvider';
-import { VOTER_DISTRIBUTE_ABI } from '@/config/abis';
+import { VOTER_DISTRIBUTE_ABI, FEE_REWARD_ABI } from '@/config/abis';
 
 export default function VotePage() {
 
@@ -133,24 +133,6 @@ export default function VotePage() {
         lastTs: 0,
         inFlight: false,
     });
-
-    // ABI for fee reward contracts (earned + getReward)
-    const FEE_REWARD_ABI = [
-        {
-            inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
-            name: 'earned',
-            outputs: [{ name: '', type: 'uint256' }],
-            stateMutability: 'view',
-            type: 'function',
-        },
-        {
-            inputs: [{ name: 'tokenId', type: 'uint256' }, { name: 'tokens', type: 'address[]' }],
-            name: 'getReward',
-            outputs: [],
-            stateMutability: 'nonpayable',
-            type: 'function',
-        },
-    ] as const;
 
     // Fetch claimable voting rewards for all veNFTs using on-chain earned() calls
     // Note: VotingRewardBalance in subgraph tracks CLAIMED rewards, not pending ones
