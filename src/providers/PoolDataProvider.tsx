@@ -8,9 +8,7 @@ import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 import { useUserPositions } from '@/hooks/useSubgraph';
 import { getRpcForUserData } from '@/utils/rpc';
 import { V2_CONTRACTS } from '@/config/contracts';
-
-// Goldsky Subgraph URL for pool data
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
+import { SUBGRAPH_URL } from '@/config/subgraph';
 
 // Fetch pools from subgraph
 async function fetchPoolsFromSubgraph(): Promise<{

@@ -12,14 +12,12 @@ import { WSEI, Token } from '@/config/tokens';
 import { getTokenLogo as getTokenLogoUtil, getTokenDisplayInfo } from '@/utils/tokens';
 import { formatPrice } from '@/utils/format';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
-import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
+import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI, VOTING_ESCROW_ABI, CL_GAUGE_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { getRpcForPoolData } from '@/utils/rpc';
 import { useToast } from '@/providers/ToastProvider';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-
-// Goldsky GraphQL endpoint (v3.0.6)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
+import { SUBGRAPH_URL } from '@/config/subgraph';
 
 async function fetchGaugeAddressByPool(poolId: string): Promise<string | null> {
     try {
@@ -43,69 +41,7 @@ async function fetchGaugeAddressByPool(poolId: string): Promise<string | null> {
     }
 }
 
-// VotingEscrow ABI for veNFT data
-const VOTING_ESCROW_ABI = [
-    {
-        inputs: [{ name: 'owner', type: 'address' }],
-        name: 'balanceOf',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'owner', type: 'address' }, { name: 'index', type: 'uint256' }],
-        name: 'tokenOfOwnerByIndex',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        name: 'locked',
-        outputs: [{ name: 'amount', type: 'int128' }, { name: 'end', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        name: 'balanceOfNFT',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
-
-// CL Gauge ABI for staking/claiming
-const CL_GAUGE_ABI = [
-    {
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        name: 'deposit',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        name: 'withdraw',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        name: 'getReward',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'account', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
-        name: 'earned',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
+// Note: VOTING_ESCROW_ABI and CL_GAUGE_ABI are now imported from @/config/abis
 
 interface VeNFT {
     tokenId: bigint;

@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { WIND, WSEI } from '@/config/tokens';
-
-// Goldsky GraphQL endpoint (v3.0.6)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
+import { SUBGRAPH_URL } from '@/config/subgraph';
 
 /**
  * Hook to get WIND and SEI prices in USD from DEX pools

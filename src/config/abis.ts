@@ -1380,3 +1380,118 @@ export const BEAR_STAKING_ABI = [
         type: 'function',
     },
 ] as const;
+
+// ============================================
+// Additional ABIs (consolidated from pages)
+// ============================================
+
+// Voter ABI for distribute and basic operations
+export const VOTER_DISTRIBUTE_ABI = [
+    {
+        inputs: [{ name: '_start', type: 'uint256' }, { name: '_finish', type: 'uint256' }],
+        name: 'distribute',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'length',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// CL Gauge ABI for staking/claiming
+export const CL_GAUGE_ABI = [
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'deposit',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'withdraw',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        name: 'getReward',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'account', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
+        name: 'earned',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Factory Registry ABI
+export const FACTORY_REGISTRY_ABI = [
+    {
+        inputs: [
+            { name: 'poolFactory', type: 'address' },
+            { name: 'votingRewardsFactory', type: 'address' },
+            { name: 'gaugeFactory', type: 'address' },
+        ],
+        name: 'approve',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'poolFactory', type: 'address' }],
+        name: 'unapprove',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'owner',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'poolFactory', type: 'address' }],
+        name: 'isPoolFactoryApproved',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Minter ABI
+export const MINTER_ABI = [
+    {
+        inputs: [],
+        name: 'weeklyEmissions',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'tailEmissionRate',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'activePeriod',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
