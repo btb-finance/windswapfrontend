@@ -10,6 +10,7 @@ import { DEFAULT_TOKEN_LIST, Token } from '@/config/tokens';
 import { getRpcForVoting } from '@/utils/rpc';
 import { SUBGRAPH_URL } from '@/config/subgraph';
 import { VOTER_ABI, FACTORY_REGISTRY_ABI, CL_FACTORY_ABI, MINTER_ABI } from '@/config/abis';
+import { TIME } from '@/config/constants';
 
 type AdminTab = 'tokens' | 'gauges' | 'factories' | 'config';
 
@@ -151,20 +152,20 @@ export default function AdminPage() {
 
     const getNextEpochTime = (activePeriod: bigint | undefined) => {
         if (!activePeriod) return 'Loading...';
-        const nextEpoch = Number(activePeriod) + (7 * 24 * 60 * 60); // +1 week
+        const nextEpoch = Number(activePeriod) + TIME.SECONDS_PER_WEEK;
         const date = new Date(nextEpoch * 1000);
         return date.toLocaleString();
     };
 
     const getTimeUntilNextEpoch = (activePeriod: bigint | undefined) => {
         if (!activePeriod) return 'Loading...';
-        const nextEpoch = Number(activePeriod) + (7 * 24 * 60 * 60);
+        const nextEpoch = Number(activePeriod) + TIME.SECONDS_PER_WEEK;
         const now = Math.floor(Date.now() / 1000);
         const diff = nextEpoch - now;
         if (diff <= 0) return 'Epoch ended - ready for update!';
-        const days = Math.floor(diff / 86400);
-        const hours = Math.floor((diff % 86400) / 3600);
-        const minutes = Math.floor((diff % 3600) / 60);
+        const days = Math.floor(diff / TIME.SECONDS_PER_DAY);
+        const hours = Math.floor((diff % TIME.SECONDS_PER_DAY) / TIME.SECONDS_PER_HOUR);
+        const minutes = Math.floor((diff % TIME.SECONDS_PER_HOUR) / 60);
         return `${days}d ${hours}h ${minutes}m`;
     };
 

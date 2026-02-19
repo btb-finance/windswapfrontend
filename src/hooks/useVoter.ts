@@ -6,33 +6,11 @@ import { useWriteContract } from '@/hooks/useWriteContract';
 import { Address, parseUnits } from 'viem';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { usePoolData, GaugeInfo, RewardToken } from '@/providers/PoolDataProvider';
-import { VOTER_EXTENDED_ABI, BRIBE_VOTING_REWARD_ABI, ERC20_ABI } from '@/config/abis';
+import { VOTER_EXTENDED_ABI, VOTER_ABI, BRIBE_VOTING_REWARD_ABI, ERC20_ABI } from '@/config/abis';
 import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 
 // Re-export types for backward compatibility
 export type { GaugeInfo, RewardToken };
-
-// Voter ABI (only what we need for write operations)
-const VOTER_ABI = [
-    {
-        inputs: [
-            { name: '_tokenId', type: 'uint256' },
-            { name: '_poolVote', type: 'address[]' },
-            { name: '_weights', type: 'uint256[]' },
-        ],
-        name: 'vote',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: '_tokenId', type: 'uint256' }],
-        name: 'reset',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-] as const;
 
 export interface VoteInfo {
     pool: string;

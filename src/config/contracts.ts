@@ -54,6 +54,9 @@ export const V2_CONTRACTS = {
     // Governance
     ProtocolGovernor: '0x70123139AAe07Ce9d7734E92Cd1D658d6d9Ce3d2',
     EpochGovernor: '0x8Fc6107ba0b72cd72ad840Ab0Bcce94b30262b44',
+
+    // Stablecoin Zap helper
+    StablecoinZap: '0x8dfbAC3C691BEACD54949bBd43FF8bBe869e8930',
 } as const;
 
 // ============================================

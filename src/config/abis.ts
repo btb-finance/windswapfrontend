@@ -1624,6 +1624,31 @@ export const VOTER_ABI = [
         stateMutability: 'nonpayable',
         type: 'function',
     },
+    {
+        inputs: [
+            { name: '_tokenId', type: 'uint256' },
+            { name: '_poolVote', type: 'address[]' },
+            { name: '_weights', type: 'uint256[]' },
+        ],
+        name: 'vote',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'reset',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '_governor', type: 'address' }],
+        name: 'setGovernor',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
 ] as const;
 
 // Fee Reward ABI (for voting rewards)
@@ -1670,5 +1695,110 @@ export const WARP_ROUTE_ABI = [
         stateMutability: 'view',
         inputs: [{ name: 'account', type: 'address' }],
         outputs: [{ name: '', type: 'uint256' }],
+    },
+] as const;
+
+// VetoGovernor ABI (protocol governance)
+export const GOVERNOR_ABI = [
+    {
+        inputs: [
+            { name: 'tokenId', type: 'uint256' },
+            { name: 'targets', type: 'address[]' },
+            { name: 'values', type: 'uint256[]' },
+            { name: 'calldatas', type: 'bytes[]' },
+            { name: 'description', type: 'string' },
+        ],
+        name: 'propose',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'proposalId', type: 'uint256' },
+            { name: 'tokenId', type: 'uint256' },
+            { name: 'support', type: 'uint8' },
+        ],
+        name: 'castVote',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'targets', type: 'address[]' },
+            { name: 'values', type: 'uint256[]' },
+            { name: 'calldatas', type: 'bytes[]' },
+            { name: 'descriptionHash', type: 'bytes32' },
+        ],
+        name: 'execute',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'proposalId', type: 'uint256' }],
+        name: 'state',
+        outputs: [{ name: '', type: 'uint8' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'proposalId', type: 'uint256' }],
+        name: 'proposalVotes',
+        outputs: [
+            { name: 'againstVotes', type: 'uint256' },
+            { name: 'forVotes', type: 'uint256' },
+            { name: 'abstainVotes', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'proposalThreshold',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'votingDelay',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'votingPeriod',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'proposalId', type: 'uint256' }, { name: 'account', type: 'address' }],
+        name: 'hasVoted',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Stablecoin Zap ABI
+export const STABLECOIN_ZAP_ABI = [
+    {
+        type: 'function',
+        name: 'zap',
+        inputs: [
+            { name: 'inputToken', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+            { name: 'slippageBps', type: 'uint256' },
+            { name: 'minLiquidity', type: 'uint128' },
+        ],
+        outputs: [
+            { name: 'tokenId', type: 'uint256' },
+            { name: 'liquidity', type: 'uint128' },
+        ],
+        stateMutability: 'nonpayable',
     },
 ] as const;
