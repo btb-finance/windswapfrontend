@@ -152,6 +152,18 @@ export const ALL_CONTRACTS = {
 } as const;
 
 // ============================================
+// LORE Mining Contracts (Sei Mainnet)
+// ============================================
+export const LORE_MINING_CONTRACTS = {
+    // LOREmining UUPS Proxy (vanity address)
+    LOREmining: '0x88888A11ef184e35D2A1098A5abe8b30312e4f54',
+    // LOREBondingCurve UUPS Proxy (vanity address)
+    BondingCurve: '0x88888b465eA2871Ddb6Ebe804608c2aC1F0CCc25',
+    // LORE Token UUPS Proxy (vanity address)
+    LoreToken: '0x888886c43b4B4A15833Be49e7F08242e26e9A6f0',
+} as const;
+
+// ============================================
 // BTB Finance Contracts (Ethereum Mainnet)
 // ============================================
 export const BTB_CONTRACTS = {

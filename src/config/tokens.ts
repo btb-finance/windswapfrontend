@@ -225,10 +225,20 @@ export const WETH: Token = {
     logoURI: '/logo/WrappedEther(Wormhole).png',
 };
 
+// LORE — BTB Finance Mining Token (Sei Mainnet, bonding curve only)
+export const LORE: Token = {
+    address: '0x888886c43b4B4A15833Be49e7F08242e26e9A6f0',
+    symbol: 'LORE',
+    name: 'LORE Token',
+    decimals: 18,
+    logoURI: '/logo/LORE.png',
+};
+
 // Default token list
 export const DEFAULT_TOKEN_LIST: Token[] = [
     SEI,
     WSEI,
+    LORE,
     WIND,
     USDC,
     WBTC,
@@ -258,6 +268,7 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
 // Token addresses for quick lookup
 export const TOKEN_ADDRESSES = {
     SEI: SEI.address,
+    LORE: LORE.address,
     WSEI: WSEI.address,
     WIND: WIND.address,
     YAKA: WIND.address, // Legacy alias

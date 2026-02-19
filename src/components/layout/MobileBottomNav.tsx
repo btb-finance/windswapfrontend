@@ -43,6 +43,12 @@ const BTBIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
+const MiningIcon = ({ className }: { className?: string }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-2-2-9 9-1 3 3-1 9-9zm-14 9l-2 2M9 15l-2 2M5 20h2" />
+    </svg>
+);
+
 // Nav items - 6 items with Portfolio elevated in center
 const navItems = [
     { href: '/swap', label: 'Swap', Icon: SwapIcon },
@@ -51,6 +57,7 @@ const navItems = [
     { href: '/bridge', label: 'Bridge', Icon: BridgeIcon },
     { href: '/vote', label: 'Vote', Icon: VoteIcon },
     { href: '/btb', label: 'BTB', Icon: BTBIcon },
+    { href: '/mining', label: 'Mining', Icon: MiningIcon },
 ];
 
 /**

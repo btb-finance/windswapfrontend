@@ -1802,3 +1802,388 @@ export const STABLECOIN_ZAP_ABI = [
         stateMutability: 'nonpayable',
     },
 ] as const;
+
+// ============================================
+// LOREBondingCurve ABI (Sei Mainnet)
+// ============================================
+export const LORE_BONDING_CURVE_ABI = [
+    {
+        type: 'function',
+        name: 'buy',
+        inputs: [],
+        outputs: [],
+        stateMutability: 'payable',
+    },
+    {
+        type: 'function',
+        name: 'sell',
+        inputs: [{ name: 'boreAmount', type: 'uint256' }],
+        outputs: [],
+        stateMutability: 'nonpayable',
+    },
+    {
+        type: 'function',
+        name: 'getCurrentPrice',
+        inputs: [],
+        outputs: [{ name: 'price', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'previewBuy',
+        inputs: [{ name: 'SEIAmount', type: 'uint256' }],
+        outputs: [
+            { name: 'boreAmount', type: 'uint256' },
+            { name: 'price', type: 'uint256' },
+            { name: 'fee', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'previewSell',
+        inputs: [{ name: 'boreAmount', type: 'uint256' }],
+        outputs: [
+            { name: 'SEIAmount', type: 'uint256' },
+            { name: 'price', type: 'uint256' },
+            { name: 'fee', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getMarketInfo',
+        inputs: [],
+        outputs: [
+            { name: 'currentPrice', type: 'uint256' },
+            { name: 'circulatingSupply', type: 'uint256' },
+            { name: 'SEIBacking', type: 'uint256' },
+            { name: 'availableBORE', type: 'uint256' },
+            { name: 'tradingFee', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getSEIReserve',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getLOREReserve',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getCirculatingSupply',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'tradingFeeBps',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'event',
+        name: 'LOREBought',
+        inputs: [
+            { name: 'buyer', type: 'address', indexed: true },
+            { name: 'SEIAmount', type: 'uint256', indexed: false },
+            { name: 'boreAmount', type: 'uint256', indexed: false },
+            { name: 'price', type: 'uint256', indexed: false },
+        ],
+    },
+    {
+        type: 'event',
+        name: 'LORESold',
+        inputs: [
+            { name: 'seller', type: 'address', indexed: true },
+            { name: 'boreAmount', type: 'uint256', indexed: false },
+            { name: 'SEIAmount', type: 'uint256', indexed: false },
+            { name: 'price', type: 'uint256', indexed: false },
+        ],
+    },
+] as const;
+
+// ============================================
+// LOREmining ABI (Sei Mainnet)
+// ============================================
+export const LORE_MINING_ABI = [
+    // View functions
+    {
+        type: 'function',
+        name: 'currentRoundId',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'roundDuration',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'startTime',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'endTime',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getCurrentRound',
+        inputs: [],
+        outputs: [
+            {
+                name: '',
+                type: 'tuple',
+                components: [
+                    { name: 'id', type: 'uint256' },
+                    { name: 'startTime', type: 'uint256' },
+                    { name: 'endTime', type: 'uint256' },
+                    { name: 'deployed', type: 'uint256[25]' },
+                    { name: 'minerCount', type: 'uint256[25]' },
+                    { name: 'totalDeployed', type: 'uint256' },
+                    { name: 'entropyHash', type: 'bytes32' },
+                    { name: 'totalWinnings', type: 'uint256' },
+                    { name: 'loreReward', type: 'uint256' },
+                    { name: 'totalMotherlodeReward', type: 'uint256' },
+                    { name: 'winningSquare', type: 'uint8' },
+                    { name: 'motherlodeTiersHit', type: 'uint16' },
+                    { name: 'finalized', type: 'bool' },
+                    { name: 'isCheckpointable', type: 'bool' },
+                    { name: 'isJackpotRound', type: 'bool' },
+                    { name: 'timerStarted', type: 'bool' },
+                    { name: '__deprecated_finalizationRequested', type: 'bool' },
+                ],
+            },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getRound',
+        inputs: [{ name: 'roundId', type: 'uint256' }],
+        outputs: [
+            {
+                name: '',
+                type: 'tuple',
+                components: [
+                    { name: 'id', type: 'uint256' },
+                    { name: 'startTime', type: 'uint256' },
+                    { name: 'endTime', type: 'uint256' },
+                    { name: 'deployed', type: 'uint256[25]' },
+                    { name: 'minerCount', type: 'uint256[25]' },
+                    { name: 'totalDeployed', type: 'uint256' },
+                    { name: 'entropyHash', type: 'bytes32' },
+                    { name: 'totalWinnings', type: 'uint256' },
+                    { name: 'loreReward', type: 'uint256' },
+                    { name: 'totalMotherlodeReward', type: 'uint256' },
+                    { name: 'winningSquare', type: 'uint8' },
+                    { name: 'motherlodeTiersHit', type: 'uint16' },
+                    { name: 'finalized', type: 'bool' },
+                    { name: 'isCheckpointable', type: 'bool' },
+                    { name: 'isJackpotRound', type: 'bool' },
+                    { name: 'timerStarted', type: 'bool' },
+                    { name: '__deprecated_finalizationRequested', type: 'bool' },
+                ],
+            },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getMinerRoundData',
+        inputs: [
+            { name: 'roundId', type: 'uint256' },
+            { name: 'miner', type: 'address' },
+        ],
+        outputs: [
+            {
+                name: '',
+                type: 'tuple',
+                components: [
+                    { name: 'deployed', type: 'uint256[25]' },
+                    { name: 'hasCheckpointed', type: 'bool' },
+                    { name: 'rewardsSei', type: 'uint256' },
+                    { name: 'rewardsLore', type: 'uint256' },
+                    { name: 'refinedLore', type: 'uint256' },
+                    { name: 'lastRewardsFactor', type: 'uint256' },
+                ],
+            },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'minerStats',
+        inputs: [{ name: 'miner', type: 'address' }],
+        outputs: [
+            { name: 'unclaimedSei', type: 'uint256' },
+            { name: 'unclaimedLore', type: 'uint256' },
+            { name: 'refinedLore', type: 'uint256' },
+            { name: 'lastRewardsFactor', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getTotalClaimableBalance',
+        inputs: [{ name: 'miner', type: 'address' }],
+        outputs: [
+            { name: 'totalSei', type: 'uint256' },
+            { name: 'totalLore', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getAllMotherloadePots',
+        inputs: [],
+        outputs: [{ name: 'pots', type: 'uint256[10]' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getCurrentRoundTimeRemaining',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getSquareDeployment',
+        inputs: [
+            { name: 'roundId', type: 'uint256' },
+            { name: 'square', type: 'uint8' },
+        ],
+        outputs: [
+            { name: 'totalDeployed', type: 'uint256' },
+            { name: 'minerCount', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'loreToken',
+        inputs: [],
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'bondingCurveAddress',
+        inputs: [],
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+    },
+    // Write functions
+    {
+        type: 'function',
+        name: 'deploy',
+        inputs: [
+            { name: 'squares', type: 'uint8[]' },
+            { name: 'amountPerSquare', type: 'uint256' },
+            { name: 'partner', type: 'address' },
+            { name: 'userRandom', type: 'bytes32' },
+        ],
+        outputs: [],
+        stateMutability: 'payable',
+    },
+    {
+        type: 'function',
+        name: 'finalizeRound',
+        inputs: [{ name: 'userRandom', type: 'bytes32' }],
+        outputs: [],
+        stateMutability: 'nonpayable',
+    },
+    {
+        type: 'function',
+        name: 'checkpoint',
+        inputs: [{ name: 'roundId', type: 'uint256' }],
+        outputs: [],
+        stateMutability: 'nonpayable',
+    },
+    {
+        type: 'function',
+        name: 'claimSei',
+        inputs: [],
+        outputs: [],
+        stateMutability: 'nonpayable',
+    },
+    {
+        type: 'function',
+        name: 'claimLore',
+        inputs: [],
+        outputs: [],
+        stateMutability: 'nonpayable',
+    },
+    {
+        type: 'function',
+        name: 'claimAll',
+        inputs: [],
+        outputs: [],
+        stateMutability: 'nonpayable',
+    },
+    // Events
+    {
+        type: 'event',
+        name: 'RoundStarted',
+        inputs: [
+            { name: 'roundId', type: 'uint256', indexed: true },
+            { name: 'startTime', type: 'uint256', indexed: false },
+            { name: 'endTime', type: 'uint256', indexed: false },
+        ],
+    },
+    {
+        type: 'event',
+        name: 'Deployed',
+        inputs: [
+            { name: 'roundId', type: 'uint256', indexed: true },
+            { name: 'miner', type: 'address', indexed: true },
+            { name: 'squares', type: 'uint8[]', indexed: false },
+            { name: 'amountPerSquare', type: 'uint256', indexed: false },
+            { name: 'totalAmount', type: 'uint256', indexed: false },
+        ],
+    },
+    {
+        type: 'event',
+        name: 'RoundFinalized',
+        inputs: [
+            { name: 'roundId', type: 'uint256', indexed: true },
+            { name: 'winningSquare', type: 'uint8', indexed: false },
+            { name: 'totalWinnings', type: 'uint256', indexed: false },
+            { name: 'loreReward', type: 'uint256', indexed: false },
+            { name: 'totalMotherlodeReward', type: 'uint256', indexed: false },
+            { name: 'motherlodeTiersHit', type: 'uint16', indexed: false },
+        ],
+    },
+    {
+        type: 'event',
+        name: 'RewardsClaimed',
+        inputs: [
+            { name: 'miner', type: 'address', indexed: true },
+            { name: 'seiAmount', type: 'uint256', indexed: false },
+            { name: 'loreAmount', type: 'uint256', indexed: false },
+            { name: 'refinedLore', type: 'uint256', indexed: false },
+            { name: 'claimFee', type: 'uint256', indexed: false },
+        ],
+    },
+] as const;

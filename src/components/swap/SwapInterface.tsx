@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import { useAccount, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { parseUnits, formatUnits, Address, maxUint256, encodeFunctionData } from 'viem';
-import { Token, SEI, USDC, WSEI } from '@/config/tokens';
+import { Token, SEI, USDC, WSEI, LORE } from '@/config/tokens';
+import { LoreBondingCurveSwap } from './LoreBondingCurveSwap';
 import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI, SWAP_ROUTER_ABI, WETH_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
@@ -46,13 +47,56 @@ interface SwapInterfaceProps {
     initialTokenOut?: Token;
 }
 
+interface SwapInterfaceInnerProps extends SwapInterfaceProps {
+    onTokenInChange: (t: Token) => void;
+    onTokenOutChange: (t: Token) => void;
+}
+
+const LORE_ADDRESS_LOWER = LORE.address.toLowerCase();
+
+function isLoreToken(t?: Token): boolean {
+    return !!t && t.address.toLowerCase() === LORE_ADDRESS_LOWER;
+}
+
+// Public entry point — owns tokenIn/tokenOut routing state, no other hooks
 export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterfaceProps) {
+    const [tokenIn, setTokenIn] = useState<Token | undefined>(initialTokenIn || SEI);
+    const [tokenOut, setTokenOut] = useState<Token | undefined>(initialTokenOut || USDC);
+
+    const handleTokenInChange = useCallback((t: Token) => { setTokenIn(t); }, []);
+    const handleTokenOutChange = useCallback((t: Token) => { setTokenOut(t); }, []);
+
+    if (isLoreToken(tokenIn) || isLoreToken(tokenOut)) {
+        return <LoreBondingCurveSwap initialTokenIn={tokenIn} initialTokenOut={tokenOut} />;
+    }
+    return (
+        <SwapInterfaceInner
+            initialTokenIn={tokenIn}
+            initialTokenOut={tokenOut}
+            onTokenInChange={handleTokenInChange}
+            onTokenOutChange={handleTokenOutChange}
+        />
+    );
+}
+
+function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, onTokenOutChange }: SwapInterfaceInnerProps) {
     const { isConnected, address } = useAccount();
     const { success, error: showError } = useToast();
 
-    // Token state - use props if provided, otherwise defaults
+    // Token state — local copy; changes bubble up via callbacks so parent can re-route to bonding curve
     const [tokenIn, setTokenIn] = useState<Token | undefined>(initialTokenIn || SEI);
     const [tokenOut, setTokenOut] = useState<Token | undefined>(initialTokenOut || USDC);
+
+    const handleSetTokenIn = useCallback((t: Token) => {
+        setTokenIn(t);
+        onTokenInChange(t);
+    }, [onTokenInChange]);
+
+    const handleSetTokenOut = useCallback((t: Token) => {
+        setTokenOut(t);
+        onTokenOutChange(t);
+    }, [onTokenOutChange]);
+
     const [amountIn, setAmountIn] = useState('');
     const [amountOut, setAmountOut] = useState('');
 
@@ -532,8 +576,8 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
-        setTokenIn(tokenOut);
-        setTokenOut(tokenIn);
+        if (tokenOut) handleSetTokenIn(tokenOut);
+        if (tokenIn) handleSetTokenOut(tokenIn);
         if (independentField === 'INPUT') {
             setAmountIn(amountOut);
             setAmountOut(amountIn);
@@ -725,7 +769,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 balance={formattedBalanceIn}
                 rawBalance={rawBalanceIn}
                 onAmountChange={handleTypeInput}
-                onTokenSelect={setTokenIn}
+                onTokenSelect={handleSetTokenIn}
                 showMaxButton
             />
 
@@ -751,7 +795,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 amount={amountOut}
                 balance={formattedBalanceOut}
                 onAmountChange={handleTypeOutput}
-                onTokenSelect={setTokenOut}
+                onTokenSelect={handleSetTokenOut}
             />
 
             {/* Rate Info - Compact */}
