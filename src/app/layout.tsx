@@ -7,6 +7,7 @@ import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { MainContent } from "@/components/layout/MainContent";
 import { PWAInstallPrompt } from "@/components/common/PWAInstallPrompt";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 
 
 const geistSans = Geist({
@@ -103,7 +104,11 @@ export default function RootLayout({
           <Header />
 
           {/* Main Content - dynamic padding based on connection */}
-          <MainContent>{children}</MainContent>
+          <MainContent>
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </MainContent>
 
           {/* Mobile Bottom Navigation */}
           <MobileBottomNav />

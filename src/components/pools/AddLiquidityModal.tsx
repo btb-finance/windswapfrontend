@@ -544,12 +544,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         // For CL, single-sided liquidity is allowed when price range is outside current price
         // At least one amount must be positive
         if (isNaN(amtA) || isNaN(amtB) || (amtA <= 0 && amtB <= 0)) {
-            alert('Please enter a valid amount for at least one token');
+            toast.error('Please enter a valid amount for at least one token');
             return;
         }
 
         if (!clPoolPrice && (!initialPrice || parseFloat(initialPrice) <= 0)) {
-            alert('Please set the initial price for this new pool');
+            toast.error('Please set the initial price for this new pool');
             return;
         }
 

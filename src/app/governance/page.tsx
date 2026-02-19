@@ -10,6 +10,7 @@ import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { GAUGE_LIST } from '@/config/gauges';
 import { getRpcForVoting } from '@/utils/rpc';
+import { useToast } from '@/providers/ToastProvider';
 
 type ProposalType = 'whitelist' | 'gauge' | 'setGovernor';
 
@@ -17,6 +18,7 @@ export default function GovernancePage() {
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<'proposals' | 'create'>('proposals');
     const [txHash, setTxHash] = useState<string | null>(null);
+    const toast = useToast();
 
     // Create proposal form state
     const [proposalType, setProposalType] = useState<ProposalType>('whitelist');
@@ -48,7 +50,7 @@ export default function GovernancePage() {
     const handleDelegate = async () => {
         const permanentPosition = positions.find(p => p.isPermanent);
         if (!permanentPosition) {
-            alert('You need a permanent lock veNFT to delegate for governance voting');
+            toast.error('You need a permanent lock veNFT to delegate for governance voting');
             return;
         }
 
@@ -63,7 +65,7 @@ export default function GovernancePage() {
         const result = await delegateForGovernance(permanentPosition.tokenId);
         if (result) {
             setTxHash(result.hash);
-            alert('Delegation successful! You can now vote on governance proposals.');
+            toast.success('Delegation successful! You can now vote on governance proposals.');
         }
     };
 
@@ -74,7 +76,7 @@ export default function GovernancePage() {
         // Get first permanent veNFT tokenId for proposing
         const permanentPosition = positions.find(p => p.isPermanent);
         if (!permanentPosition) {
-            alert('You need a permanent lock veNFT to create proposals');
+            toast.error('You need a permanent lock veNFT to create proposals');
             return;
         }
         const tokenId = permanentPosition.tokenId;
@@ -91,7 +93,7 @@ export default function GovernancePage() {
             // Transfer governor role to specified address (or connected wallet as fallback)
             const targetGovernor = newGovernorAddress || address;
             if (!targetGovernor) {
-                alert('Please enter a governor address or connect your wallet');
+                toast.error('Please enter a governor address or connect your wallet');
                 return;
             }
             result = await proposeSetGovernor(
@@ -117,7 +119,7 @@ export default function GovernancePage() {
                 const factoryResult = await response.json();
 
                 if (!factoryResult.result || factoryResult.result === '0x') {
-                    alert('Could not detect pool factory. Is this a valid pool address?');
+                    toast.error('Could not detect pool factory. Is this a valid pool address?');
                     return;
                 }
 
@@ -132,7 +134,7 @@ export default function GovernancePage() {
                 );
             } catch (e) {
                 console.error('Failed to detect factory:', e);
-                alert('Failed to detect pool factory');
+                toast.error('Failed to detect pool factory');
                 return;
             }
         }

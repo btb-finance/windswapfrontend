@@ -14,39 +14,9 @@ import { V2_CONTRACTS } from '@/config/contracts';
 import { getRpcForVoting, rpcCall } from '@/utils/rpc';
 import { EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
-import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
+import { SUBGRAPH_URL, readSubgraphJson } from '@/config/subgraph';
 import { usePoolData } from '@/providers/PoolDataProvider';
-
-async function readSubgraphJson(response: Response, label: string): Promise<any> {
-    const text = await response.text();
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        const ct = response.headers.get('content-type') || '';
-        const snippet = text.slice(0, 200);
-        throw new Error(`[Subgraph] ${label} returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
-    }
-    return json;
-}
-
-// Voter ABI for distribute (permissionless!)
-const VOTER_DISTRIBUTE_ABI = [
-    {
-        inputs: [{ name: '_start', type: 'uint256' }, { name: '_finish', type: 'uint256' }],
-        name: 'distribute',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'length',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
+import { VOTER_DISTRIBUTE_ABI, FEE_REWARD_ABI } from '@/config/abis';
 
 export default function VotePage() {
 
@@ -164,24 +134,6 @@ export default function VotePage() {
         inFlight: false,
     });
 
-    // ABI for fee reward contracts (earned + getReward)
-    const FEE_REWARD_ABI = [
-        {
-            inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
-            name: 'earned',
-            outputs: [{ name: '', type: 'uint256' }],
-            stateMutability: 'view',
-            type: 'function',
-        },
-        {
-            inputs: [{ name: 'tokenId', type: 'uint256' }, { name: 'tokens', type: 'address[]' }],
-            name: 'getReward',
-            outputs: [],
-            stateMutability: 'nonpayable',
-            type: 'function',
-        },
-    ] as const;
-
     // Fetch claimable voting rewards for all veNFTs using on-chain earned() calls
     // Note: VotingRewardBalance in subgraph tracks CLAIMED rewards, not pending ones
     // We must call earned(token, tokenId) on fee/bribe reward contracts to get pending
@@ -214,7 +166,7 @@ export default function VotePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: votesQuery, variables: { tokenIds } }),
             });
-            const votesJson = await readSubgraphJson(votesRes, 'veVotes(for rewards)');
+            const votesJson = await readSubgraphJson(votesRes, 'veVotes(for rewards)') as any;
             if (votesJson.errors) throw new Error(votesJson.errors[0]?.message || 'Subgraph error');
 
             const veVotes: Array<{
@@ -375,7 +327,7 @@ export default function VotePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query, variables: { tokenIds } }),
             });
-            const json = await readSubgraphJson(response, 'veVotes(vote status)');
+            const json = await readSubgraphJson(response, 'veVotes(vote status)') as any;
             if (json.errors) throw new Error(json.errors[0]?.message || 'Subgraph error');
 
             const rows: Array<any> = json.data?.veVotes || [];

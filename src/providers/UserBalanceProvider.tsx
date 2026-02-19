@@ -5,9 +5,7 @@ import { formatUnits, Address } from 'viem';
 import { useAccount } from 'wagmi';
 import { DEFAULT_TOKEN_LIST, Token, WSEI } from '@/config/tokens';
 import { getRpcForUserData } from '@/utils/rpc';
-
-// Goldsky GraphQL endpoint (v3.0.6)
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v3.0.8/gn';
+import { SUBGRAPH_URL } from '@/config/subgraph';
 
 // ============================================
 // Types
