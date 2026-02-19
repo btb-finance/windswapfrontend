@@ -4,6 +4,7 @@ import { useState, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { usePoolData } from '@/providers/PoolDataProvider';
+import { NOTABLE_POOLS } from '@/config/contracts';
 import { EmptyState } from '@/components/common/InfoCard';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 
@@ -38,19 +39,15 @@ interface PoolConfig {
     stable?: boolean;
 }
 
-// Top pool addresses (specific pools, not just token pairs)
-const TOP_POOL_ADDRESSES: Record<string, boolean> = {
-    '0x3c2567b15fd9133cf9101e043c58e2b444af900b': true, // USDT_USDC
-    '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0': true, // WIND_USDC
-    '0xc7035a2ef7c685fc853475744623a0f164541b69': true, // WIND_WSEI
-    '0x587b82b8ed109d8587a58f9476a8d4268ae945b1': true, // USDC_WSEI
-};
+const TOP_POOL_ADDRESSES: Record<string, boolean> = Object.fromEntries(
+    Object.values(NOTABLE_POOLS).map(addr => [addr.toLowerCase(), true])
+);
 
 const TOP_POOL_PRIORITY: Record<string, number> = {
-    '0x3c2567b15fd9133cf9101e043c58e2b444af900b': 1,
-    '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0': 2,
-    '0xc7035a2ef7c685fc853475744623a0f164541b69': 3,
-    '0x587b82b8ed109d8587a58f9476a8d4268ae945b1': 4,
+    [NOTABLE_POOLS.USDT_USDC.toLowerCase()]: 1,
+    [NOTABLE_POOLS.WIND_USDC.toLowerCase()]: 2,
+    [NOTABLE_POOLS.WIND_WSEI.toLowerCase()]: 3,
+    [NOTABLE_POOLS.USDC_WSEI.toLowerCase()]: 4,
 };
 
 // Helper to find token by address - use SEI for WSEI in UI

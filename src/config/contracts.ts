@@ -54,6 +54,9 @@ export const V2_CONTRACTS = {
     // Governance
     ProtocolGovernor: '0x70123139AAe07Ce9d7734E92Cd1D658d6d9Ce3d2',
     EpochGovernor: '0x8Fc6107ba0b72cd72ad840Ab0Bcce94b30262b44',
+
+    // Stablecoin Zap helper
+    StablecoinZap: '0x8dfbAC3C691BEACD54949bBd43FF8bBe869e8930',
 } as const;
 
 // ============================================
@@ -122,6 +125,20 @@ export const COMMON = {
 
     // Zero address
     ZERO_ADDRESS: '0x0000000000000000000000000000000000000000',
+} as const;
+
+// ============================================
+// Notable Pools & Gauges (used for prioritization / APR display)
+// ============================================
+export const NOTABLE_POOLS = {
+    WIND_WSEI:  '0xc7035A2Ef7C685Fc853475744623A0F164541b69',
+    WIND_USDC:  '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0',
+    USDT_USDC:  '0x3c2567b15fd9133cf9101e043c58e2b444af900b',
+    USDC_WSEI:  '0x587b82b8ed109d8587a58f9476a8d4268ae945b1',
+} as const;
+
+export const NOTABLE_GAUGES = {
+    WIND_WSEI: '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb',
 } as const;
 
 // ============================================

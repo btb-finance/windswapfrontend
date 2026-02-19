@@ -11,7 +11,7 @@ import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { TokenSelector } from '@/components/common/TokenSelector';
 import { useLiquidity } from '@/hooks/useLiquidity';
 import { useTokenBalance, useTokenAllowance } from '@/hooks/useToken';
-import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
+import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, STABLECOIN_ZAP_ABI } from '@/config/abis';
 import { getRpcForPoolData, getRpcForUserData } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
@@ -58,26 +58,7 @@ type PoolType = 'v2' | 'cl';
 type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'approving_nft' | 'staking' | 'done' | 'error';
 type ActiveTab = 'regular' | 'zap';
 
-// StablecoinZap contract address and ABI
-const STABLECOIN_ZAP_ADDRESS = '0x8dfbAC3C691BEACD54949bBd43FF8bBe869e8930' as Address;
-
-const STABLECOIN_ZAP_ABI = [
-    {
-        type: 'function',
-        name: 'zap',
-        inputs: [
-            { name: 'inputToken', type: 'address' },
-            { name: 'amount', type: 'uint256' },
-            { name: 'slippageBps', type: 'uint256' },
-            { name: 'minLiquidity', type: 'uint128' }
-        ],
-        outputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'liquidity', type: 'uint128' }
-        ],
-        stateMutability: 'nonpayable'
-    }
-] as const;
+const STABLECOIN_ZAP_ADDRESS = V2_CONTRACTS.StablecoinZap as Address;
 
 interface PoolConfig {
     token0?: Token;

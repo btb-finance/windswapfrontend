@@ -10,6 +10,7 @@ import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { GAUGE_LIST } from '@/config/gauges';
 import { getRpcForVoting } from '@/utils/rpc';
+import { shortenAddress } from '@/utils/format';
 import { useToast } from '@/providers/ToastProvider';
 
 type ProposalType = 'whitelist' | 'gauge' | 'setGovernor';
@@ -379,7 +380,7 @@ export default function GovernancePage() {
 
                                         {/* Proposer info */}
                                         <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-gray-500">
-                                            Proposed by: {proposal.proposer.slice(0, 6)}...{proposal.proposer.slice(-4)}
+                                            Proposed by: {shortenAddress(proposal.proposer, 4)}
                                         </div>
                                     </div>
                                 );

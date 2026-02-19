@@ -6,33 +6,11 @@ import { useWriteContract } from '@/hooks/useWriteContract';
 import { Address, parseUnits } from 'viem';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { usePoolData, GaugeInfo, RewardToken } from '@/providers/PoolDataProvider';
-import { VOTER_EXTENDED_ABI, BRIBE_VOTING_REWARD_ABI, ERC20_ABI } from '@/config/abis';
-import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
+import { VOTER_EXTENDED_ABI, VOTER_ABI, BRIBE_VOTING_REWARD_ABI, ERC20_ABI } from '@/config/abis';
+import { fetchSubgraph } from '@/config/subgraph';
 
 // Re-export types for backward compatibility
 export type { GaugeInfo, RewardToken };
-
-// Voter ABI (only what we need for write operations)
-const VOTER_ABI = [
-    {
-        inputs: [
-            { name: '_tokenId', type: 'uint256' },
-            { name: '_poolVote', type: 'address[]' },
-            { name: '_weights', type: 'uint256[]' },
-        ],
-        name: 'vote',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: '_tokenId', type: 'uint256' }],
-        name: 'reset',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-] as const;
 
 export interface VoteInfo {
     pool: string;
@@ -49,18 +27,6 @@ export function useVoter() {
     // Get gauge data from global provider (instant!)
     const { gauges, totalVoteWeight, epochCount, gaugesLoading, refetch } = usePoolData();
 
-    const fetchGraphQL = useCallback(async <T,>(query: string, variables: Record<string, any>): Promise<T> => {
-        const response = await fetch(SUBGRAPH_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, variables }),
-        });
-        const json = await response.json();
-        if (json.errors) {
-            throw new Error(json.errors[0]?.message || 'Subgraph error');
-        }
-        return json.data;
-    }, []);
 
     // Fetch existing votes for a veNFT across all pools
     const fetchExistingVotes = useCallback(async (tokenId: bigint) => {
@@ -75,7 +41,7 @@ export function useVoter() {
                 }
             }`;
 
-            const data = await fetchGraphQL<{ veVotes: Array<{ epoch: string; pool: { id: string }; weight: string }> }>(query, {
+            const data = await fetchSubgraph<{ veVotes: Array<{ epoch: string; pool: { id: string }; weight: string }> }>(query, {
                 tokenId: tokenId.toString(),
             });
 
@@ -94,7 +60,7 @@ export function useVoter() {
         } catch (err) {
             console.error('Error fetching existing votes (subgraph):', err);
         }
-    }, [fetchGraphQL]);
+    }, [fetchSubgraph]);
 
     // Add incentive (bribe) to a pool
     const addIncentive = useCallback(async (

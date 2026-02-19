@@ -1,6 +1,8 @@
 // Bridge Configuration for Hyperlane Warp Routes
 // Base <-> Sei
 
+export { WARP_ROUTE_ABI, ERC20_ABI } from './abis';
+
 export interface BridgeToken {
     symbol: string;
     name: string;
@@ -129,62 +131,3 @@ export const HYPERLANE_DOMAIN_IDS = {
     sei: 1329,
 } as const;
 
-// Warp Route ABI (only needed functions)
-export const WARP_ROUTE_ABI = [
-    {
-        name: 'transferRemote',
-        type: 'function',
-        stateMutability: 'payable',
-        inputs: [
-            { name: 'destination', type: 'uint32' },
-            { name: 'recipient', type: 'bytes32' },
-            { name: 'amount', type: 'uint256' },
-        ],
-        outputs: [{ name: 'messageId', type: 'bytes32' }],
-    },
-    {
-        name: 'quoteGasPayment',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'destination', type: 'uint32' }],
-        outputs: [{ name: '', type: 'uint256' }],
-    },
-    {
-        name: 'balanceOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'account', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }],
-    },
-] as const;
-
-// ERC20 ABI for approval
-export const ERC20_ABI = [
-    {
-        name: 'approve',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'spender', type: 'address' },
-            { name: 'amount', type: 'uint256' },
-        ],
-        outputs: [{ name: '', type: 'bool' }],
-    },
-    {
-        name: 'allowance',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'spender', type: 'address' },
-        ],
-        outputs: [{ name: '', type: 'uint256' }],
-    },
-    {
-        name: 'balanceOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'account', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }],
-    },
-] as const;

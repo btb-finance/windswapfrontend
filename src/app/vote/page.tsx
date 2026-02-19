@@ -17,6 +17,7 @@ import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 import { SUBGRAPH_URL, readSubgraphJson } from '@/config/subgraph';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { VOTER_DISTRIBUTE_ABI, FEE_REWARD_ABI } from '@/config/abis';
+import { TIME } from '@/config/constants';
 
 export default function VotePage() {
 
@@ -89,10 +90,10 @@ export default function VotePage() {
 
     // Calculate epoch times
     const epochStartDate = activePeriod ? new Date(Number(activePeriod) * 1000) : null;
-    const epochEndDate = activePeriod ? new Date((Number(activePeriod) + 7 * 24 * 60 * 60) * 1000) : null;
-    const timeUntilNextEpoch = activePeriod ? Math.max(0, Number(activePeriod) + 7 * 24 * 60 * 60 - Math.floor(Date.now() / 1000)) : 0;
-    const daysRemaining = Math.floor(timeUntilNextEpoch / 86400);
-    const hoursRemaining = Math.floor((timeUntilNextEpoch % 86400) / 3600);
+    const epochEndDate = activePeriod ? new Date((Number(activePeriod) + TIME.SECONDS_PER_WEEK) * 1000) : null;
+    const timeUntilNextEpoch = activePeriod ? Math.max(0, Number(activePeriod) + TIME.SECONDS_PER_WEEK - Math.floor(Date.now() / 1000)) : 0;
+    const daysRemaining = Math.floor(timeUntilNextEpoch / TIME.SECONDS_PER_DAY);
+    const hoursRemaining = Math.floor((timeUntilNextEpoch % TIME.SECONDS_PER_DAY) / TIME.SECONDS_PER_HOUR);
     const epochHasEnded = timeUntilNextEpoch === 0;
 
     // Read voter pool count for distribute
@@ -182,14 +183,6 @@ export default function VotePage() {
             }
 
             // Step 2: Build list of (tokenId, feeRewardContract, token, decimals) to call earned()
-            const earnedAbi = [{
-                inputs: [{ name: 'token', type: 'address' }, { name: 'tokenId', type: 'uint256' }],
-                name: 'earned',
-                outputs: [{ name: '', type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function',
-            }] as const;
-
             type EarnedCall = {
                 veNFTId: string;
                 poolId: string;
@@ -243,7 +236,7 @@ export default function VotePage() {
             const results = await Promise.all(calls.map(async (c, i) => {
                 try {
                     const data = encodeFunctionData({
-                        abi: earnedAbi,
+                        abi: FEE_REWARD_ABI,
                         functionName: 'earned',
                         args: [c.token as Address, BigInt(c.veNFTId)],
                     });
@@ -259,7 +252,7 @@ export default function VotePage() {
                     const resultHex = result as `0x${string}`;
 
                     const decoded = decodeFunctionResult({
-                        abi: earnedAbi,
+                        abi: FEE_REWARD_ABI,
                         functionName: 'earned',
                         data: resultHex,
                     });

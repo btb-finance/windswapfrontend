@@ -1,6 +1,16 @@
 // Centralized formatting utilities
 // Provides consistent number and currency formatting across the application
 
+import { formatUnits } from 'viem';
+
+/**
+ * Convert a bigint wei value to a JS number.
+ * Replaces the `parseFloat(formatUnits(value, decimals))` pattern.
+ */
+export function fromWei(value: bigint, decimals: number = 18): number {
+    return parseFloat(formatUnits(value, decimals));
+}
+
 /**
  * Format USD values with appropriate suffixes (K, M, B)
  * @param value - The numeric value to format
@@ -117,4 +127,18 @@ export function shortenAddress(address: string, chars: number = 4): string {
     if (!address) return '';
     if (address.length <= chars * 2 + 2) return address;
     return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
+}
+
+/**
+ * Format APR percentage for display
+ * @param apr - APR as a percentage number
+ * @returns Formatted string like "123%", "1.2K%", "12.5K%"
+ */
+export function formatAPR(apr: number): string {
+    if (apr <= 0) return '—';
+    if (apr >= 10000) return `${(apr / 1000).toFixed(0)}K%`;
+    if (apr >= 1000) return `${(apr / 1000).toFixed(1)}K%`;
+    if (apr >= 100) return `${apr.toFixed(0)}%`;
+    if (apr >= 1) return `${apr.toFixed(1)}%`;
+    return `${apr.toFixed(2)}%`;
 }

@@ -2,6 +2,7 @@
 // Provides O(1) lookups and consistent handling of WSEI/SEI edge cases
 
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
+import { shortenAddress } from '@/utils/format';
 
 // Pre-built lookup map for O(1) lookups instead of O(n) array find
 const TOKEN_MAP = new Map<string, Token>(
@@ -29,7 +30,7 @@ export function getTokenByAddress(address: string): Token | null {
 export function getTokenSymbol(address: string): string {
     const token = getTokenByAddress(address);
     if (token) return token.symbol;
-    return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Unknown';
+    return address ? shortenAddress(address, 4) : 'Unknown';
 }
 
 /**

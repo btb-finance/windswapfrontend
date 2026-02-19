@@ -6,6 +6,7 @@ import { useWriteContract } from '@/hooks/useWriteContract';
 import { Address, encodeFunctionData, keccak256, toBytes, parseUnits } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
+import { GOVERNOR_ABI, VOTER_ABI } from '@/config/abis';
 
 // Governor states
 export enum ProposalState {
@@ -44,117 +45,6 @@ export interface Proposal {
     values: bigint[];
     calldatas: `0x${string}`[];
 }
-
-// VetoGovernor ABI (requires tokenId for propose and castVote)
-const GOVERNOR_ABI = [
-    {
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'targets', type: 'address[]' },
-            { name: 'values', type: 'uint256[]' },
-            { name: 'calldatas', type: 'bytes[]' },
-            { name: 'description', type: 'string' },
-        ],
-        name: 'propose',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [
-            { name: 'proposalId', type: 'uint256' },
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'support', type: 'uint8' },
-        ],
-        name: 'castVote',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [
-            { name: 'targets', type: 'address[]' },
-            { name: 'values', type: 'uint256[]' },
-            { name: 'calldatas', type: 'bytes[]' },
-            { name: 'descriptionHash', type: 'bytes32' },
-        ],
-        name: 'execute',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'payable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'proposalId', type: 'uint256' }],
-        name: 'state',
-        outputs: [{ name: '', type: 'uint8' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'proposalId', type: 'uint256' }],
-        name: 'proposalVotes',
-        outputs: [
-            { name: 'againstVotes', type: 'uint256' },
-            { name: 'forVotes', type: 'uint256' },
-            { name: 'abstainVotes', type: 'uint256' },
-        ],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'proposalThreshold',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'votingDelay',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'votingPeriod',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'proposalId', type: 'uint256' }, { name: 'account', type: 'address' }],
-        name: 'hasVoted',
-        outputs: [{ name: '', type: 'bool' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
-
-// Voter ABI for creating governance actions
-const VOTER_ABI = [
-    {
-        inputs: [{ name: '_token', type: 'address' }, { name: '_bool', type: 'bool' }],
-        name: 'whitelistToken',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: '_poolFactory', type: 'address' }, { name: '_pool', type: 'address' }],
-        name: 'createGauge',
-        outputs: [{ name: '', type: 'address' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: '_governor', type: 'address' }],
-        name: 'setGovernor',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-] as const;
 
 export function useGovernance() {
     const { address, isConnected } = useAccount();

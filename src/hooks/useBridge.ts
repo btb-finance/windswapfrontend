@@ -3,7 +3,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useWalletClient, useSwitchChain } from 'wagmi';
 import { parseUnits, formatUnits, pad } from 'viem';
-import { BRIDGE_TOKENS, BRIDGE_CHAINS, HYPERLANE_DOMAIN_IDS, WARP_ROUTE_ABI, ERC20_ABI, BridgeToken } from '@/config/bridge';
+import { BRIDGE_TOKENS, BRIDGE_CHAINS, HYPERLANE_DOMAIN_IDS, BridgeToken } from '@/config/bridge';
+import { WARP_ROUTE_ABI, ERC20_ABI } from '@/config/abis';
 
 export type BridgeDirection = 'base-to-sei' | 'sei-to-base';
 

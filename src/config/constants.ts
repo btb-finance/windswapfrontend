@@ -1,5 +1,12 @@
 // Application-wide constants
 
+// Time constants (in seconds unless noted)
+export const TIME = {
+    SECONDS_PER_HOUR: 3600,
+    SECONDS_PER_DAY: 86400,
+    SECONDS_PER_WEEK: 604800,
+} as const;
+
 export const DEBOUNCE_MS = {
   QUOTE: 400,        // Increased to reduce RPC calls while keeping UX snappy
   INPUT: 100,        // Reduced for more responsive typing

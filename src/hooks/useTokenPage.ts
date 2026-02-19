@@ -8,31 +8,7 @@ import { getTokenByAddress } from '@/utils/tokens';
 import { GAUGE_LIST, GaugeConfig } from '@/config/gauges';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
-
-// Minimal ERC20 ABI for fetching token info
-const ERC20_ABI = [
-    {
-        name: 'name',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ type: 'string' }],
-    },
-    {
-        name: 'symbol',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ type: 'string' }],
-    },
-    {
-        name: 'decimals',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ type: 'uint8' }],
-    },
-] as const;
+import { ERC20_ABI } from '@/config/abis';
 
 export interface TokenPool {
     address: string;

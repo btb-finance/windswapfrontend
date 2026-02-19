@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { WIND, WSEI } from '@/config/tokens';
-import { SUBGRAPH_URL } from '@/config/subgraph';
+import { fetchSubgraph } from '@/config/subgraph';
 
 /**
  * Hook to get WIND and SEI prices in USD from DEX pools
@@ -27,18 +27,8 @@ export function useWindPrice() {
                     ids: [WIND.address.toLowerCase(), WSEI.address.toLowerCase()],
                 };
 
-                const response = await fetch(SUBGRAPH_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query, variables }),
-                });
-
-                const json = await response.json();
-                if (json.errors) {
-                    return null;
-                }
-
-                const tokens: Array<{ id: string; symbol: string; priceUSD: string }> = json.data?.tokens || [];
+                const data = await fetchSubgraph<{ tokens: Array<{ id: string; symbol: string; priceUSD: string }> }>(query, variables);
+                const tokens = data?.tokens || [];
                 const byId = new Map(tokens.map(t => [String(t.id).toLowerCase(), t]));
 
                 const wind = byId.get(WIND.address.toLowerCase());
