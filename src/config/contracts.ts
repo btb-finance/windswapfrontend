@@ -128,6 +128,20 @@ export const COMMON = {
 } as const;
 
 // ============================================
+// Notable Pools & Gauges (used for prioritization / APR display)
+// ============================================
+export const NOTABLE_POOLS = {
+    WIND_WSEI:  '0xc7035A2Ef7C685Fc853475744623A0F164541b69',
+    WIND_USDC:  '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0',
+    USDT_USDC:  '0x3c2567b15fd9133cf9101e043c58e2b444af900b',
+    USDC_WSEI:  '0x587b82b8ed109d8587a58f9476a8d4268ae945b1',
+} as const;
+
+export const NOTABLE_GAUGES = {
+    WIND_WSEI: '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb',
+} as const;
+
+// ============================================
 // All Contracts Combined (for easy access)
 // ============================================
 export const ALL_CONTRACTS = {

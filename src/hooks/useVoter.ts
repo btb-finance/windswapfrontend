@@ -7,7 +7,7 @@ import { Address, parseUnits } from 'viem';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { usePoolData, GaugeInfo, RewardToken } from '@/providers/PoolDataProvider';
 import { VOTER_EXTENDED_ABI, VOTER_ABI, BRIBE_VOTING_REWARD_ABI, ERC20_ABI } from '@/config/abis';
-import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
+import { fetchSubgraph } from '@/config/subgraph';
 
 // Re-export types for backward compatibility
 export type { GaugeInfo, RewardToken };
@@ -27,18 +27,6 @@ export function useVoter() {
     // Get gauge data from global provider (instant!)
     const { gauges, totalVoteWeight, epochCount, gaugesLoading, refetch } = usePoolData();
 
-    const fetchGraphQL = useCallback(async <T,>(query: string, variables: Record<string, any>): Promise<T> => {
-        const response = await fetch(SUBGRAPH_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, variables }),
-        });
-        const json = await response.json();
-        if (json.errors) {
-            throw new Error(json.errors[0]?.message || 'Subgraph error');
-        }
-        return json.data;
-    }, []);
 
     // Fetch existing votes for a veNFT across all pools
     const fetchExistingVotes = useCallback(async (tokenId: bigint) => {
@@ -53,7 +41,7 @@ export function useVoter() {
                 }
             }`;
 
-            const data = await fetchGraphQL<{ veVotes: Array<{ epoch: string; pool: { id: string }; weight: string }> }>(query, {
+            const data = await fetchSubgraph<{ veVotes: Array<{ epoch: string; pool: { id: string }; weight: string }> }>(query, {
                 tokenId: tokenId.toString(),
             });
 
@@ -72,7 +60,7 @@ export function useVoter() {
         } catch (err) {
             console.error('Error fetching existing votes (subgraph):', err);
         }
-    }, [fetchGraphQL]);
+    }, [fetchSubgraph]);
 
     // Add incentive (bribe) to a pool
     const addIncentive = useCallback(async (

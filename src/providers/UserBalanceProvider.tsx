@@ -4,8 +4,8 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { formatUnits, Address } from 'viem';
 import { useAccount } from 'wagmi';
 import { DEFAULT_TOKEN_LIST, Token, WSEI } from '@/config/tokens';
-import { getRpcForUserData } from '@/utils/rpc';
-import { SUBGRAPH_URL } from '@/config/subgraph';
+import { getRpcForUserData, batchRpcCall as batchEthCall, rpcCall } from '@/utils/rpc';
+import { fetchSubgraph } from '@/config/subgraph';
 
 // ============================================
 // Types
@@ -37,13 +37,8 @@ async function fetchTokenPricesUsd(tokenAddresses: string[]): Promise<Map<string
             }
         }`;
 
-        const response = await fetch(SUBGRAPH_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, variables: { ids: tokenAddresses.map(a => a.toLowerCase()) } }),
-        });
-        const json = await response.json();
-        const rows: Array<{ id: string; priceUSD: string }> = json?.data?.tokens || [];
+        const data = await fetchSubgraph<{ tokens: Array<{ id: string; priceUSD: string }> }>(query, { ids: tokenAddresses.map(a => a.toLowerCase()) });
+        const rows = data?.tokens || [];
         for (const r of rows) {
             const p = r?.priceUSD ? parseFloat(r.priceUSD) : 0;
             if (r?.id && isFinite(p) && p > 0) {
@@ -59,30 +54,6 @@ async function fetchTokenPricesUsd(tokenAddresses: string[]): Promise<Map<string
 
 const UserBalanceContext = createContext<UserBalanceContextType | undefined>(undefined);
 
-// ============================================
-// Batch RPC Helper
-// ============================================
-async function batchRpcCall(calls: { to: string; data: string }[]): Promise<string[]> {
-    if (calls.length === 0) return [];
-
-    const batch = calls.map((call, i) => ({
-        jsonrpc: '2.0',
-        method: 'eth_call',
-        params: [{ to: call.to, data: call.data }, 'latest'],
-        id: i + 1
-    }));
-
-    const response = await fetch(getRpcForUserData(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(batch)
-    });
-
-    const results = await response.json();
-    return Array.isArray(results)
-        ? results.sort((a: any, b: any) => a.id - b.id).map((r: any) => r.result || '0x')
-        : [results.result || '0x'];
-}
 
 // ============================================
 // Provider Component
@@ -114,27 +85,18 @@ export function UserBalanceProvider({ children }: { children: ReactNode }) {
             const wseiUsd = priceUsdMap.get(WSEI.address.toLowerCase()) || 0;
 
             // Get native SEI balance
-            const nativeBalanceRes = await fetch(getRpcForUserData(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'eth_getBalance',
-                    params: [address, 'latest'],
-                    id: 1
-                })
-            });
-            const nativeData = await nativeBalanceRes.json();
-            const nativeBalance = nativeData.result ? BigInt(nativeData.result) : BigInt(0);
+            const nativeHex = await rpcCall<string>('eth_getBalance', [address, 'latest'], getRpcForUserData());
+            const nativeBalance = nativeHex ? BigInt(nativeHex) : BigInt(0);
 
             // Fetch balances for all ERC20 tokens
             const erc20Tokens = DEFAULT_TOKEN_LIST.filter(t => !t.isNative);
-            const balanceCalls = erc20Tokens.map(token => ({
-                to: token.address,
-                data: `0x70a08231${addressPadded}` // balanceOf(address)
-            }));
-
-            const balanceResults = await batchRpcCall(balanceCalls);
+            const balanceResults = await batchEthCall(
+                erc20Tokens.map(token => ({
+                    method: 'eth_call',
+                    params: [{ to: token.address, data: `0x70a08231${addressPadded}` }, 'latest'],
+                })),
+                getRpcForUserData()
+            );
 
             // Build balance map
             const newBalances = new Map<string, TokenBalance>();

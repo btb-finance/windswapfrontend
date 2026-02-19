@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { SUBGRAPH_URL } from '@/config/subgraph';
+import { fetchSubgraph, SUBGRAPH_URL } from '@/config/subgraph';
 
 // Types matching subgraph schema
 export interface SubgraphToken {
@@ -140,21 +140,6 @@ const RECENT_SWAPS_QUERY = `
     }
 `;
 
-async function fetchGraphQL<T>(query: string, variables: Record<string, any>): Promise<T> {
-    const response = await fetch(SUBGRAPH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables }),
-    });
-
-    const json = await response.json();
-
-    if (json.errors) {
-        throw new Error(json.errors[0]?.message || 'GraphQL error');
-    }
-
-    return json.data;
-}
 
 /**
  * Hook to fetch all pools from the WindSwap subgraph
@@ -172,7 +157,7 @@ export function useSubgraph(): UseSubgraphResult {
 
         try {
             // Fetch pools
-            const poolsData = await fetchGraphQL<{
+            const poolsData = await fetchSubgraph<{
                 pools: SubgraphPool[];
                 protocol: SubgraphProtocol | null;
             }>(POOLS_QUERY, {
@@ -186,7 +171,7 @@ export function useSubgraph(): UseSubgraphResult {
             setProtocol(poolsData.protocol);
 
             // Fetch recent swaps
-            const swapsData = await fetchGraphQL<{ swaps: SubgraphSwap[] }>(RECENT_SWAPS_QUERY, {
+            const swapsData = await fetchSubgraph<{ swaps: SubgraphSwap[] }>(RECENT_SWAPS_QUERY, {
                 first: 20,
             });
 
@@ -229,7 +214,7 @@ export function usePoolDayData(poolId: string) {
 
         const fetchDayData = async () => {
             try {
-                const data = await fetchGraphQL<{ poolDayDatas: SubgraphPoolDayData[] }>(
+                const data = await fetchSubgraph<{ poolDayDatas: SubgraphPoolDayData[] }>(
                     `query GetPoolDayData($poolId: String!) {
                         poolDayDatas(first: 30, where: { pool: $poolId }, orderBy: date, orderDirection: desc) {
                             id
@@ -482,7 +467,7 @@ export function useUserPositions(userAddress: string | undefined) {
             let hasMorePositions = true;
 
             while (hasMorePositions) {
-                const data = await fetchGraphQL<{
+                const data = await fetchSubgraph<{
                     user: SubgraphUser | null;
                     gaugeStakedPositions: SubgraphStakedPosition[];
                 }>(
@@ -513,7 +498,7 @@ export function useUserPositions(userAddress: string | undefined) {
             let hasMoreStaked = true;
 
             while (hasMoreStaked) {
-                const data = await fetchGraphQL<{
+                const data = await fetchSubgraph<{
                     user: SubgraphUser | null;
                     gaugeStakedPositions: SubgraphStakedPosition[];
                 }>(

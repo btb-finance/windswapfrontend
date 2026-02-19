@@ -7,7 +7,7 @@ import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 import { useUserPositions } from '@/hooks/useSubgraph';
 import { getRpcForUserData, rpcCall } from '@/utils/rpc';
-import { V2_CONTRACTS } from '@/config/contracts';
+import { V2_CONTRACTS, NOTABLE_POOLS, NOTABLE_GAUGES } from '@/config/contracts';
 import { SUBGRAPH_URL } from '@/config/subgraph';
 
 // Fetch pools from subgraph
@@ -58,9 +58,8 @@ async function fetchPoolsFromSubgraph(): Promise<{
     }
 }
 
-// Priority pool address - WIND/WSEI pool loads first with its APR
-const PRIORITY_POOL = '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase();
-const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase();
+const PRIORITY_POOL = NOTABLE_POOLS.WIND_WSEI.toLowerCase();
+const PRIORITY_GAUGE = NOTABLE_GAUGES.WIND_WSEI.toLowerCase();
 
 // ============================================
 // Types

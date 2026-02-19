@@ -1,6 +1,16 @@
 // Centralized formatting utilities
 // Provides consistent number and currency formatting across the application
 
+import { formatUnits } from 'viem';
+
+/**
+ * Convert a bigint wei value to a JS number.
+ * Replaces the `parseFloat(formatUnits(value, decimals))` pattern.
+ */
+export function fromWei(value: bigint, decimals: number = 18): number {
+    return parseFloat(formatUnits(value, decimals));
+}
+
 /**
  * Format USD values with appropriate suffixes (K, M, B)
  * @param value - The numeric value to format
