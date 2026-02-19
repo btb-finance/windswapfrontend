@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useChainId, useSwitchChain } from 'wagmi';
 import { formatEther, parseEther } from 'viem';
 import { sei } from '@/config/chains';
+import { useToast } from '@/providers/ToastProvider';
 import {
     useCurrentRound,
     useCurrentRoundId,
@@ -96,6 +97,7 @@ export default function MiningPage() {
     const chainId = useChainId();
     const { switchChain } = useSwitchChain();
     const isOnSei = chainId === sei.id;
+    const { success, error: showError } = useToast();
 
     const [selectedSquares, setSelectedSquares] = useState<number[]>([]);
     const [amountInput, setAmountInput] = useState('1');
@@ -118,7 +120,7 @@ export default function MiningPage() {
     const endTime = round ? Number(round.endTime) : 0;
     const { display: countdown, remaining: timeLeft } = useCountdown(endTime);
 
-    const canFinalize = round && round.timerStarted && timeLeft === 0 && !round.finalized;
+    const canFinalize = round && timeLeft === 0 && !round.finalized;
 
     // Refetch on success
     useEffect(() => {
@@ -141,15 +143,28 @@ export default function MiningPage() {
     const handleDeploy = async () => {
         if (!isConnected || !isOnSei || selectedSquares.length === 0) return;
         const amount = parseEther(amountInput || '1');
-        await deploy(selectedSquares, amount);
+        try {
+            await deploy(selectedSquares, amount);
+        } catch (err: any) {
+            showError(err?.shortMessage || err?.message || 'Deploy failed');
+        }
     };
 
     const handleFinalize = async () => {
-        await finalize();
+        try {
+            await finalize();
+            success('Round finalized!');
+        } catch (err: any) {
+            showError(err?.shortMessage || err?.message || 'Finalize failed');
+        }
     };
 
     const handleClaimAll = async () => {
-        await claim();
+        try {
+            await claim();
+        } catch (err: any) {
+            showError(err?.shortMessage || err?.message || 'Claim failed');
+        }
     };
 
     const getSquareAmount = (i: number): bigint => {
@@ -313,7 +328,7 @@ export default function MiningPage() {
                                             ${isWinner
                                                 ? 'border-yellow-400 bg-yellow-400/20 text-yellow-400'
                                                 : isSelected
-                                                ? 'border-primary bg-primary/20 text-primary'
+                                                ? 'border-blue-400 bg-blue-500/40 text-white shadow-lg shadow-blue-500/30 ring-2 ring-blue-400/60'
                                                 : hasMyDeployment
                                                 ? 'border-green-500 bg-green-500/10 text-green-400'
                                                 : squareAmount > BigInt(0)
@@ -338,6 +353,9 @@ export default function MiningPage() {
                                         {minerCount > BigInt(0) && (
                                             <span className="relative z-10 text-[8px] opacity-50">{minerCount.toString()}m</span>
                                         )}
+                                        {isSelected && (
+                                            <span className="absolute top-0.5 right-0.5 text-[10px] text-blue-300">✓</span>
+                                        )}
                                         {isWinner && (
                                             <span className="absolute top-0.5 right-0.5 text-[8px]">★</span>
                                         )}
@@ -346,7 +364,7 @@ export default function MiningPage() {
                             })}
                         </div>
                         <div className="flex gap-3 mt-3 text-xs text-foreground/50">
-                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border-2 border-primary inline-block" /> Selected</span>
+                            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border-2 border-blue-400 bg-blue-500/40 inline-block" /> Selected</span>
                             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border-2 border-green-500 inline-block" /> My deploy</span>
                             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded border-2 border-yellow-400 inline-block" /> Winner</span>
                         </div>
