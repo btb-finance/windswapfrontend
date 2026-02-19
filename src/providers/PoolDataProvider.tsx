@@ -6,7 +6,7 @@ import { useAccount } from 'wagmi';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 import { useUserPositions } from '@/hooks/useSubgraph';
-import { getRpcForUserData } from '@/utils/rpc';
+import { getRpcForUserData, rpcCall } from '@/utils/rpc';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { SUBGRAPH_URL } from '@/config/subgraph';
 
@@ -681,7 +681,21 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const total = protocol.totalVotingWeight ? BigInt(protocol.totalVotingWeight) : BigInt(0);
                 setTotalVoteWeight(total);
                 setEpochCount(protocol.epochCount ? BigInt(protocol.epochCount) : BigInt(0));
-                setActivePeriod(protocol.activePeriod ? BigInt(protocol.activePeriod) : BigInt(0));
+
+                // Fetch activePeriod directly from Minter on-chain to avoid subgraph lag/inaccuracy
+                try {
+                    const onChainResult = await rpcCall<string>(
+                        'eth_call',
+                        [{ to: V2_CONTRACTS.Minter, data: '0x0a441f7b' }, 'latest'],
+                    );
+                    if (onChainResult && onChainResult !== '0x') {
+                        setActivePeriod(BigInt(onChainResult));
+                    } else {
+                        setActivePeriod(protocol.activePeriod ? BigInt(protocol.activePeriod) : BigInt(0));
+                    }
+                } catch {
+                    setActivePeriod(protocol.activePeriod ? BigInt(protocol.activePeriod) : BigInt(0));
+                }
             }
 
             const decimalToBigInt = (value: string | null | undefined, decimals: number): bigint => {
