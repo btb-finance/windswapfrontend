@@ -1643,3 +1643,32 @@ export const FEE_REWARD_ABI = [
         type: 'function',
     },
 ] as const;
+
+// Hyperlane Warp Route ABI (bridge)
+export const WARP_ROUTE_ABI = [
+    {
+        name: 'transferRemote',
+        type: 'function',
+        stateMutability: 'payable',
+        inputs: [
+            { name: 'destination', type: 'uint32' },
+            { name: 'recipient', type: 'bytes32' },
+            { name: 'amount', type: 'uint256' },
+        ],
+        outputs: [{ name: 'messageId', type: 'bytes32' }],
+    },
+    {
+        name: 'quoteGasPayment',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'destination', type: 'uint32' }],
+        outputs: [{ name: '', type: 'uint256' }],
+    },
+    {
+        name: 'balanceOf',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'account', type: 'address' }],
+        outputs: [{ name: '', type: 'uint256' }],
+    },
+] as const;

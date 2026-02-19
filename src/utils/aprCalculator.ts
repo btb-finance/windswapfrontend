@@ -127,20 +127,8 @@ export function calculateRangeAdjustedAPR(
     return baseAPR * effectiveMultiplier;
 }
 
-/**
- * Format APR for display
- * 
- * @param apr - APR as a percentage
- * @returns Formatted string like "123%", "1.2K%", "12.5K%"
- */
-export function formatAPR(apr: number): string {
-    if (apr <= 0) return '—';
-    if (apr >= 10000) return `${(apr / 1000).toFixed(0)}K%`;
-    if (apr >= 1000) return `${(apr / 1000).toFixed(1)}K%`;
-    if (apr >= 100) return `${apr.toFixed(0)}%`;
-    if (apr >= 1) return `${apr.toFixed(1)}%`;
-    return `${apr.toFixed(2)}%`;
-}
+// Re-export from central format.ts
+export { formatAPR } from './format';
 
 /**
  * Calculate staked TVL from total TVL and staked liquidity ratio
