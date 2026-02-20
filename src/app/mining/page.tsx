@@ -17,7 +17,13 @@ import {
     useDeployToSquares,
     useFinalizeRound,
     useClaimAll,
+    useGetRound,
+    useMiningLoreBalance,
 } from '@/hooks/useLOREmining';
+
+// 20,000 LORE for normal rounds, 10,000 for jackpot (contract constants)
+const LORE_PER_ROUND_NORMAL = BigInt('20000000000000000000000'); // 20,000e18
+const LORE_PER_ROUND_JACKPOT = BigInt('10000000000000000000000'); // 10,000e18
 
 const MOTHERLODE_TIER_NAMES = [
     'Bronze Nugget', 'Silver Nugget', 'Gold Nugget', 'Platinum Nugget',
@@ -67,6 +73,79 @@ function useCountdown(endTimestamp: number) {
 
 const QUICK_AMOUNTS = ['1', '5', '10', '50'];
 
+// 0-indexed square strategies for the 5×5 grid
+// Grid layout (0-based):
+//  0  1  2  3  4
+//  5  6  7  8  9
+// 10 11 12 13 14
+// 15 16 17 18 19
+// 20 21 22 23 24
+const STRATEGIES = [
+    {
+        id: 'corners',
+        label: 'Corners',
+        desc: '4 corner squares',
+        squares: [0, 4, 20, 24],
+        color: 'border-rose-500/50 bg-rose-500/10 text-rose-400',
+        activeColor: 'border-rose-400 bg-rose-500/25 text-rose-300',
+        dot: 'bg-rose-400',
+    },
+    {
+        id: 'cross',
+        label: 'Cross',
+        desc: 'Center row + column',
+        squares: [2, 7, 10, 11, 12, 13, 14, 17, 22],
+        color: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400',
+        activeColor: 'border-emerald-400 bg-emerald-500/25 text-emerald-300',
+        dot: 'bg-emerald-400',
+    },
+    {
+        id: 'odds',
+        label: 'Odds',
+        desc: 'Squares 1,3,5,7,9…',
+        squares: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24],
+        color: 'border-sky-500/50 bg-sky-500/10 text-sky-400',
+        activeColor: 'border-sky-400 bg-sky-500/25 text-sky-300',
+        dot: 'bg-sky-400',
+    },
+    {
+        id: 'evens',
+        label: 'Evens',
+        desc: 'Squares 2,4,6,8…',
+        squares: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23],
+        color: 'border-violet-500/50 bg-violet-500/10 text-violet-400',
+        activeColor: 'border-violet-400 bg-violet-500/25 text-violet-300',
+        dot: 'bg-violet-400',
+    },
+    {
+        id: 'diamond',
+        label: 'Diamond',
+        desc: 'Diamond pattern',
+        squares: [2, 6, 8, 11, 13, 16, 18, 22],
+        color: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400',
+        activeColor: 'border-yellow-400 bg-yellow-500/25 text-yellow-300',
+        dot: 'bg-yellow-400',
+    },
+    {
+        id: 'snipe',
+        label: 'Snipe',
+        desc: 'Single center square',
+        squares: [12],
+        color: 'border-orange-500/50 bg-orange-500/10 text-orange-400',
+        activeColor: 'border-orange-400 bg-orange-500/25 text-orange-300',
+        dot: 'bg-orange-400',
+    },
+    {
+        id: 'all',
+        label: 'All In',
+        desc: 'All 25 squares',
+        squares: Array.from({ length: 25 }, (_, i) => i),
+        color: 'border-pink-500/50 bg-pink-500/10 text-pink-400',
+        activeColor: 'border-pink-400 bg-pink-500/25 text-pink-300',
+        dot: 'bg-pink-400',
+    },
+] as const;
+
 export default function MiningPage() {
     const { address, isConnected } = useAccount();
     const chainId = useChainId();
@@ -75,6 +154,7 @@ export default function MiningPage() {
     const { success, error: showError } = useToast();
 
     const [selectedSquares, setSelectedSquares] = useState<number[]>([]);
+    const [activeStrategyId, setActiveStrategyId] = useState<string | null>(null);
     const [amountInput, setAmountInput] = useState('1');
     const [activeTab, setActiveTab] = useState<'game' | 'rewards' | 'pots'>('game');
 
@@ -84,6 +164,13 @@ export default function MiningPage() {
     const { data: claimable, refetch: refetchClaimable } = useTotalClaimableBalance(address);
     const { data: minerRoundData, refetch: refetchMinerRound } = useMinerRoundData(roundId, address);
     const { data: pots } = useMotherloadePots();
+
+    // Previous round for history
+    const prevRoundId = roundId !== undefined && roundId > BigInt(0) ? roundId - BigInt(1) : undefined;
+    const { data: prevRound } = useGetRound(prevRoundId);
+
+    // LORE balance of mining contract → estimated reward
+    const { data: miningLoreBalance } = useMiningLoreBalance();
 
     const { deploy, isPending: isDeploying, isSuccess: deploySuccess } = useDeployToSquares();
     const { finalize, isPending: isFinalizing, isSuccess: finalizeSuccess } = useFinalizeRound();
@@ -100,13 +187,30 @@ export default function MiningPage() {
             refetchClaimable();
             refetchMinerRound();
             setSelectedSquares([]);
+            setActiveStrategyId(null);
         }
     }, [deploySuccess, finalizeSuccess, claimSuccess]);
 
     const toggleSquare = (i: number) => {
+        setActiveStrategyId(null); // manual selection clears strategy highlight
         setSelectedSquares(prev =>
             prev.includes(i) ? prev.filter(s => s !== i) : [...prev, i]
         );
+    };
+
+    const applyStrategy = (strategyId: string, squares: readonly number[]) => {
+        if (activeStrategyId === strategyId) {
+            // Clicking the active strategy deselects it
+            setActiveStrategyId(null);
+            setSelectedSquares([]);
+        } else {
+            setActiveStrategyId(strategyId);
+            // Only select squares the user hasn't already deployed to
+            const available = (squares as number[]).filter(
+                s => mySquareDeployment(s) === BigInt(0)
+            );
+            setSelectedSquares(available);
+        }
     };
 
     const handleDeploy = async () => {
@@ -144,7 +248,15 @@ export default function MiningPage() {
 
     const totalDeployed = round?.totalDeployed ?? BigInt(0);
     const isJackpot = round?.isJackpotRound ?? false;
-    const loreReward = round?.loreReward ?? BigInt(0);
+
+    // If round is finalized, show the actual stored loreReward.
+    // If still live, estimate from contract's LORE balance vs per-round constant.
+    const loreRewardEstimate = (() => {
+        if (round?.finalized) return round.loreReward;
+        const target = isJackpot ? LORE_PER_ROUND_JACKPOT : LORE_PER_ROUND_NORMAL;
+        if (miningLoreBalance === undefined) return undefined; // loading
+        return miningLoreBalance >= target ? target : miningLoreBalance;
+    })();
     const totalClaimableSei = claimable ? claimable[0] : BigInt(0);
     const totalClaimableLore = claimable ? claimable[1] : BigInt(0);
     const hasClaimable = totalClaimableSei > BigInt(0) || totalClaimableLore > BigInt(0);
@@ -155,7 +267,7 @@ export default function MiningPage() {
     const urgent = timeLeft > 0 && timeLeft <= 10 && round?.timerStarted;
 
     return (
-        <div className="min-h-screen pb-40">
+        <div className="min-h-screen pb-52 md:pb-40">
             <div className="container mx-auto px-3 sm:px-4 py-4 max-w-2xl">
 
                 {/* Header */}
@@ -208,7 +320,12 @@ export default function MiningPage() {
                     </div>
                     <div className="card text-center py-2.5 px-2">
                         <div className="text-[10px] text-foreground/40 uppercase tracking-wide mb-0.5">LORE Prize</div>
-                        <div className="text-base sm:text-lg font-bold text-yellow-400">{formatLORE(loreReward)}</div>
+                        <div className="text-base sm:text-lg font-bold text-yellow-400">
+                            {loreRewardEstimate === undefined ? '…' : formatLORE(loreRewardEstimate)}
+                        </div>
+                        {!round?.finalized && loreRewardEstimate !== undefined && (
+                            <div className="text-[9px] text-foreground/30">est.</div>
+                        )}
                     </div>
                 </div>
 
@@ -236,6 +353,55 @@ export default function MiningPage() {
                     )}
                 </AnimatePresence>
 
+                {/* Motherlode Pots Strip — always visible */}
+                {pots && (
+                    <div className="mb-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="text-[10px] text-foreground/40 uppercase tracking-wide font-medium">Motherlode Pots — win big this round</span>
+                            <span className="text-[10px] text-yellow-400 animate-pulse">✦</span>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-none -mx-1 px-1">
+                            {MOTHERLODE_TIER_NAMES.map((name, i) => {
+                                const pot = pots[i] ?? BigInt(0);
+                                const isLast = i === MOTHERLODE_TIER_NAMES.length - 1;
+                                return (
+                                    <div
+                                        key={i}
+                                        className={`snap-start shrink-0 rounded-xl border px-3 py-2.5 min-w-[110px] text-center
+                                            ${isLast
+                                                ? 'border-yellow-300/40 bg-yellow-300/10 shadow-md shadow-yellow-400/10'
+                                                : `border-white/8 ${MOTHERLODE_TIER_BG[i]}`
+                                            }`}
+                                    >
+                                        <div className={`text-[10px] font-semibold truncate ${MOTHERLODE_TIER_COLORS[i]}`}>{name}</div>
+                                        <div className={`text-base font-bold mt-0.5 ${MOTHERLODE_TIER_COLORS[i]}`}>
+                                            {formatLORE(pot)}
+                                        </div>
+                                        <div className="text-[9px] text-foreground/30 mt-0.5">LORE · 1/{MOTHERLODE_ODDS[i]}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Last Round Result */}
+                {prevRound?.finalized && prevRoundId !== undefined && (
+                    <div className="mb-4 px-3 py-2.5 rounded-xl border border-yellow-400/20 bg-yellow-400/5 flex items-center gap-3">
+                        <span className="text-lg shrink-0">🏆</span>
+                        <div className="min-w-0">
+                            <div className="text-[10px] text-foreground/40 uppercase tracking-wide">Last Round #{prevRoundId.toString()}</div>
+                            <div className="text-sm font-semibold">
+                                Square <span className="text-yellow-400">{Number(prevRound.winningSquare) + 1}</span> won{' '}
+                                <span className="text-foreground/70">{formatSEI(prevRound.totalWinnings)} SEI</span>
+                                {prevRound.loreReward > BigInt(0) && (
+                                    <span className="text-yellow-400"> + {formatLORE(prevRound.loreReward)} LORE</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Tabs */}
                 <div className="flex gap-1 mb-4 bg-surface/40 rounded-xl p-1">
                     {(['game', 'rewards', 'pots'] as const).map(tab => (
@@ -259,13 +425,49 @@ export default function MiningPage() {
                 {/* ── GAME TAB ── */}
                 {activeTab === 'game' && (
                     <div className="space-y-3">
+
+                        {/* Strategy Presets */}
+                        {!round?.finalized && (
+                            <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-[10px] text-foreground/40 uppercase tracking-wide font-medium">Quick Strategies</span>
+                                    {activeStrategyId && (
+                                        <button
+                                            onClick={() => { setActiveStrategyId(null); setSelectedSquares([]); }}
+                                            className="text-[10px] text-foreground/40 hover:text-foreground/70 transition-colors ml-auto"
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex gap-2 overflow-x-auto pb-1 snap-x scrollbar-none -mx-1 px-1">
+                                    {STRATEGIES.map(s => {
+                                        const isActive = activeStrategyId === s.id;
+                                        return (
+                                            <button
+                                                key={s.id}
+                                                onClick={() => applyStrategy(s.id, s.squares)}
+                                                className={`snap-start shrink-0 flex flex-col items-start px-3 py-2 rounded-xl border text-left transition-all active:scale-95 ${isActive ? s.activeColor : s.color}`}
+                                            >
+                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
+                                                    <span className="text-xs font-semibold whitespace-nowrap">{s.label}</span>
+                                                </div>
+                                                <span className="text-[10px] opacity-60 whitespace-nowrap">{s.desc}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Grid */}
                         <div className="card">
                             <div className="flex items-center justify-between mb-3">
                                 <span className="text-sm font-medium">5×5 Grid</span>
                                 {selectedSquares.length > 0 && (
                                     <button
-                                        onClick={() => setSelectedSquares([])}
+                                        onClick={() => { setSelectedSquares([]); setActiveStrategyId(null); }}
                                         className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors"
                                     >
                                         Clear ({selectedSquares.length})
@@ -383,7 +585,7 @@ export default function MiningPage() {
                                 <div className="text-yellow-400 font-semibold text-sm">Round Finalized</div>
                                 <div className="text-2xl font-bold">Square {Number(round.winningSquare) + 1} wins!</div>
                                 <div className="text-sm text-foreground/60">
-                                    {formatSEI(round.totalWinnings)} SEI + {formatLORE(round.loreReward)} LORE split among winners
+                                    {formatSEI(round.totalWinnings)} SEI{round.loreReward > BigInt(0) ? ` + ${formatLORE(round.loreReward)} LORE` : ''} split among winners
                                 </div>
                                 {round.totalMotherlodeReward > BigInt(0) && (
                                     <div className="text-sm text-yellow-400 font-medium">
@@ -500,7 +702,7 @@ export default function MiningPage() {
 
             {/* ── STICKY DEPLOY PANEL (bottom) ── */}
             {activeTab === 'game' && !round?.finalized && (
-                <div className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur border-t border-white/10 px-3 pt-3 pb-safe pb-4 safe-bottom">
+                <div className="fixed left-0 right-0 z-40 bg-[var(--bg-primary)]/95 backdrop-blur-xl border-t border-white/10 px-3 pt-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 64px)', paddingBottom: '12px' }}>
                     <div className="max-w-2xl mx-auto space-y-2.5">
                         {/* Quick amounts */}
                         <div className="flex items-center gap-2">

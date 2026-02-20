@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* ===== TAILWIND V4 THEME TOKENS ===== */
+@theme {
+  --color-primary: #6366f1;
+  --color-secondary: #8b5cf6;
+  --color-accent: #06b6d4;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-background: #0a0a0f;
+  --color-surface: #111118;
+  --color-foreground: #ffffff;
+}
+
 :root {
   /* Brand Colors */
   --primary: #6366f1;
@@ -40,8 +53,50 @@ html {
 
 body {
   background: var(--bg-primary);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(139, 92, 246, 0.08), transparent);
   color: var(--text-primary);
   min-height: 100vh;
+}
+
+/* ===== GENERIC CARD & INPUT UTILITY CLASSES ===== */
+/* Used throughout pages (especially mining) */
+.card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.card:has(button:hover) {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.input {
+  background: rgba(17, 17, 24, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+/* Safe area bottom padding for sticky footers */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
 /* Gradient Text */
@@ -330,26 +385,36 @@ body {
 .bg-orb {
   position: fixed;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
+  filter: blur(100px);
+  opacity: 0.2;
   pointer-events: none;
   z-index: -1;
+  animation: orb-drift 20s ease-in-out infinite;
+}
+
+@keyframes orb-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
 }
 
 .bg-orb-primary {
-  background: var(--primary);
-  width: 500px;
-  height: 500px;
+  background: radial-gradient(circle, #6366f1, #8b5cf6);
+  width: 600px;
+  height: 600px;
   top: -200px;
-  right: -100px;
+  right: -150px;
+  animation-duration: 25s;
 }
 
 .bg-orb-secondary {
-  background: var(--secondary);
-  width: 400px;
-  height: 400px;
+  background: radial-gradient(circle, #8b5cf6, #06b6d4);
+  width: 500px;
+  height: 500px;
   bottom: -150px;
-  left: -100px;
+  left: -150px;
+  animation-duration: 30s;
+  animation-direction: reverse;
 }
 
 /* Stats Card */
@@ -359,12 +424,31 @@ body {
   border-radius: 16px;
   padding: 1.5rem;
   transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .stat-card:hover {
   background: var(--glass-hover);
   border-color: rgba(255, 255, 255, 0.12);
   transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12);
+}
+
+.stat-card:hover::after {
+  opacity: 1;
 }
 
 /* ===== PREMIUM DESIGN UTILITIES ===== */

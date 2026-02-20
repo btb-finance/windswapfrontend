@@ -39,21 +39,49 @@ export default function Home() {
       title: 'Trade Tokens',
       description: 'Swap any token with deep liquidity and minimal slippage.',
       href: '/swap',
+      icon: (
+        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      ),
+      gradient: 'from-indigo-500 to-purple-600',
+      glowColor: 'rgba(99, 102, 241, 0.15)',
     },
     {
       title: 'Provide Liquidity',
       description: 'Earn trading fees by depositing tokens into pools.',
       href: '/pools',
+      icon: (
+        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+      ),
+      gradient: 'from-cyan-500 to-blue-600',
+      glowColor: 'rgba(6, 182, 212, 0.15)',
     },
     {
       title: 'Vote & Earn',
       description: 'Lock WIND to vote on pool rewards and earn your share.',
       href: '/vote',
+      icon: (
+        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      gradient: 'from-emerald-500 to-teal-600',
+      glowColor: 'rgba(16, 185, 129, 0.15)',
     },
     {
-      title: 'Portfolio',
-      description: 'Track your positions, staked LP, and pending rewards.',
-      href: '/portfolio',
+      title: 'LORE Mining',
+      description: 'Deploy SEI on a 5×5 grid, win the pot, earn LORE rewards.',
+      href: '/mining',
+      icon: (
+        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      gradient: 'from-yellow-500 to-orange-600',
+      glowColor: 'rgba(245, 158, 11, 0.15)',
     },
   ];
 
@@ -150,19 +178,19 @@ export default function Home() {
         >
           <div className="stat-card text-center">
             <p className="text-xs md:text-sm text-gray-400 mb-1">Total Pools</p>
-            <p className="text-xl md:text-3xl font-bold">{poolCount > 0 ? poolCount.toLocaleString() : '--'}</p>
+            <p className="text-xl md:text-3xl font-bold text-indigo-400">{poolCount > 0 ? poolCount.toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
             <p className="text-xs md:text-sm text-gray-400 mb-1">Active Gauges</p>
-            <p className="text-xl md:text-3xl font-bold">{gaugeCount > 0 ? gaugeCount.toLocaleString() : '--'}</p>
+            <p className="text-xl md:text-3xl font-bold text-purple-400">{gaugeCount > 0 ? gaugeCount.toLocaleString() : '--'}</p>
           </div>
           <div className="stat-card text-center">
             <p className="text-xs md:text-sm text-gray-400 mb-1">WIND Locked</p>
-            <p className="text-xl md:text-3xl font-bold">{formattedVeSupply}</p>
+            <p className="text-xl md:text-3xl font-bold text-cyan-400">{formattedVeSupply}</p>
           </div>
           <div className="stat-card text-center">
             <p className="text-xs md:text-sm text-gray-400 mb-1">Network</p>
-            <p className="text-xl md:text-3xl font-bold">Sei</p>
+            <p className="text-xl md:text-3xl font-bold text-emerald-400">Sei</p>
           </div>
         </motion.div>
       </section>
@@ -240,9 +268,11 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <h2 className="text-3xl font-bold text-center mb-4">Get Started</h2>
+          <h2 className="text-3xl font-bold text-center mb-4">
+            Everything You Need
+          </h2>
           <p className="text-gray-400 text-center max-w-xl mx-auto mb-10">
-            Everything you need to trade, earn, and participate in Wind Swap governance.
+            Trade, earn, and participate in Wind Swap governance — all in one place.
           </p>
         </motion.div>
 
@@ -255,11 +285,14 @@ export default function Home() {
               transition={{ delay: 0.5 + index * 0.1 }}
             >
               <Link href={feature.href}>
-                <div className="feature-card h-full cursor-pointer">
+                <div className="feature-card h-full cursor-pointer group">
+                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    {feature.icon}
+                  </div>
                   <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-                  <p className="text-gray-400 text-sm">{feature.description}</p>
-                  <div className="mt-4 text-primary text-sm font-medium">
-                    Get Started →
+                  <p className="text-gray-400 text-sm leading-relaxed">{feature.description}</p>
+                  <div className="mt-4 text-primary text-sm font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
+                    Get Started <span>→</span>
                   </div>
                 </div>
               </Link>

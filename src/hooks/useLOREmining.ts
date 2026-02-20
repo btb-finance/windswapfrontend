@@ -112,6 +112,40 @@ export function useMiningEndTime() {
     });
 }
 
+export function useGetRound(roundId: bigint | undefined) {
+    return useReadContract({
+        address: CONTRACT,
+        abi: LORE_MINING_ABI,
+        functionName: 'getRound',
+        args: roundId !== undefined ? [roundId] : undefined,
+        chainId: sei.id,
+        query: {
+            enabled: roundId !== undefined && roundId > BigInt(0),
+        },
+    });
+}
+
+export function useMiningLoreBalance() {
+    return useReadContract({
+        address: LORE_MINING_CONTRACTS.LoreToken as `0x${string}`,
+        abi: [
+            {
+                type: 'function',
+                name: 'balanceOf',
+                inputs: [{ name: 'account', type: 'address' }],
+                outputs: [{ name: '', type: 'uint256' }],
+                stateMutability: 'view',
+            },
+        ] as const,
+        functionName: 'balanceOf',
+        args: [CONTRACT],
+        chainId: sei.id,
+        query: {
+            refetchInterval: 15000,
+        },
+    });
+}
+
 // ============================================
 // Write Hooks
 // ============================================
