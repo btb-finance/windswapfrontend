@@ -28,6 +28,18 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
+    // Chunk load failures happen after a new deployment when cached pages try
+    // to load old chunk filenames that no longer exist. Auto-reload fixes it.
+    const isChunkError =
+      error.name === 'ChunkLoadError' ||
+      /loading chunk \d+ failed/i.test(error.message) ||
+      /loading css chunk \d+ failed/i.test(error.message);
+
+    if (isChunkError) {
+      window.location.reload();
+      return { hasError: false };
+    }
+
     return { hasError: true, error };
   }
 
