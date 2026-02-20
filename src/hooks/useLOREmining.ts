@@ -168,7 +168,7 @@ export function useDeployToSquares() {
             address: CONTRACT,
             abi: LORE_MINING_ABI,
             functionName: 'deploy',
-            args: [squares.map(s => s as number) as unknown as readonly number[], amountPerSquare, partner, userRandom as `0x${string}`],
+            args: [squares.map(s => Number(s)) as readonly number[], amountPerSquare, partner, userRandom as `0x${string}`],
             value: totalValue,
             chainId: sei.id,
         });

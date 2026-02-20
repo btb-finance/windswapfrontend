@@ -87,8 +87,8 @@ export function useMixedRouteQuoter() {
             // Parse results - they come back as array in same order
             return requests.map((req, i) => {
                 const result = Array.isArray(results)
-                    ? results.find((r: any) => r.id === i + 1)
-                    : results;
+                    ? (results as Array<{ id: number; result: string }>).find((r) => r.id === i + 1)
+                    : (results as { id: number; result: string });
 
                 if (!result?.result || result.result === '0x' || result.result.length < 66) {
                     return null;
@@ -201,8 +201,8 @@ export function useMixedRouteQuoter() {
 
             setIsLoading(false);
             return best;
-        } catch (err: any) {
-            setError(err.message || 'Quote failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Quote failed');
             setIsLoading(false);
             return null;
         }

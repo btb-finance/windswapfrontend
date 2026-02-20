@@ -99,8 +99,8 @@ export function useVoter() {
             await refetch();
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Failed to add incentive');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Failed to add incentive');
             return null;
         }
     }, [gauges, writeContractAsync, refetch]);
@@ -127,8 +127,8 @@ export function useVoter() {
             await fetchExistingVotes(tokenId);
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Vote failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Vote failed');
             return null;
         }
     };
@@ -152,8 +152,8 @@ export function useVoter() {
             setExistingVotes({});
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Reset failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Reset failed');
             return null;
         }
     };

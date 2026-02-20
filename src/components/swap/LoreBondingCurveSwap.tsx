@@ -157,8 +157,8 @@ export function LoreBondingCurveSwap({ initialTokenIn, initialTokenOut }: LoreBo
         try {
             const hash = await approve(loreWei);
             setPendingApprovalHash(hash);
-        } catch (err: any) {
-            showError(err?.shortMessage || err?.message || 'Approval failed');
+        } catch (err: unknown) {
+            showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Approval failed');
         }
     };
 
@@ -178,8 +178,8 @@ export function LoreBondingCurveSwap({ initialTokenIn, initialTokenOut }: LoreBo
             setLoreAmount('');
             refetchMarket();
             success(`${isBuying ? 'Buy' : 'Sell'} successful!`);
-        } catch (err: any) {
-            showError(err?.shortMessage || err?.message || 'Transaction failed');
+        } catch (err: unknown) {
+            showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Transaction failed');
         }
     };
 

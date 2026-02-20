@@ -218,8 +218,8 @@ export default function MiningPage() {
         try {
             await deploy(selectedSquares, parseEther(amountInput || '1'));
             success(`Deployed to ${selectedSquares.length} square${selectedSquares.length > 1 ? 's' : ''}!`);
-        } catch (err: any) {
-            showError(err?.shortMessage || err?.message || 'Deploy failed');
+        } catch (err: unknown) {
+            showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Deploy failed');
         }
     };
 
@@ -227,8 +227,8 @@ export default function MiningPage() {
         try {
             await finalize();
             success('Round finalized!');
-        } catch (err: any) {
-            showError(err?.shortMessage || err?.message || 'Finalize failed');
+        } catch (err: unknown) {
+            showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Finalize failed');
         }
     };
 
@@ -236,8 +236,8 @@ export default function MiningPage() {
         try {
             await claim();
             success('Rewards claimed!');
-        } catch (err: any) {
-            showError(err?.shortMessage || err?.message || 'Claim failed');
+        } catch (err: unknown) {
+            showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Claim failed');
         }
     };
 

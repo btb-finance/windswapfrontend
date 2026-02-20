@@ -456,9 +456,9 @@ export function useSwapV3() {
             setTxHash(hash);
             setIsLoading(false);
             return { hash };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('V3 swap error:', err);
-            setError(err.message || 'Swap failed');
+            setError((err instanceof Error ? err.message : undefined) || 'Swap failed');
             setIsLoading(false);
             return null;
         }
@@ -598,9 +598,9 @@ export function useSwapV3() {
             setTxHash(hash);
             setIsLoading(false);
             return { hash };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Multi-hop V3 swap error:', err);
-            setError(err.message || 'Multi-hop swap failed');
+            setError((err instanceof Error ? err.message : undefined) || 'Multi-hop swap failed');
             setIsLoading(false);
             return null;
         }

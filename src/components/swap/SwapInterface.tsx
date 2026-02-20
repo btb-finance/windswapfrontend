@@ -649,7 +649,7 @@ function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, 
                     });
                 }
                 result = { hash };
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('Wrap/unwrap error:', err);
                 const errorMsg = getSwapErrorMessage(err);
                 setError(errorMsg);

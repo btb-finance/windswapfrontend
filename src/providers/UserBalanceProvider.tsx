@@ -117,8 +117,9 @@ export function UserBalanceProvider({ children }: { children: ReactNode }) {
 
             // Add ERC20 balances
             erc20Tokens.forEach((token, i) => {
-                const balance = balanceResults[i] !== '0x' && balanceResults[i].length > 2
-                    ? BigInt(balanceResults[i])
+                const raw = balanceResults[i] as string;
+                const balance = raw !== '0x' && raw.length > 2
+                    ? BigInt(raw)
                     : BigInt(0);
 
                 const formatted = formatUnits(balance, token.decimals);

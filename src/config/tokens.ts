@@ -231,7 +231,7 @@ export const LORE: Token = {
     symbol: 'LORE',
     name: 'LORE Token',
     decimals: 18,
-    logoURI: '/logo/LORE.png',
+    logoURI: '/logo/LORE.svg',
 };
 
 // Default token list

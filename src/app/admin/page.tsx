@@ -179,8 +179,8 @@ export default function AdminPage() {
                 functionName: 'updatePeriod',
             });
             setTxHash(hash);
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 
@@ -197,8 +197,8 @@ export default function AdminPage() {
                 args: [BigInt(0), BigInt(poolCount)],
             });
             setTxHash(hash);
-        } catch (err: any) {
-            setError(err.message || 'Distribute failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Distribute failed');
         }
     };
 
@@ -215,8 +215,8 @@ export default function AdminPage() {
             });
             setTxHash(hash);
             refetchWhitelist();
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 
@@ -231,8 +231,8 @@ export default function AdminPage() {
                 args: [BigInt(nftId), whitelistAction === 'whitelist'],
             });
             setTxHash(hash);
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 
@@ -268,8 +268,8 @@ export default function AdminPage() {
                 args: [poolFactory as Address, poolAddress as Address],
             });
             setTxHash(hash);
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 
@@ -299,8 +299,8 @@ export default function AdminPage() {
             } else {
                 setError('No gauge found for this pool');
             }
-        } catch (err: any) {
-            setError(err.message || 'Failed to lookup gauge');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Failed to lookup gauge');
         }
     };
 
@@ -317,8 +317,8 @@ export default function AdminPage() {
             });
             setTxHash(hash);
             setGaugeAddress('');
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 
@@ -334,8 +334,8 @@ export default function AdminPage() {
                 args: [parseInt(newTickSpacing), parseInt(newFee)],
             });
             setTxHash(hash);
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 
@@ -356,8 +356,8 @@ export default function AdminPage() {
             setTxHash(hash);
             refetchV2Approval();
             refetchCLApproval();
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 
@@ -377,8 +377,8 @@ export default function AdminPage() {
             });
             setTxHash(hash);
             refetchCLApproval();
-        } catch (err: any) {
-            setError(err.message || 'Transaction failed');
+        } catch (err: unknown) {
+            setError((err instanceof Error ? err.message : undefined) || 'Transaction failed');
         }
     };
 

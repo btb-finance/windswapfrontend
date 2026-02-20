@@ -10,6 +10,31 @@ import { getRpcForUserData, rpcCall } from '@/utils/rpc';
 import { V2_CONTRACTS, NOTABLE_POOLS, NOTABLE_GAUGES } from '@/config/contracts';
 import { SUBGRAPH_URL } from '@/config/subgraph';
 
+interface SubgraphGauge {
+    id: string;
+    pool?: {
+        id?: string;
+        token0?: { id?: string; symbol?: string; decimals?: number };
+        token1?: { id?: string; symbol?: string; decimals?: number };
+        stable?: boolean;
+        isV3?: boolean;
+        tickSpacing?: number;
+    };
+    weight?: string;
+    rewardRate?: string;
+    totalStakedLiquidity?: string;
+    bribeReward?: string;
+    gaugeType?: string;
+    isActive?: boolean;
+    feeVotingReward?: string;
+    bribeVotingReward?: string;
+    epochData?: Array<{ feeRewardToken0?: string; feeRewardToken1?: string }>;
+    rewardTokens?: Array<{ token?: { id?: string; symbol?: string; decimals?: string }; rewardRate?: string }>;
+    claimableRewards?: string;
+    externalBribes?: string;
+    internalBribes?: string;
+}
+
 // Fetch pools from subgraph
 async function fetchPoolsFromSubgraph(): Promise<{
     pools: Array<{
@@ -356,7 +381,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         data: json.result,
                     });
 
-                    return { key: `${c.gauge.toLowerCase()}-${c.tokenId.toString()}`, earned: decoded as unknown as bigint };
+                    return { key: `${c.gauge.toLowerCase()}-${c.tokenId.toString()}`, earned: decoded as bigint };
                 }));
 
                 if (cancelled) return;
@@ -464,7 +489,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         data: json.result,
                     });
 
-                    return { tokenId, votingPower: decoded as unknown as bigint };
+                    return { tokenId, votingPower: decoded as bigint };
                 }));
 
                 if (cancelled) return;
@@ -704,13 +729,13 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 return BigInt(Math.floor(num * Math.pow(10, decimals)));
             };
 
-            const gaugeRows: any[] = json.data?.gauges || [];
+            const gaugeRows: SubgraphGauge[] = json.data?.gauges || [];
             const totalWeight = protocol?.totalVotingWeight ? BigInt(protocol.totalVotingWeight) : BigInt(0);
 
             const newRewards = new Map<string, bigint>();
             const newStakedLiquidity = new Map<string, bigint>();
 
-            const gaugeList: GaugeInfo[] = gaugeRows.map((g: any) => {
+            const gaugeList: GaugeInfo[] = gaugeRows.map((g) => {
                 const poolId = String(g.pool?.id || '').toLowerCase();
                 const token0 = String(g.pool?.token0?.id || '0x0000000000000000000000000000000000000000');
                 const token1 = String(g.pool?.token1?.id || '0x0000000000000000000000000000000000000000');

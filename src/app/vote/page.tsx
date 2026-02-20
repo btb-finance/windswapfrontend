@@ -257,7 +257,7 @@ export default function VotePage() {
                         data: resultHex,
                     });
 
-                    return { ...c, earned: decoded as unknown as bigint };
+                    return { ...c, earned: decoded as bigint };
                 } catch {
                     return { ...c, earned: BigInt(0) };
                 }
@@ -369,7 +369,7 @@ export default function VotePage() {
             setTxHash(hash);
             // Refetch voting rewards after claiming
             setTimeout(() => fetchVotingRewards(), 3000);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Claim voting rewards failed:', err);
         }
         setIsClaimingVotingRewards(null);
@@ -401,7 +401,7 @@ export default function VotePage() {
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 }
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Distribute failed:', err);
         }
         setIsDistributing(false);
@@ -591,7 +591,7 @@ export default function VotePage() {
                 setIncentiveToken(null);
                 setIncentiveAmount('');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Add incentive failed:', err);
         }
         setIsAddingIncentive(false);

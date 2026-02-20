@@ -8,6 +8,26 @@ import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { SUBGRAPH_URL } from '@/hooks/useSubgraph';
 import { GOVERNOR_ABI, VOTER_ABI } from '@/config/abis';
 
+// Subgraph proposal shape
+interface SubgraphProposal {
+    id: string;
+    proposalId: string;
+    proposer: string;
+    targets: string[];
+    values: string[];
+    calldatas: string[];
+    description: string;
+    voteStart: string;
+    voteEnd: string;
+    forVotes: string;
+    againstVotes: string;
+    abstainVotes: string;
+    state: number;
+    executed: boolean;
+    canceled: boolean;
+    createdAtTimestamp: string;
+}
+
 // Governor states
 export enum ProposalState {
     Pending = 0,
@@ -124,8 +144,8 @@ export function useGovernance() {
                 throw new Error(result.errors[0]?.message || 'Subgraph query failed');
             }
 
-            const subgraphProposals = result.data?.proposals || [];
-            const parsedProposals: Proposal[] = subgraphProposals.map((p: any) => ({
+            const subgraphProposals: SubgraphProposal[] = result.data?.proposals || [];
+            const parsedProposals: Proposal[] = subgraphProposals.map((p) => ({
                 id: BigInt(p.proposalId),
                 proposer: p.proposer as Address,
                 description: p.description,
@@ -142,7 +162,7 @@ export function useGovernance() {
 
             console.log(`[Governance] Loaded ${parsedProposals.length} proposals from subgraph`);
             setProposals(parsedProposals);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('[Governance] Error fetching proposals:', err);
             setError('Failed to fetch proposals');
         } finally {
@@ -183,8 +203,8 @@ export function useGovernance() {
             });
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Failed to create proposal');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to create proposal');
             return null;
         }
     }, [writeContractAsync]);
@@ -218,8 +238,8 @@ export function useGovernance() {
             });
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Failed to create proposal');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to create proposal');
             return null;
         }
     }, [writeContractAsync]);
@@ -252,8 +272,8 @@ export function useGovernance() {
             });
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Failed to create proposal');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to create proposal');
             return null;
         }
     }, [writeContractAsync]);
@@ -271,8 +291,8 @@ export function useGovernance() {
             });
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Failed to cast vote');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to cast vote');
             return null;
         }
     }, [writeContractAsync]);
@@ -296,8 +316,8 @@ export function useGovernance() {
             });
 
             return { hash };
-        } catch (err: any) {
-            setError(err.message || 'Failed to execute proposal');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to execute proposal');
             return null;
         }
     }, [writeContractAsync]);

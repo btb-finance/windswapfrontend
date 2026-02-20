@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { WalletConnect } from '@/components/wallet/WalletConnect';
 import { motion } from 'framer-motion';
 import { useAutoSwitchToSei } from '@/hooks/useAutoSwitchToSei';
+import { WindLogo } from '@/components/common/WindLogo';
 
 const navLinks = [
     { href: '/swap', label: 'Swap' },
@@ -28,10 +29,9 @@ export function Header() {
                 <div className="container mx-auto px-3 md:px-6 py-2 md:py-4">
                     <div className="flex items-center justify-between">
                         {/* Logo - text hidden on mobile */}
-                        <Link href="/" className="flex items-center gap-2 md:gap-3">
-                            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl overflow-hidden hover:scale-105 active:scale-95 transition-transform">
-                                <img src="/logo.png" alt="Wind Swap" className="w-full h-full object-contain" />
-                            </div>
+                        <Link href="/" className="flex items-center gap-2 md:gap-3 hover:scale-105 active:scale-95 transition-transform">
+                            <WindLogo size={36} className="md:hidden" />
+                            <WindLogo size={42} className="hidden md:block" />
                             <span className="hidden sm:inline text-lg md:text-xl font-bold gradient-text">Wind Swap</span>
                         </Link>
 

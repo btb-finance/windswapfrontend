@@ -334,9 +334,9 @@ export function useSwap() {
                 }
 
                 return { hash };
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('Swap error:', err);
-                setError(err.message || 'Swap failed');
+                setError((err instanceof Error ? err.message : undefined) || 'Swap failed');
                 return null;
             } finally {
                 setIsLoading(false);

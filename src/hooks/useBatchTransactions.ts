@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useSendCalls } from 'wagmi';
-import { encodeFunctionData, Address } from 'viem';
+import { encodeFunctionData, Address, Abi } from 'viem';
 import { ERC20_ABI } from '@/config/abis';
 
 interface Call {
@@ -59,9 +59,9 @@ export function useBatchTransactions() {
                 usedBatching: true,
             };
 
-        } catch (batchError: any) {
+        } catch (batchError: unknown) {
             // EIP-5792 not supported - this is expected for most wallets
-            console.log('EIP-5792 batch not available:', batchError.message);
+            console.log('EIP-5792 batch not available:', batchError instanceof Error ? batchError.message : batchError);
             setIsLoading(false);
             return {
                 success: false,
@@ -95,9 +95,9 @@ export function useBatchTransactions() {
      */
     const encodeContractCall = useCallback((
         contractAddress: Address,
-        abi: any,
+        abi: Abi,
         functionName: string,
-        args: any[],
+        args: readonly unknown[],
         value?: bigint
     ): Call => {
         return {

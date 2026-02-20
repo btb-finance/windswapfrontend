@@ -125,9 +125,9 @@ export function useLiquidity() {
                 }
 
                 return { hash };
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('Add liquidity error:', err);
-                setError(err.message || 'Failed to add liquidity');
+                setError((err instanceof Error ? err.message : undefined) || 'Failed to add liquidity');
                 return null;
             } finally {
                 setIsLoading(false);
@@ -180,9 +180,9 @@ export function useLiquidity() {
                 });
 
                 return { hash };
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('Remove liquidity error:', err);
-                setError(err.message || 'Failed to remove liquidity');
+                setError((err instanceof Error ? err.message : undefined) || 'Failed to remove liquidity');
                 return null;
             } finally {
                 setIsLoading(false);

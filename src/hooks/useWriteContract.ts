@@ -16,7 +16,7 @@ export function useWriteContract() {
     // Wrap writeContractAsync to track wallet modal state
     // Using 'any' cast to preserve wagmi's complex generic signature
     const wrappedWriteContractAsync = useCallback(
-        async (params: any) => {
+        async (params: Parameters<typeof wagmiResult.writeContractAsync>[0]) => {
             openWalletModal();
             try {
                 const result = await wagmiResult.writeContractAsync(params);

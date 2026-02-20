@@ -921,10 +921,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             setAmountA('');
             setAmountB('');
             setTxProgress('done');
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('CL mint error:', err);
             setTxProgress('error');
-            setTxError(err?.message || 'Transaction failed');
+            setTxError(err instanceof Error ? err.message : 'Transaction failed');
         }
     };
 
@@ -957,9 +957,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
             toast.success(`${selectedZapToken} approved!`);
             haptic('success');
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Approval failed:', err);
-            toast.error(err.shortMessage || 'Approval failed');
+            toast.error((err instanceof Error ? (err as { shortMessage?: string }).shortMessage ?? err.message : undefined) || 'Approval failed');
             haptic('error');
         } finally {
             setIsApproving(false);
@@ -1072,9 +1072,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             setZapAmount('');
             refetchZapBalance();
             onClose();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Zap failed:', err);
-            toast.error(err.shortMessage || 'Zap failed');
+            toast.error((err instanceof Error ? (err as { shortMessage?: string }).shortMessage ?? err.message : undefined) || 'Zap failed');
             haptic('error');
         } finally {
             setIsZapping(false);

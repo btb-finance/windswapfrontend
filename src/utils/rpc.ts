@@ -48,9 +48,9 @@ export function getRpcForQuotes(): string {
 /**
  * Make an RPC call with automatic fallback
  */
-export async function rpcCall<T = any>(
+export async function rpcCall<T = unknown>(
     method: string,
-    params: any[],
+    params: unknown[],
     preferredRpc?: string
 ): Promise<T> {
     const rpc = preferredRpc || getAlchemyRpc();
@@ -66,9 +66,9 @@ export async function rpcCall<T = any>(
     });
 
     const text = await response.text();
-    let result: any;
+    let result: { error?: { message?: string }; result: T };
     try {
-        result = JSON.parse(text);
+        result = JSON.parse(text) as typeof result;
     } catch {
         const ct = response.headers.get('content-type') || '';
         const snippet = text.slice(0, 200);
@@ -84,9 +84,9 @@ export async function rpcCall<T = any>(
  * Make batch RPC calls with automatic fallback
  */
 export async function batchRpcCall(
-    calls: Array<{ method: string; params: any[] }>,
+    calls: Array<{ method: string; params: unknown[] }>,
     preferredRpc?: string
-): Promise<any[]> {
+): Promise<unknown[]> {
     const rpc = preferredRpc || getAlchemyRpc();
     const response = await fetch(rpc, {
         method: 'POST',
@@ -102,9 +102,9 @@ export async function batchRpcCall(
     });
 
     const text = await response.text();
-    let results: any;
+    let results: Array<{ result: unknown }> | { result: unknown };
     try {
-        results = JSON.parse(text);
+        results = JSON.parse(text) as typeof results;
     } catch {
         const ct = response.headers.get('content-type') || '';
         const snippet = text.slice(0, 200);
