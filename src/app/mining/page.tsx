@@ -17,6 +17,8 @@ import {
     useDeployToSquares,
     useFinalizeRound,
     useClaimAll,
+    useClaimSei,
+    useClaimLore,
     useGetRound,
     useMiningLoreBalance,
 } from '@/hooks/useLOREmining';
@@ -159,7 +161,7 @@ export default function MiningPage() {
     const [activeTab, setActiveTab] = useState<'game' | 'rewards' | 'pots'>('game');
 
     const { data: round, refetch: refetchRound } = useCurrentRound();
-    const { data: roundId } = useCurrentRoundId();
+    const { data: roundId, refetch: refetchRoundId } = useCurrentRoundId();
     const { data: minerStats } = useMinerStats(address);
     const { data: claimable, refetch: refetchClaimable } = useTotalClaimableBalance(address);
     const { data: minerRoundData, refetch: refetchMinerRound } = useMinerRoundData(roundId, address);
@@ -175,6 +177,8 @@ export default function MiningPage() {
     const { deploy, isPending: isDeploying, isSuccess: deploySuccess } = useDeployToSquares();
     const { finalize, isPending: isFinalizing, isSuccess: finalizeSuccess } = useFinalizeRound();
     const { claim, isPending: isClaiming, isSuccess: claimSuccess } = useClaimAll();
+    const { claim: claimSei, isPending: isClaimingSei, isSuccess: claimSeiSuccess } = useClaimSei();
+    const { claim: claimLore, isPending: isClaimingLore, isSuccess: claimLoreSuccess } = useClaimLore();
 
     const endTime = round ? Number(round.endTime) : 0;
     const { display: countdown, remaining: timeLeft } = useCountdown(endTime);
@@ -182,14 +186,15 @@ export default function MiningPage() {
     const canFinalize = round && timeLeft === 0 && !round.finalized;
 
     useEffect(() => {
-        if (deploySuccess || finalizeSuccess || claimSuccess) {
+        if (deploySuccess || finalizeSuccess || claimSuccess || claimSeiSuccess || claimLoreSuccess) {
+            refetchRoundId();
             refetchRound();
             refetchClaimable();
             refetchMinerRound();
             setSelectedSquares([]);
             setActiveStrategyId(null);
         }
-    }, [deploySuccess, finalizeSuccess, claimSuccess]);
+    }, [deploySuccess, finalizeSuccess, claimSuccess, claimSeiSuccess, claimLoreSuccess]);
 
     const toggleSquare = (i: number) => {
         setActiveStrategyId(null); // manual selection clears strategy highlight
@@ -205,10 +210,10 @@ export default function MiningPage() {
             setSelectedSquares([]);
         } else {
             setActiveStrategyId(strategyId);
-            // Only select squares the user hasn't already deployed to
-            const available = (squares as number[]).filter(
-                s => mySquareDeployment(s) === BigInt(0)
-            );
+            // Only skip already-deployed squares if round is still active (not expired)
+            const available = canFinalize
+                ? [...squares]
+                : (squares as number[]).filter(s => mySquareDeployment(s) === BigInt(0));
             setSelectedSquares(available);
         }
     };
@@ -236,6 +241,24 @@ export default function MiningPage() {
         try {
             await claim();
             success('Rewards claimed!');
+        } catch (err: unknown) {
+            showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Claim failed');
+        }
+    };
+
+    const handleClaimSei = async () => {
+        try {
+            await claimSei();
+            success('SEI claimed!');
+        } catch (err: unknown) {
+            showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Claim failed');
+        }
+    };
+
+    const handleClaimLore = async () => {
+        try {
+            await claimLore();
+            success('LORE claimed!');
         } catch (err: unknown) {
             showError((err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : undefined) || 'Claim failed');
         }
@@ -340,7 +363,7 @@ export default function MiningPage() {
                         >
                             <div>
                                 <div className="text-sm font-semibold text-primary">Round Expired!</div>
-                                <div className="text-xs text-foreground/60">Finalize to reveal the winner</div>
+                                <div className="text-xs text-foreground/60">Auto-finalizes when next round starts, or finalize now</div>
                             </div>
                             <button
                                 onClick={handleFinalize}
@@ -482,7 +505,7 @@ export default function MiningPage() {
                                     const myAmount = mySquareDeployment(i);
                                     const isSelected = selectedSquares.includes(i);
                                     const isWinner = isWinningSquare(i);
-                                    const hasMyDeployment = myAmount > BigInt(0);
+                                    const hasMyDeployment = myAmount > BigInt(0) && !canFinalize;
                                     const pct = totalDeployed > BigInt(0)
                                         ? Number((squareAmount * BigInt(100)) / totalDeployed)
                                         : 0;
@@ -637,13 +660,31 @@ export default function MiningPage() {
                                     Switch to Sei
                                 </button>
                             ) : (
-                                <button
-                                    onClick={handleClaimAll}
-                                    disabled={isClaiming || !hasClaimable}
-                                    className="btn-primary w-full py-3.5 text-base disabled:opacity-50"
-                                >
-                                    {isClaiming ? 'Claiming…' : hasClaimable ? '⬇ Claim All Rewards' : 'No rewards yet'}
-                                </button>
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={handleClaimAll}
+                                        disabled={isClaiming || isClaimingSei || isClaimingLore || !hasClaimable}
+                                        className="btn-primary w-full py-3.5 text-base disabled:opacity-50"
+                                    >
+                                        {isClaiming ? 'Claiming…' : hasClaimable ? '⬇ Claim All Rewards' : 'No rewards yet'}
+                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleClaimSei}
+                                            disabled={isClaiming || isClaimingSei || isClaimingLore || totalClaimableSei === BigInt(0)}
+                                            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-white/10 bg-surface/50 hover:bg-surface/80 transition-all disabled:opacity-40"
+                                        >
+                                            {isClaimingSei ? 'Claiming…' : `Claim SEI`}
+                                        </button>
+                                        <button
+                                            onClick={handleClaimLore}
+                                            disabled={isClaiming || isClaimingSei || isClaimingLore || totalClaimableLore === BigInt(0)}
+                                            className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-yellow-400/20 bg-yellow-400/5 hover:bg-yellow-400/10 text-yellow-400 transition-all disabled:opacity-40"
+                                        >
+                                            {isClaimingLore ? 'Claiming…' : `Claim LORE`}
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
@@ -652,7 +693,9 @@ export default function MiningPage() {
                             {[
                                 'Winners get their SEI back + proportional share of losing squares',
                                 'All players on winning square split the LORE reward proportionally',
-                                'Claiming LORE has a 10% fee redistributed to LORE holders',
+                                'Claiming LORE has a 10% fee — but that fee is redistributed to all unclaimed LORE holders',
+                                'Don\'t claim yet? You earn 10% of every other player\'s LORE claim as "Refined LORE"',
+                                'The longer you hold unclaimed LORE, the more Refined LORE you accumulate',
                                 'Rewards accumulate automatically across rounds',
                             ].map(t => (
                                 <div key={t} className="flex gap-2">
@@ -702,7 +745,7 @@ export default function MiningPage() {
 
             {/* ── STICKY DEPLOY PANEL (bottom) ── */}
             {activeTab === 'game' && !round?.finalized && (
-                <div className="fixed left-0 right-0 z-40 bg-[var(--bg-primary)]/95 backdrop-blur-xl border-t border-white/10 px-3 pt-3" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 64px)', paddingBottom: '12px' }}>
+                <div className="fixed left-0 right-0 z-40 bg-[var(--bg-primary)]/95 backdrop-blur-xl border-t border-white/10 px-3 pt-3 pb-3 bottom-[64px] md:bottom-0">
                     <div className="max-w-2xl mx-auto space-y-2.5">
                         {/* Quick amounts */}
                         <div className="flex items-center gap-2">
