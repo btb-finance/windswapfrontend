@@ -2094,6 +2094,18 @@ export const LORE_MINING_ABI = [
         outputs: [{ name: '', type: 'address' }],
         stateMutability: 'view',
     },
+    {
+        type: 'function',
+        name: 'getMinerLoreBreakdown',
+        inputs: [{ name: 'miner', type: 'address' }],
+        outputs: [
+            { name: 'unclaimedLore', type: 'uint256' },
+            { name: 'refinedLore', type: 'uint256' },
+            { name: 'pendingRefined', type: 'uint256' },
+            { name: 'totalClaimable', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+    },
     // Write functions
     {
         type: 'function',

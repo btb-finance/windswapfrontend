@@ -21,6 +21,7 @@ import {
     useClaimLore,
     useGetRound,
     useMiningLoreBalance,
+    useMinerLoreBreakdown,
 } from '@/hooks/useLOREmining';
 
 // 20,000 LORE for normal rounds, 10,000 for jackpot (contract constants)
@@ -173,6 +174,7 @@ export default function MiningPage() {
 
     // LORE balance of mining contract → estimated reward
     const { data: miningLoreBalance } = useMiningLoreBalance();
+    const { data: loreBreakdown } = useMinerLoreBreakdown(address);
 
     const { deploy, isPending: isDeploying, isSuccess: deploySuccess } = useDeployToSquares();
     const { finalize, isPending: isFinalizing, isSuccess: finalizeSuccess } = useFinalizeRound();
@@ -416,7 +418,7 @@ export default function MiningPage() {
                             <div className="text-[10px] text-foreground/40 uppercase tracking-wide">Last Round #{prevRoundId.toString()}</div>
                             <div className="text-sm font-semibold">
                                 Square <span className="text-yellow-400">{Number(prevRound.winningSquare) + 1}</span> won{' '}
-                                <span className="text-foreground/70">{formatSEI(prevRound.totalWinnings)} SEI</span>
+                                <span className="text-foreground/70">{formatSEI(prevRound.totalDeployed)} SEI</span>
                                 {prevRound.loreReward > BigInt(0) && (
                                     <span className="text-yellow-400"> + {formatLORE(prevRound.loreReward)} LORE</span>
                                 )}
@@ -431,11 +433,10 @@ export default function MiningPage() {
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all capitalize relative ${
-                                activeTab === tab
-                                    ? 'bg-primary/20 text-primary'
-                                    : 'text-foreground/50 hover:text-foreground'
-                            }`}
+                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all capitalize relative ${activeTab === tab
+                                ? 'bg-primary/20 text-primary'
+                                : 'text-foreground/50 hover:text-foreground'
+                                }`}
                         >
                             {tab === 'rewards' ? 'Rewards' : tab === 'pots' ? 'Pots' : 'Play'}
                             {tab === 'rewards' && hasClaimable && (
@@ -523,12 +524,12 @@ export default function MiningPage() {
                                                 ${isWinner
                                                     ? 'border-yellow-400 bg-yellow-400/25 text-yellow-300'
                                                     : isSelected
-                                                    ? 'border-blue-400 bg-blue-500/40 text-white shadow-md shadow-blue-500/20 ring-1 ring-blue-400/50'
-                                                    : hasMyDeployment
-                                                    ? 'border-green-500 bg-green-500/15 text-green-400'
-                                                    : squareAmount > BigInt(0)
-                                                    ? 'border-foreground/20 bg-surface/60 text-foreground/70 hover:border-foreground/40'
-                                                    : 'border-foreground/10 bg-surface/20 text-foreground/30 hover:border-primary/50 hover:bg-primary/5'
+                                                        ? 'border-blue-400 bg-blue-500/40 text-white shadow-md shadow-blue-500/20 ring-1 ring-blue-400/50'
+                                                        : hasMyDeployment
+                                                            ? 'border-green-500 bg-green-500/15 text-green-400'
+                                                            : squareAmount > BigInt(0)
+                                                                ? 'border-foreground/20 bg-surface/60 text-foreground/70 hover:border-foreground/40'
+                                                                : 'border-foreground/10 bg-surface/20 text-foreground/30 hover:border-primary/50 hover:bg-primary/5'
                                                 }
                                             `}
                                         >
@@ -608,7 +609,7 @@ export default function MiningPage() {
                                 <div className="text-yellow-400 font-semibold text-sm">Round Finalized</div>
                                 <div className="text-2xl font-bold">Square {Number(round.winningSquare) + 1} wins!</div>
                                 <div className="text-sm text-foreground/60">
-                                    {formatSEI(round.totalWinnings)} SEI{round.loreReward > BigInt(0) ? ` + ${formatLORE(round.loreReward)} LORE` : ''} split among winners
+                                    {formatSEI(round.totalDeployed)} SEI{round.loreReward > BigInt(0) ? ` + ${formatLORE(round.loreReward)} LORE` : ''} split among winners
                                 </div>
                                 {round.totalMotherlodeReward > BigInt(0) && (
                                     <div className="text-sm text-yellow-400 font-medium">
@@ -624,26 +625,32 @@ export default function MiningPage() {
                 {activeTab === 'rewards' && (
                     <div className="space-y-3">
                         <div className="card space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="rounded-xl bg-surface/50 p-4 text-center">
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="rounded-xl bg-surface/50 p-3 text-center">
                                     <div className="text-[10px] text-foreground/40 uppercase tracking-wide mb-1">Claimable SEI</div>
-                                    <div className="text-2xl font-bold">{formatSEI(totalClaimableSei)}</div>
-                                    <div className="text-xs text-foreground/40 mt-0.5">SEI</div>
+                                    <div className="text-xl font-bold">{formatSEI(totalClaimableSei)}</div>
+                                    <div className="text-[10px] text-foreground/40 mt-0.5">SEI</div>
                                 </div>
-                                <div className="rounded-xl bg-surface/50 p-4 text-center">
+                                <div className="rounded-xl bg-surface/50 p-3 text-center">
                                     <div className="text-[10px] text-foreground/40 uppercase tracking-wide mb-1">Claimable LORE</div>
-                                    <div className="text-2xl font-bold text-yellow-400">{formatLORE(totalClaimableLore)}</div>
-                                    <div className="text-xs text-foreground/40 mt-0.5">LORE</div>
+                                    <div className="text-xl font-bold text-yellow-400">{formatLORE(totalClaimableLore)}</div>
+                                    <div className="text-[10px] text-foreground/40 mt-0.5">LORE</div>
+                                </div>
+                                <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-3 text-center">
+                                    <div className="text-[10px] text-purple-300/60 uppercase tracking-wide mb-1">Refined LORE</div>
+                                    <div className="text-xl font-bold text-purple-300">{loreBreakdown ? formatLORE(loreBreakdown[1] + loreBreakdown[2]) : '0'}</div>
+                                    <div className="text-[10px] text-purple-300/40 mt-0.5">from fees ✦</div>
                                 </div>
                             </div>
 
-                            {minerStats && (
+                            {loreBreakdown && (loreBreakdown[0] > BigInt(0) || loreBreakdown[1] > BigInt(0) || loreBreakdown[2] > BigInt(0)) && (
                                 <div className="rounded-xl bg-surface/30 p-3 space-y-2">
-                                    <div className="text-xs font-medium text-foreground/60 mb-1">Your stats</div>
+                                    <div className="text-xs font-medium text-foreground/60 mb-1">LORE Breakdown</div>
                                     {[
-                                        ['Unclaimed SEI', `${formatSEI(minerStats[0])} SEI`],
-                                        ['Unclaimed LORE', `${formatLORE(minerStats[1])} LORE`],
-                                        ['Refined LORE (fees)', `${formatLORE(minerStats[2])} LORE`],
+                                        ['Unclaimed LORE', `${formatLORE(loreBreakdown[0])} LORE`],
+                                        ['Refined (earned)', `${formatLORE(loreBreakdown[1])} LORE`],
+                                        ['Refining (pending)', `${formatLORE(loreBreakdown[2])} LORE`],
+                                        ['Total Claimable', `${formatLORE(loreBreakdown[3])} LORE`],
                                     ].map(([label, val]) => (
                                         <div key={label} className="flex justify-between text-xs">
                                             <span className="text-foreground/50">{label}</span>
@@ -755,11 +762,10 @@ export default function MiningPage() {
                                     <button
                                         key={amt}
                                         onClick={() => setAmountInput(amt)}
-                                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                                            amountInput === amt
-                                                ? 'border-primary bg-primary/20 text-primary'
-                                                : 'border-white/10 bg-surface/50 text-foreground/60 hover:border-foreground/30'
-                                        }`}
+                                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all border ${amountInput === amt
+                                            ? 'border-primary bg-primary/20 text-primary'
+                                            : 'border-white/10 bg-surface/50 text-foreground/60 hover:border-foreground/30'
+                                            }`}
                                     >
                                         {amt}
                                     </button>
@@ -802,8 +808,8 @@ export default function MiningPage() {
                                     {isDeploying
                                         ? 'Deploying…'
                                         : selectedSquares.length === 0
-                                        ? 'Select Squares'
-                                        : `Deploy ${formatSEI(totalCost)} SEI`}
+                                            ? 'Select Squares'
+                                            : `Deploy ${formatSEI(totalCost)} SEI`}
                                 </button>
                             )}
                         </div>

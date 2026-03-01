@@ -146,6 +146,20 @@ export function useMiningLoreBalance() {
     });
 }
 
+export function useMinerLoreBreakdown(address: `0x${string}` | undefined) {
+    return useReadContract({
+        address: CONTRACT,
+        abi: LORE_MINING_ABI,
+        functionName: 'getMinerLoreBreakdown',
+        args: address ? [address] : undefined,
+        chainId: sei.id,
+        query: {
+            enabled: !!address,
+            refetchInterval: 5000,
+        },
+    });
+}
+
 // ============================================
 // Write Hooks
 // ============================================
