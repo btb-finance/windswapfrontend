@@ -412,18 +412,31 @@ export default function MiningPage() {
 
                 {/* Last Round Result */}
                 {prevRound?.finalized && prevRoundId !== undefined && (
-                    <div className="mb-4 px-3 py-2.5 rounded-xl border border-yellow-400/20 bg-yellow-400/5 flex items-center gap-3">
-                        <span className="text-lg shrink-0">🏆</span>
-                        <div className="min-w-0">
-                            <div className="text-[10px] text-foreground/40 uppercase tracking-wide">Last Round #{prevRoundId.toString()}</div>
-                            <div className="text-sm font-semibold">
-                                Square <span className="text-yellow-400">{Number(prevRound.winningSquare) + 1}</span> won{' '}
-                                <span className="text-foreground/70">{formatSEI(prevRound.totalDeployed)} SEI</span>
-                                {prevRound.loreReward > BigInt(0) && (
-                                    <span className="text-yellow-400"> + {formatLORE(prevRound.loreReward)} LORE</span>
-                                )}
+                    <div className="mb-4 px-3 py-2.5 rounded-xl border border-yellow-400/20 bg-yellow-400/5">
+                        <div className="flex items-center gap-3">
+                            <span className="text-lg shrink-0">🏆</span>
+                            <div className="min-w-0">
+                                <div className="text-[10px] text-foreground/40 uppercase tracking-wide">Last Round #{prevRoundId.toString()}</div>
+                                <div className="text-sm font-semibold">
+                                    Square <span className="text-yellow-400">{Number(prevRound.winningSquare) + 1}</span> won{' '}
+                                    <span className="text-foreground/70">{formatSEI(prevRound.totalDeployed)} SEI</span>
+                                    {prevRound.loreReward > BigInt(0) && (
+                                        <span className="text-yellow-400"> + {formatLORE(prevRound.loreReward)} LORE</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
+                        {prevRound.totalMotherlodeReward > BigInt(0) && (
+                            <div className="mt-2 pt-2 border-t border-yellow-400/10 space-y-0.5">
+                                {MOTHERLODE_TIER_NAMES.map((name, i) =>
+                                    (Number(prevRound.motherlodeTiersHit) & (1 << i)) !== 0 ? (
+                                        <div key={i} className={`text-xs font-medium ${MOTHERLODE_TIER_COLORS[i]}`}>
+                                            {name} hit — +{formatLORE(prevRound.totalMotherlodeReward)} LORE
+                                        </div>
+                                    ) : null
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
