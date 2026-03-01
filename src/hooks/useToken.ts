@@ -5,6 +5,18 @@ import { formatUnits, Address } from 'viem';
 import { ERC20_ABI } from '@/config/abis';
 import { Token } from '@/config/tokens';
 
+export function truncateToDecimals(numStr: string, decimals: number = 4): string {
+    if (!numStr) return '0';
+    const parts = numStr.split('.');
+    if (parts.length === 1) return parts[0];
+    return `${parts[0]}.${parts[1].slice(0, decimals)}`;
+}
+
+export function bigIntPercentage(amount: bigint | undefined, percentage: number): bigint {
+    if (!amount) return BigInt(0);
+    return (amount * BigInt(percentage)) / BigInt(100);
+}
+
 export function useTokenBalance(token: Token | undefined) {
     const { address } = useAccount();
 
@@ -49,7 +61,7 @@ export function useTokenBalance(token: Token | undefined) {
         balance,
         rawBigInt, // Actual bigint for precise calculations
         raw: balance || '0', // Full precision string for MAX button
-        formatted: balance ? parseFloat(balance).toFixed(4) : '--',
+        formatted: balance ? truncateToDecimals(balance, 4) : '--',
         refetch,
     };
 }

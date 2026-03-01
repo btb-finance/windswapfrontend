@@ -10,7 +10,7 @@ import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC, USDT0 } from '@/config/toke
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { TokenSelector } from '@/components/common/TokenSelector';
 import { useLiquidity } from '@/hooks/useLiquidity';
-import { useTokenBalance, useTokenAllowance } from '@/hooks/useToken';
+import { useTokenBalance, useTokenAllowance, truncateToDecimals, bigIntPercentage } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, STABLECOIN_ZAP_ABI } from '@/config/abis';
 import { getRpcForPoolData, getRpcForUserData } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
@@ -21,11 +21,11 @@ import { useToast } from '@/providers/ToastProvider';
 import { haptic } from '@/hooks/useHaptic';
 import {
     calculateOptimalAmounts,
-    getRequiredTokens, 
-    priceToTick, 
-    tickToPrice, 
-    MAX_TICK, 
-    MIN_TICK 
+    getRequiredTokens,
+    priceToTick,
+    tickToPrice,
+    MAX_TICK,
+    MIN_TICK
 } from '@/utils/liquidityMath';
 
 // Smart price formatter for displaying very small or large prices
@@ -40,18 +40,18 @@ function formatSmartPrice(price: number): string {
         return price.toPrecision(4);
     }
 
-    // For small numbers (< 1), show up to 6 decimals
+    // For small numbers (< 1), show up to 8 decimals
     if (absPrice < 1) {
-        return price.toFixed(6).replace(/\.?0+$/, '');
+        return price.toFixed(8).replace(/\.?0+$/, '');
     }
 
-    // For normal numbers (1-10000), show 4 decimals
+    // For normal numbers (1-10000), show up to 8 decimals to preserve exact tick boundaries
     if (absPrice < 10000) {
-        return price.toFixed(4).replace(/\.?0+$/, '');
+        return price.toFixed(8).replace(/\.?0+$/, '');
     }
 
-    // For large numbers, use compact notation
-    return price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    // For large numbers, use 6 decimals to prevent tick precision loss
+    return price.toLocaleString('en-US', { maximumFractionDigits: 6 }).replace(/,/g, '');
 }
 
 type PoolType = 'v2' | 'cl';
@@ -120,8 +120,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
-    const { raw: rawBalanceA, formatted: balanceA } = useTokenBalance(tokenA);
-    const { raw: rawBalanceB, formatted: balanceB } = useTokenBalance(tokenB);
+    const { raw: rawBalanceA, rawBigInt: rawBigIntA, formatted: balanceA } = useTokenBalance(tokenA);
+    const { raw: rawBalanceB, rawBigInt: rawBigIntB, formatted: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
     const { executeBatch, encodeApproveCall, encodeContractCall } = useBatchTransactions();
     const { poolRewards, windPrice, seiPrice, allPools } = usePoolData();
@@ -436,12 +436,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     const outputDecimals = actualTokenB?.decimals || 18;
                     const outputAmount = formatUnits(outputAmountWei, outputDecimals);
 
-
-
-                    // Format with reasonable precision
+                    // Format with max token precision
                     const parsedOutput = parseFloat(outputAmount);
                     if (parsedOutput > 0 && isFinite(parsedOutput)) {
-                        setAmountB(parsedOutput.toFixed(6).replace(/\.?0+$/, ''));
+                        setAmountB(parsedOutput.toFixed(outputDecimals).replace(/\.?0+$/, ''));
                     } else {
                         setAmountB('0');
                     }
@@ -460,7 +458,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
                     const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
                     if (outputAmount > 0 && isFinite(outputAmount)) {
-                        setAmountB(outputAmount.toFixed(6).replace(/\.?0+$/, ''));
+                        const outputDecimals = isAToken0 ? token1Decimals : token0Decimals;
+                        setAmountB(outputAmount.toFixed(outputDecimals).replace(/\.?0+$/, ''));
                     } else {
                         setAmountB('0');
                     }
@@ -480,7 +479,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
                 const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
                 if (outputAmount > 0 && isFinite(outputAmount)) {
-                    setAmountB(outputAmount.toFixed(6).replace(/\.?0+$/, ''));
+                    const outputDecimals = isAToken0 ? token1Decimals : token0Decimals;
+                    setAmountB(outputAmount.toFixed(outputDecimals).replace(/\.?0+$/, ''));
                 } else {
                     setAmountB('0');
                 }
@@ -688,10 +688,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
             }
 
-            // For CL, use 0 for min amounts since the ratio is already calculated from price range
-            // This prevents reverts from rounding issues in the contract
-            const amount0Min = BigInt(0);
-            const amount1Min = BigInt(0);
+            // Add 1% slippage protection (amountMin is 99% of desired)
+            const amount0Min = (amount0Wei * BigInt(99)) / BigInt(100);
+            const amount1Min = (amount1Wei * BigInt(99)) / BigInt(100);
 
             console.log('CL Mint params:', {
                 token0: token0.address,
@@ -1020,7 +1019,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 } else {
                     // Fall back to sequential
                     console.log('Batch not available, using sequential approve + zap');
-                    
+
                     // Approve first
                     await writeContractAsync({
                         address: zapToken.address as Address,
@@ -1820,7 +1819,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {[25, 50, 75, 100].map(pct => (
                                                         <button
                                                             key={pct}
-                                                            onClick={() => setAmountA((parseFloat(rawBalanceA) * pct / 100).toString())}
+                                                            onClick={() => {
+                                                                if (pct === 100) {
+                                                                    setAmountA(rawBalanceA);
+                                                                } else {
+                                                                    const calc = bigIntPercentage(rawBigIntA, pct);
+                                                                    setAmountA(formatUnits(calc, tokenA?.decimals ?? 18));
+                                                                }
+                                                            }}
                                                             className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
                                                         >
                                                             {pct === 100 ? 'MAX' : `${pct}%`}
@@ -1875,7 +1881,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {[25, 50, 75, 100].map(pct => (
                                                         <button
                                                             key={pct}
-                                                            onClick={() => setAmountB((parseFloat(rawBalanceB) * pct / 100).toString())}
+                                                            onClick={() => {
+                                                                if (pct === 100) {
+                                                                    setAmountB(rawBalanceB);
+                                                                } else {
+                                                                    const calc = bigIntPercentage(rawBigIntB, pct);
+                                                                    setAmountB(formatUnits(calc, tokenB?.decimals ?? 18));
+                                                                }
+                                                            }}
                                                             className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
                                                         >
                                                             {pct === 100 ? 'MAX' : `${pct}%`}
@@ -1994,33 +2007,113 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     )
                                 ) : (
                                     /* Regular LP Footer Button */
-                                    <motion.button
-                                        onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
-                                        disabled={!canAdd || isLoading || isCLInProgress}
-                                        className={`w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl ${canAdd && !isLoading && !isCLInProgress
-                                            ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.98]'
-                                            : 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                                            }`}
-                                        whileTap={canAdd ? { scale: 0.98 } : {}}
-                                    >
-                                        {isLoading || isCLInProgress ? (
-                                            <span className="flex items-center justify-center gap-3">
-                                                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                </svg>
-                                                Adding Liquidity...
-                                            </span>
-                                        ) : !isConnected ? (
-                                            '🔗 Connect Wallet'
-                                        ) : !tokenA || !tokenB ? (
-                                            'Select Tokens'
-                                        ) : !amountA || (parseFloat(amountA) <= 0 && parseFloat(amountB || '0') <= 0) ? (
-                                            'Enter Amount'
-                                        ) : (
-                                            <>Add Liquidity</>
-                                        )}
-                                    </motion.button>
+                                    (() => {
+                                        // Validation & UX: Check if user is trying to provide only 1 token when range overlaps current price
+                                        let invalidSingleSidedRange = false;
+                                        let isTryingSingleSidedA = false;
+                                        let isTryingSingleSidedB = false;
+
+                                        if (poolType === 'cl' && currentPrice && priceLower && priceUpper) {
+                                            const pLow = parseFloat(priceLower);
+                                            const pHigh = parseFloat(priceUpper);
+                                            const aAmt = parseFloat(amountA || '0');
+                                            const bAmt = parseFloat(amountB || '0');
+
+                                            // True if the range overlaps current price
+                                            const isOverlapping = pLow <= currentPrice && currentPrice <= pHigh;
+
+                                            // Check which token they are trying to provide solely
+                                            isTryingSingleSidedA = aAmt > 0 && bAmt === 0;
+                                            isTryingSingleSidedB = bAmt > 0 && aAmt === 0;
+
+                                            if (isOverlapping && (isTryingSingleSidedA || isTryingSingleSidedB) && !isZapActive) {
+                                                invalidSingleSidedRange = true;
+                                            }
+                                        }
+
+                                        // Auto-fix handler for single-sided range overlap
+                                        const handleAutoFixRange = (e: React.MouseEvent) => {
+                                            e.preventDefault();
+                                            if (!tokenA || !tokenB || !currentPrice) return;
+
+                                            const actualTokenA = tokenA.isNative ? WSEI : tokenA;
+                                            const actualTokenB = tokenB.isNative ? WSEI : tokenB;
+                                            const isAToken0 = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase();
+
+                                            const poolPrice = isAToken0 ? currentPrice : 1 / currentPrice;
+                                            const adjustedPrice = poolPrice * Math.pow(10, actualTokenB.decimals - actualTokenA.decimals);
+                                            const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
+
+                                            // If they are trying to provide only TokenA (which might be token0 or token1)
+                                            // Wait, if they only provide token0, range must be ABOVE current tick.
+                                            // If they only provide token1, range must be BELOW current tick.
+                                            let depositToken0 = isTryingSingleSidedA ? isAToken0 : !isAToken0;
+
+                                            if (depositToken0) {
+                                                // Deposit token0 -> Range must be ABOVE current tick
+                                                const lowerTick = Math.ceil(rawTick / tickSpacing) * tickSpacing;
+                                                const upperTick = lowerTick + tickSpacing;
+                                                const lower = tickToPrice(lowerTick, actualTokenA.decimals, actualTokenB.decimals, isAToken0);
+                                                const upper = tickToPrice(upperTick, actualTokenA.decimals, actualTokenB.decimals, isAToken0);
+                                                setPriceLower(formatSmartPrice(Math.min(lower, upper)));
+                                                setPriceUpper(formatSmartPrice(Math.max(lower, upper)));
+                                            } else {
+                                                // Deposit token1 -> Range must be BELOW current tick
+                                                const upperTick = Math.floor(rawTick / tickSpacing) * tickSpacing;
+                                                const lowerTick = upperTick - tickSpacing;
+                                                const lower = tickToPrice(lowerTick, actualTokenA.decimals, actualTokenB.decimals, isAToken0);
+                                                const upper = tickToPrice(upperTick, actualTokenA.decimals, actualTokenB.decimals, isAToken0);
+                                                setPriceLower(formatSmartPrice(Math.min(lower, upper)));
+                                                setPriceUpper(formatSmartPrice(Math.max(lower, upper)));
+                                            }
+                                        };
+
+                                        // If invalid, show the auto-fix button instead of disabling
+                                        if (invalidSingleSidedRange) {
+                                            return (
+                                                <motion.button
+                                                    onClick={handleAutoFixRange}
+                                                    className="w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl bg-orange-500/20 text-orange-400 border border-orange-500/50 hover:bg-orange-500/30 active:scale-[0.98]"
+                                                    whileTap={{ scale: 0.98 }}
+                                                >
+                                                    <div className="flex flex-col items-center">
+                                                        <span>Auto-Fix Single-Sided Range</span>
+                                                        <span className="text-xs font-normal opacity-80 mt-0.5">Shifts range to nearest valid tick</span>
+                                                    </div>
+                                                </motion.button>
+                                            );
+                                        }
+
+                                        return (
+                                            <motion.button
+                                                onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
+                                                disabled={!canAdd || isLoading || isCLInProgress}
+                                                className={`w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl ${canAdd && !isLoading && !isCLInProgress
+                                                    ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.98]'
+                                                    : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                                    }`}
+                                                whileTap={canAdd ? { scale: 0.98 } : {}}
+                                            >
+                                                {isLoading || isCLInProgress ? (
+                                                    <span className="flex items-center justify-center gap-3">
+                                                        <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                        </svg>
+                                                        Adding Liquidity...
+                                                    </span>
+                                                ) : !isConnected ? (
+                                                    '🔗 Connect Wallet'
+                                                ) : !tokenA || !tokenB ? (
+                                                    'Select Tokens'
+                                                ) : !amountA || (parseFloat(amountA) <= 0 && parseFloat(amountB || '0') <= 0) ? (
+                                                    'Enter Amount'
+                                                ) : (
+                                                    <>Add Liquidity</>
+                                                )}
+                                            </motion.button>
+                                        );
+                                    })()
                                 )}
                             </div>
                         </motion.div>
