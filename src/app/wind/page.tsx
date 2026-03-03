@@ -71,7 +71,7 @@ export default function WindPage() {
     const { data: stakingUser, refetch: refetchStakingUser } = useStakingUserInfo(address);
 
     // ── buy tab state ──
-    // Contract takes plain integer units (not wei). 10 = 10 bonding curve units.
+    // buy(amount) takes whole token count (e.g. 10 = 10 WINDC). Contract mints amount*1e18.
     const [buyTokenAmount, setBuyTokenAmount] = useState('');
     const buyAmount = buyTokenAmount && Number(buyTokenAmount) > 0
         ? BigInt(Math.floor(Number(buyTokenAmount))) : undefined;
@@ -80,20 +80,18 @@ export default function WindPage() {
     const { buy, isPending: buying } = useWindBuy();
 
     // ── sell tab state ──
+    // sell(totalAmount) takes ERC20 wei (user's balance). Use parseEther.
     const [sellAmount, setSellAmount] = useState('');
     const sellAmount_ = sellAmount && Number(sellAmount) > 0
-        ? BigInt(Math.floor(Number(sellAmount))) : undefined;
+        ? parseEther(sellAmount) : undefined;
     const { data: sellInfo } = useWindSellInfo(sellAmount_);
     const { sell, isPending: selling } = useWindSell();
 
     // ── stake tab state ──
-    // Staking deals with the raw ERC20 balance (which is in tiny wei units from the curve)
     const [stakeAmount, setStakeAmount] = useState('');
     const [unstakeAmount, setUnstakeAmount] = useState('');
-    const stakeAmountWei = stakeAmount && Number(stakeAmount) > 0
-        ? BigInt(Math.floor(Number(stakeAmount))) : undefined;
-    const unstakeAmountWei = unstakeAmount && Number(unstakeAmount) > 0
-        ? BigInt(Math.floor(Number(unstakeAmount))) : undefined;
+    const stakeAmountWei = stakeAmount ? parseEther(stakeAmount) : undefined;
+    const unstakeAmountWei = unstakeAmount ? parseEther(unstakeAmount) : undefined;
     const { approve: approveWindc, isPending: approvingWindc } = useApproveWindcForStaking();
     const { stake, isPending: staking } = useStake();
     const { unstake, isPending: unstaking } = useUnstake();
@@ -267,11 +265,11 @@ export default function WindPage() {
                         </div>
                         <div>
                             <p className="text-gray-400 text-xs mb-1">WINDC Balance</p>
-                            <p className="font-semibold">{windcBal?.toString() ?? '0'}</p>
+                            <p className="font-semibold">{fmt(windcBal)}</p>
                         </div>
                         <div>
                             <p className="text-gray-400 text-xs mb-1">Staked WINDC</p>
-                            <p className="font-semibold">{stakedAmt?.toString() ?? '0'}</p>
+                            <p className="font-semibold">{fmt(stakedAmt)}</p>
                         </div>
                     </motion.div>
                 )}
@@ -370,8 +368,8 @@ export default function WindPage() {
                                 <label className="text-xs text-gray-400 mb-1 block">
                                     WINDC to sell
                                     {windcBal && windcBal > 0n && (
-                                        <button onClick={() => setSellAmount(windcBal.toString())}
-                                            className="ml-2 text-primary hover:underline">Max ({windcBal.toString()})</button>
+                                        <button onClick={() => setSellAmount(formatEther(windcBal))}
+                                            className="ml-2 text-primary hover:underline">Max ({fmt(windcBal)})</button>
                                     )}
                                 </label>
                                 <input
@@ -441,7 +439,7 @@ export default function WindPage() {
                                 <div className="glass-card p-4 flex items-center justify-between">
                                     <div>
                                         <p className="text-gray-400 text-xs mb-1">Pending Rewards</p>
-                                        <p className="font-bold text-green-400">{earnedRewards?.toString() ?? '0'} WINDC</p>
+                                        <p className="font-bold text-green-400">{fmt(earnedRewards)} WINDC</p>
                                     </div>
                                     <button
                                         onClick={handleClaim}
@@ -460,8 +458,8 @@ export default function WindPage() {
                                     <label className="text-xs text-gray-400 mb-1 block">
                                         Amount
                                         {windcBal && windcBal > 0n && (
-                                            <button onClick={() => setStakeAmount(windcBal.toString())}
-                                                className="ml-2 text-primary hover:underline">Max ({windcBal.toString()})</button>
+                                            <button onClick={() => setStakeAmount(formatEther(windcBal))}
+                                                className="ml-2 text-primary hover:underline">Max ({fmt(windcBal)})</button>
                                         )}
                                     </label>
                                     <input
@@ -490,8 +488,8 @@ export default function WindPage() {
                                     <div>
                                         <label className="text-xs text-gray-400 mb-1 block">
                                             Amount
-                                            <button onClick={() => setUnstakeAmount(stakedAmt.toString())}
-                                                className="ml-2 text-primary hover:underline">Max ({stakedAmt.toString()})</button>
+                                            <button onClick={() => setUnstakeAmount(formatEther(stakedAmt))}
+                                                className="ml-2 text-primary hover:underline">Max ({fmt(stakedAmt)})</button>
                                         </label>
                                         <input
                                             type="number"
