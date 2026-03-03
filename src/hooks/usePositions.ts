@@ -1,10 +1,11 @@
 'use client';
 
 import { useAccount, useReadContract } from 'wagmi';
-import { Address, formatUnits, parseUnits } from 'viem';
+import { Address, formatUnits, parseUnits, encodeFunctionData, decodeFunctionResult } from 'viem';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, POOL_FACTORY_ABI, POOL_ABI } from '@/config/abis';
 import { useState, useEffect, useCallback } from 'react';
+import { batchRpcCall, getRpcForUserData } from '@/utils/rpc';
 
 export interface CLPosition {
     tokenId: bigint;
@@ -48,54 +49,139 @@ export interface V2Position {
 
 import { useUserPositions, SubgraphPosition } from './useSubgraph';
 
+const MAX_UINT128 = BigInt('340282366920938463463374607431768211455');
+
 /**
- * Primary hook for fetching CL positions from subgraph
- * Returns positions with tokensOwed from subgraph data
+ * Fetch real-time collectible LP fees for a list of tokenIds via RPC eth_call simulation.
+ * Simulates collect() without sending a transaction - returns actual accrued fees.
+ */
+async function fetchRealTimeFees(
+    tokenIds: bigint[],
+    userAddress: string,
+    nftManager: string,
+    rpcUrl: string
+): Promise<Map<string, { amount0: bigint; amount1: bigint }>> {
+    if (tokenIds.length === 0) return new Map();
+
+    // Simulate collect() for each position via eth_call (no tx sent).
+    // Pass user address as `from` so ownership check passes.
+    // Use user address as recipient so the simulation succeeds end-to-end.
+    const calls = tokenIds.map(tokenId => {
+        const data = encodeFunctionData({
+            abi: NFT_POSITION_MANAGER_ABI,
+            functionName: 'collect',
+            args: [{ tokenId, recipient: userAddress as Address, amount0Max: MAX_UINT128, amount1Max: MAX_UINT128 }],
+        });
+        return { method: 'eth_call', params: [{ from: userAddress, to: nftManager, data }, 'latest'] };
+    });
+
+    const results = await batchRpcCall(calls, rpcUrl);
+    const feesMap = new Map<string, { amount0: bigint; amount1: bigint }>();
+
+    tokenIds.forEach((tokenId, i) => {
+        try {
+            const raw = results[i] as string;
+            if (raw && raw !== '0x') {
+                const decoded = decodeFunctionResult({
+                    abi: NFT_POSITION_MANAGER_ABI,
+                    functionName: 'collect',
+                    data: raw as `0x${string}`,
+                }) as [bigint, bigint];
+                feesMap.set(tokenId.toString(), { amount0: decoded[0], amount1: decoded[1] });
+            }
+        } catch {
+            // If decode fails, fees remain 0 (will fall back to subgraph data)
+        }
+    });
+
+    return feesMap;
+}
+
+/**
+ * Primary hook for fetching CL positions from subgraph + real-time fees from RPC
  * @param showZeroBalance - If true, show positions with 0 liquidity and 0 fees (default: false)
  */
 export function useCLPositionsFromSubgraph(showZeroBalance: boolean = false) {
     const { address } = useAccount();
     const { positions: subgraphPositions, isLoading, error, refetch } = useUserPositions(address);
+    const [rpcFees, setRpcFees] = useState<Map<string, { amount0: bigint; amount1: bigint }>>(new Map());
+    const [feesLoading, setFeesLoading] = useState(false);
 
-    // Convert subgraph positions to CLPosition format
-    const positions: CLPosition[] = subgraphPositions
-        .map((p: SubgraphPosition) => ({
-            tokenId: BigInt(p.tokenId),
-            poolId: p.pool.id as Address,
-            token0: p.pool.token0.id as Address,
-            token1: p.pool.token1.id as Address,
-            token0Decimals: Number(p.pool.token0.decimals ?? 18),
-            token1Decimals: Number(p.pool.token1.decimals ?? 18),
-            token0PriceUSD: p.pool.token0.priceUSD ? parseFloat(p.pool.token0.priceUSD) : 0,
-            token1PriceUSD: p.pool.token1.priceUSD ? parseFloat(p.pool.token1.priceUSD) : 0,
-            tickSpacing: p.pool.tickSpacing,
-            tickLower: p.tickLower,
-            tickUpper: p.tickUpper,
-            currentTick: p.pool.tick ?? 0,  // Pool's current tick from subgraph
-            liquidity: BigInt(p.liquidity),
-            // Use tokensOwed from subgraph (snapshot from last interaction)
-            tokensOwed0: p.tokensOwed0 ? parseUnits(p.tokensOwed0, Number(p.pool.token0.decimals ?? 18)) : BigInt(0),
-            tokensOwed1: p.tokensOwed1 ? parseUnits(p.tokensOwed1, Number(p.pool.token1.decimals ?? 18)) : BigInt(0),
-            amountUSD: p.amountUSD ? parseFloat(p.amountUSD) : 0,
-            depositedToken0: p.depositedToken0 ? parseFloat(p.depositedToken0) : 0,
-            depositedToken1: p.depositedToken1 ? parseFloat(p.depositedToken1) : 0,
-            withdrawnToken0: p.withdrawnToken0 ? parseFloat(p.withdrawnToken0) : 0,
-            withdrawnToken1: p.withdrawnToken1 ? parseFloat(p.withdrawnToken1) : 0,
-            collectedToken0: p.collectedToken0 ? parseFloat(p.collectedToken0) : 0,
-            collectedToken1: p.collectedToken1 ? parseFloat(p.collectedToken1) : 0,
-            token0Symbol: p.pool.token0.symbol,
-            token1Symbol: p.pool.token1.symbol,
-        }))
-        // By default, hide positions with 0 liquidity AND 0 fees (cleaner UI)
-        // But allow showing them if showZeroBalance = true (for managing empty positions)
+    // Filter: exclude staked positions (they appear in the gauge/staking section, not positions list)
+    const unstakedSubgraphPositions = subgraphPositions.filter((p: SubgraphPosition) => !p.staked);
+
+    // Convert subgraph positions to CLPosition format (using subgraph tokensOwed as initial value)
+    const positions: CLPosition[] = unstakedSubgraphPositions
+        .map((p: SubgraphPosition) => {
+            const tokenIdStr = BigInt(p.tokenId).toString();
+            const rpcFee = rpcFees.get(tokenIdStr);
+            const dec0 = Number(p.pool.token0.decimals ?? 18);
+            const dec1 = Number(p.pool.token1.decimals ?? 18);
+
+            // Prefer real-time RPC fees; fall back to subgraph snapshot
+            const tokensOwed0 = rpcFee
+                ? rpcFee.amount0
+                : (p.tokensOwed0 ? parseUnits(p.tokensOwed0, dec0) : BigInt(0));
+            const tokensOwed1 = rpcFee
+                ? rpcFee.amount1
+                : (p.tokensOwed1 ? parseUnits(p.tokensOwed1, dec1) : BigInt(0));
+
+            return {
+                tokenId: BigInt(p.tokenId),
+                poolId: p.pool.id as Address,
+                token0: p.pool.token0.id as Address,
+                token1: p.pool.token1.id as Address,
+                token0Decimals: dec0,
+                token1Decimals: dec1,
+                token0PriceUSD: p.pool.token0.priceUSD ? parseFloat(p.pool.token0.priceUSD) : 0,
+                token1PriceUSD: p.pool.token1.priceUSD ? parseFloat(p.pool.token1.priceUSD) : 0,
+                tickSpacing: p.pool.tickSpacing,
+                tickLower: p.tickLower,
+                tickUpper: p.tickUpper,
+                currentTick: p.pool.tick ?? 0,
+                liquidity: BigInt(p.liquidity),
+                tokensOwed0,
+                tokensOwed1,
+                amountUSD: p.amountUSD ? parseFloat(p.amountUSD) : 0,
+                depositedToken0: p.depositedToken0 ? parseFloat(p.depositedToken0) : 0,
+                depositedToken1: p.depositedToken1 ? parseFloat(p.depositedToken1) : 0,
+                withdrawnToken0: p.withdrawnToken0 ? parseFloat(p.withdrawnToken0) : 0,
+                withdrawnToken1: p.withdrawnToken1 ? parseFloat(p.withdrawnToken1) : 0,
+                collectedToken0: p.collectedToken0 ? parseFloat(p.collectedToken0) : 0,
+                collectedToken1: p.collectedToken1 ? parseFloat(p.collectedToken1) : 0,
+                token0Symbol: p.pool.token0.symbol,
+                token1Symbol: p.pool.token1.symbol,
+            };
+        })
         .filter(p => showZeroBalance || p.liquidity > BigInt(0) || p.tokensOwed0 > BigInt(0) || p.tokensOwed1 > BigInt(0));
+
+    // Fetch real-time fees from RPC whenever positions change
+    useEffect(() => {
+        if (unstakedSubgraphPositions.length === 0) return;
+        const tokenIds = unstakedSubgraphPositions
+            .filter(p => BigInt(p.liquidity) > BigInt(0))
+            .map(p => BigInt(p.tokenId));
+        if (tokenIds.length === 0) return;
+
+        setFeesLoading(true);
+        fetchRealTimeFees(tokenIds, address!, CL_CONTRACTS.NonfungiblePositionManager, getRpcForUserData())
+            .then(fees => setRpcFees(fees))
+            .catch(err => console.warn('[useCLPositions] RPC fee fetch failed, using subgraph data:', err))
+            .finally(() => setFeesLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [unstakedSubgraphPositions.length, address]);
+
+    const refetchAll = useCallback(async () => {
+        await refetch();
+        // RPC fees will re-fetch automatically via the useEffect above
+    }, [refetch]);
 
     return {
         positions,
         positionCount: positions.length,
-        isLoading,
+        isLoading: isLoading || feesLoading,
         error,
-        refetch,
+        refetch: refetchAll,
     };
 }
 

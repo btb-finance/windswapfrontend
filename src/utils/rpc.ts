@@ -111,9 +111,15 @@ export async function batchRpcCall(
         throw new Error(`RPC batch returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
     }
     if (Array.isArray(results)) {
-        return results.map(r => r.result);
+        // Sort by id to ensure results align with original call order
+        const sorted = [...results].sort((a, b) => {
+            const aId = (a as { id?: number }).id ?? 0;
+            const bId = (b as { id?: number }).id ?? 0;
+            return aId - bId;
+        });
+        return sorted.map(r => (r as { result: unknown }).result);
     }
-    return [results.result];
+    return [(results as { result: unknown }).result];
 }
 
 /**
