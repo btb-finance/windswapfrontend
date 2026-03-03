@@ -61,11 +61,10 @@ const navItems = [
     { href: '/swap', label: 'Swap', Icon: SwapIcon },
     { href: '/pools', label: 'Pools', Icon: PoolsIcon },
     { href: '/portfolio', label: 'Portfolio', Icon: PortfolioIcon, isMain: true },
-    { href: '/bridge', label: 'Bridge', Icon: BridgeIcon },
+    { href: '/wind', label: 'Curve', Icon: WindIcon },
     { href: '/vote', label: 'Vote', Icon: VoteIcon },
     { href: '/btb', label: 'BTB', Icon: BTBIcon },
     { href: '/mining', label: 'Mining', Icon: MiningIcon },
-    { href: '/wind', label: 'Wind', Icon: WindIcon },
 ];
 
 /**
