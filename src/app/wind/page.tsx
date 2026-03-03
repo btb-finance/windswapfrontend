@@ -71,23 +71,29 @@ export default function WindPage() {
     const { data: stakingUser, refetch: refetchStakingUser } = useStakingUserInfo(address);
 
     // ── buy tab state ──
+    // Contract takes plain integer units (not wei). 10 = 10 bonding curve units.
     const [buyTokenAmount, setBuyTokenAmount] = useState('');
-    const buyAmountWei = buyTokenAmount ? parseEther(buyTokenAmount) : undefined;
-    const { data: buyInfo } = useWindBuyInfo(buyAmountWei);
+    const buyAmount = buyTokenAmount && Number(buyTokenAmount) > 0
+        ? BigInt(Math.floor(Number(buyTokenAmount))) : undefined;
+    const { data: buyInfo } = useWindBuyInfo(buyAmount);
     const { approve: approveBTB, isPending: approvingBTB } = useApproveBTBForCurve();
     const { buy, isPending: buying } = useWindBuy();
 
     // ── sell tab state ──
     const [sellAmount, setSellAmount] = useState('');
-    const sellAmountWei = sellAmount ? parseEther(sellAmount) : undefined;
-    const { data: sellInfo } = useWindSellInfo(sellAmountWei);
+    const sellAmount_ = sellAmount && Number(sellAmount) > 0
+        ? BigInt(Math.floor(Number(sellAmount))) : undefined;
+    const { data: sellInfo } = useWindSellInfo(sellAmount_);
     const { sell, isPending: selling } = useWindSell();
 
     // ── stake tab state ──
+    // Staking deals with the raw ERC20 balance (which is in tiny wei units from the curve)
     const [stakeAmount, setStakeAmount] = useState('');
     const [unstakeAmount, setUnstakeAmount] = useState('');
-    const stakeAmountWei = stakeAmount ? parseEther(stakeAmount) : undefined;
-    const unstakeAmountWei = unstakeAmount ? parseEther(unstakeAmount) : undefined;
+    const stakeAmountWei = stakeAmount && Number(stakeAmount) > 0
+        ? BigInt(Math.floor(Number(stakeAmount))) : undefined;
+    const unstakeAmountWei = unstakeAmount && Number(unstakeAmount) > 0
+        ? BigInt(Math.floor(Number(unstakeAmount))) : undefined;
     const { approve: approveWindc, isPending: approvingWindc } = useApproveWindcForStaking();
     const { stake, isPending: staking } = useStake();
     const { unstake, isPending: unstaking } = useUnstake();
@@ -101,7 +107,7 @@ export default function WindPage() {
 
     // ── buy handler ──
     const handleBuy = async () => {
-        if (!buyAmountWei || !buyInfo) return;
+        if (!buyAmount || !buyInfo) return;
         const cost = (buyInfo as [bigint, bigint, bigint])[0];
         try {
             if (!btbAllowance || btbAllowance < cost) {
@@ -112,7 +118,7 @@ export default function WindPage() {
                 toast.success('Approved!');
             }
             toast.info('Buying WINDC...');
-            await buy(buyAmountWei);
+            await buy(buyAmount);
             toast.success(`Bought ${buyTokenAmount} WINDC tokens!`);
             setBuyTokenAmount('');
             setTimeout(refetchAll, 2000);
@@ -123,10 +129,10 @@ export default function WindPage() {
 
     // ── sell handler ──
     const handleSell = async () => {
-        if (!sellAmountWei) return;
+        if (!sellAmount_) return;
         try {
             toast.info('Selling WINDC...');
-            await sell(sellAmountWei);
+            await sell(sellAmount_);
             toast.success('Sold successfully!');
             setSellAmount('');
             setTimeout(refetchAll, 2000);
@@ -261,11 +267,11 @@ export default function WindPage() {
                         </div>
                         <div>
                             <p className="text-gray-400 text-xs mb-1">WINDC Balance</p>
-                            <p className="font-semibold">{fmt(windcBal)}</p>
+                            <p className="font-semibold">{windcBal?.toString() ?? '0'}</p>
                         </div>
                         <div>
                             <p className="text-gray-400 text-xs mb-1">Staked WINDC</p>
-                            <p className="font-semibold">{fmt(stakedAmt)}</p>
+                            <p className="font-semibold">{stakedAmt?.toString() ?? '0'}</p>
                         </div>
                     </motion.div>
                 )}
@@ -321,7 +327,7 @@ export default function WindPage() {
                                 </div>
                             </div>
 
-                            {buyInfo && buyAmountWei && buyAmountWei > 0n && (
+                            {buyInfo && buyAmount && buyAmount > 0n && (
                                 <div className="bg-white/5 rounded-xl p-3 space-y-1 text-sm">
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Total WIND cost</span>
@@ -329,18 +335,18 @@ export default function WindPage() {
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">You receive</span>
-                                        <span className="font-semibold text-green-400">{fmt((buyInfo as [bigint, bigint, bigint])[1])} WINDC</span>
+                                        <span className="font-semibold text-green-400">{((buyInfo as [bigint, bigint, bigint])[1]).toString()} WINDC</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Locked (solvency)</span>
-                                        <span className="text-gray-500">{fmt((buyInfo as [bigint, bigint, bigint])[2])} WINDC</span>
+                                        <span className="text-gray-500">{((buyInfo as [bigint, bigint, bigint])[2]).toString()} WINDC</span>
                                     </div>
                                 </div>
                             )}
 
                             <button
                                 onClick={handleBuy}
-                                disabled={!address || !buyAmountWei || buying || approvingBTB}
+                                disabled={!address || !buyAmount || buying || approvingBTB}
                                 className="w-full py-3 rounded-xl font-bold btn-gradient disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                             >
                                 {!address ? 'Connect Wallet' : approvingBTB ? 'Approving...' : buying ? 'Buying...' : 'Buy WINDC'}
@@ -364,8 +370,8 @@ export default function WindPage() {
                                 <label className="text-xs text-gray-400 mb-1 block">
                                     WINDC to sell
                                     {windcBal && windcBal > 0n && (
-                                        <button onClick={() => setSellAmount(formatEther(windcBal))}
-                                            className="ml-2 text-primary hover:underline">Max ({fmt(windcBal)})</button>
+                                        <button onClick={() => setSellAmount(windcBal.toString())}
+                                            className="ml-2 text-primary hover:underline">Max ({windcBal.toString()})</button>
                                     )}
                                 </label>
                                 <input
@@ -378,7 +384,7 @@ export default function WindPage() {
                                 />
                             </div>
 
-                            {sellInfo && sellAmountWei && sellAmountWei > 0n && (
+                            {sellInfo && sellAmount_ && sellAmount_ > 0n && (
                                 <div className="bg-white/5 rounded-xl p-3 space-y-1 text-sm">
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">WIND received</span>
@@ -386,18 +392,18 @@ export default function WindPage() {
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Tokens burned (60%)</span>
-                                        <span className="text-gray-500">{fmt((sellInfo as [bigint, bigint, bigint])[1])} WINDC</span>
+                                        <span className="text-gray-500">{((sellInfo as [bigint, bigint, bigint])[1]).toString()} WINDC</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Tokens locked (40%)</span>
-                                        <span className="text-gray-500">{fmt((sellInfo as [bigint, bigint, bigint])[2])} WINDC</span>
+                                        <span className="text-gray-500">{((sellInfo as [bigint, bigint, bigint])[2]).toString()} WINDC</span>
                                     </div>
                                 </div>
                             )}
 
                             <button
                                 onClick={handleSell}
-                                disabled={!address || !sellAmountWei || selling}
+                                disabled={!address || !sellAmount_ || selling}
                                 className="w-full py-3 rounded-xl font-bold btn-gradient disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                             >
                                 {!address ? 'Connect Wallet' : selling ? 'Selling...' : 'Sell WINDC'}
@@ -435,7 +441,7 @@ export default function WindPage() {
                                 <div className="glass-card p-4 flex items-center justify-between">
                                     <div>
                                         <p className="text-gray-400 text-xs mb-1">Pending Rewards</p>
-                                        <p className="font-bold text-green-400">{fmt(earnedRewards)} WINDC</p>
+                                        <p className="font-bold text-green-400">{earnedRewards?.toString() ?? '0'} WINDC</p>
                                     </div>
                                     <button
                                         onClick={handleClaim}
@@ -454,8 +460,8 @@ export default function WindPage() {
                                     <label className="text-xs text-gray-400 mb-1 block">
                                         Amount
                                         {windcBal && windcBal > 0n && (
-                                            <button onClick={() => setStakeAmount(formatEther(windcBal))}
-                                                className="ml-2 text-primary hover:underline">Max ({fmt(windcBal)})</button>
+                                            <button onClick={() => setStakeAmount(windcBal.toString())}
+                                                className="ml-2 text-primary hover:underline">Max ({windcBal.toString()})</button>
                                         )}
                                     </label>
                                     <input
@@ -484,8 +490,8 @@ export default function WindPage() {
                                     <div>
                                         <label className="text-xs text-gray-400 mb-1 block">
                                             Amount
-                                            <button onClick={() => setUnstakeAmount(formatEther(stakedAmt))}
-                                                className="ml-2 text-primary hover:underline">Max ({fmt(stakedAmt)})</button>
+                                            <button onClick={() => setUnstakeAmount(stakedAmt.toString())}
+                                                className="ml-2 text-primary hover:underline">Max ({stakedAmt.toString()})</button>
                                         </label>
                                         <input
                                             type="number"
