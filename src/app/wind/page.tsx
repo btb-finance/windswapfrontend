@@ -303,7 +303,7 @@ export default function WindPage() {
                             className="glass-card p-5 space-y-4"
                         >
                             <h2 className="font-bold text-lg">Buy WINDC</h2>
-                            <p className="text-gray-400 text-xs">Pay WIND → get 60% of minted tokens. 40% locked as solvency reserve.</p>
+                            <p className="text-gray-400 text-xs">Pay WIND → receive 60% of minted tokens. The other 40% go to stakers as rewards — the faster the price rises, the more staking rewards accumulate.</p>
 
                             <div>
                                 <label className="text-xs text-gray-400 mb-1 block">Number of WINDC tokens to mint</label>
@@ -336,7 +336,7 @@ export default function WindPage() {
                                         <span className="font-semibold text-green-400">{((buyInfo as [bigint, bigint, bigint])[1]).toString()} WINDC</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">Locked (solvency)</span>
+                                        <span className="text-gray-400">To stakers (40%)</span>
                                         <span className="text-gray-500">{((buyInfo as [bigint, bigint, bigint])[2]).toString()} WINDC</span>
                                     </div>
                                 </div>
@@ -362,7 +362,7 @@ export default function WindPage() {
                             className="glass-card p-5 space-y-4"
                         >
                             <h2 className="font-bold text-lg">Sell WINDC</h2>
-                            <p className="text-gray-400 text-xs">60% of tokens burned → receive WIND. 40% locked permanently.</p>
+                            <p className="text-gray-400 text-xs">Sell WINDC → receive WIND. 60% of your tokens are burned (reducing supply), 40% go to stakers as rewards.</p>
 
                             <div>
                                 <label className="text-xs text-gray-400 mb-1 block">
@@ -393,7 +393,7 @@ export default function WindPage() {
                                         <span className="text-gray-500">{((sellInfo as [bigint, bigint, bigint])[1]).toString()} WINDC</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400">Tokens locked (40%)</span>
+                                        <span className="text-gray-400">To stakers (40%)</span>
                                         <span className="text-gray-500">{((sellInfo as [bigint, bigint, bigint])[2]).toString()} WINDC</span>
                                     </div>
                                 </div>
@@ -532,12 +532,13 @@ export default function WindPage() {
                     className="glass-card p-4 text-xs text-gray-500 space-y-1"
                 >
                     <p className="font-semibold text-gray-400 mb-2">How solvency works</p>
-                    <p>• 100% of WIND paid goes into the reserve</p>
-                    <p>• Only 60% of minted tokens circulate — 40% are permanently locked</p>
-                    <p>• The reserve always backs more than users can withdraw</p>
+                    <p>• 100% of WIND paid by buyers goes into the reserve</p>
+                    <p>• Only 60% of minted tokens enter circulation — the other 40% go to stakers as rewards</p>
+                    <p>• Because fewer tokens circulate than WIND in reserve, sellers can always be paid out</p>
+                    <p>• The faster the price rises, the more tokens flow to stakers — rewarding long-term holders</p>
                     <p className="pt-1">
                         Reserve ratio: <span className={solvent ? 'text-green-400' : 'text-yellow-400'}>{reserveRatio > 0n ? (Number(reserveRatio) / 100).toFixed(2) + '%' : '—'}</span>
-                        {' '}(≥100% = fully solvent)
+                        {' '}(≥100% = fully backed)
                     </p>
                 </motion.div>
 
