@@ -242,13 +242,6 @@ export default function WindPage() {
                         <p className="text-gray-400 text-xs mb-1">Reserve</p>
                         <p className="font-bold">{fmt(reserve)} WIND</p>
                     </div>
-                    <div className="text-center">
-                        <p className="text-gray-400 text-xs mb-1">Solvency</p>
-                        <p className={`font-bold ${solvent ? 'text-green-400' : 'text-red-400'}`}>
-                            {solvent ? '✓ Solvent' : '⚠ Check'}
-                            {reserveRatio > 0n && <span className="text-xs text-gray-400 ml-1">({fmtBps(reserveRatio / 100n)}%)</span>}
-                        </p>
-                    </div>
                 </motion.div>
 
                 {/* User balances */}
