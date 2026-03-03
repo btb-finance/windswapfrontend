@@ -15,6 +15,7 @@ const navLinks = [
     { href: '/vote', label: 'Vote' },
     { href: '/btb', label: 'BTB' },
     { href: '/mining', label: 'Mining' },
+    { href: '/wind', label: 'Wind' },
 ];
 
 export function Header() {
