@@ -2199,3 +2199,44 @@ export const LORE_MINING_ABI = [
         ],
     },
 ] as const;
+
+// Wind Bonding Curve ABI (DevFeeTokenBondingCurve)
+export const WIND_BONDING_CURVE_ABI = [
+    { inputs: [], name: 'getCurrentPrice', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'amount', type: 'uint256' }], name: 'getBuyInfo', outputs: [{ name: 'totalBtbCost', type: 'uint256' }, { name: 'userTokens', type: 'uint256' }, { name: 'devTokens', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'totalAmount', type: 'uint256' }], name: 'getSellInfo', outputs: [{ name: 'btbReturn', type: 'uint256' }, { name: 'tokensBurned', type: 'uint256' }, { name: 'tokensLocked', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'getMarketInfo', outputs: [{ name: 'currentPrice', type: 'uint256' }, { name: 'supply', type: 'uint256' }, { name: 'reserve', type: 'uint256' }, { name: 'lockedBalance', type: 'uint256' }, { name: 'circulatingSupply', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'getReserveHealth', outputs: [{ name: 'reserve', type: 'uint256' }, { name: 'circulatingSupply', type: 'uint256' }, { name: 'lockedSupply', type: 'uint256' }, { name: 'totalSupplyAll', type: 'uint256' }, { name: 'reserveRatio', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'user', type: 'address' }], name: 'getUserInfo', outputs: [{ name: 'userBalance', type: 'uint256' }, { name: 'wouldBurn', type: 'uint256' }, { name: 'wouldLock', type: 'uint256' }, { name: 'wouldReceiveBtb', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'fromSupply', type: 'uint256' }, { name: 'amount', type: 'uint256' }], name: 'calculateCost', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'pure', type: 'function' },
+    { inputs: [], name: 'totalSupply', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'account', type: 'address' }], name: 'balanceOf', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'amount', type: 'uint256' }], name: 'buy', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [{ name: 'totalAmount', type: 'uint256' }], name: 'sell', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [], name: 'btb', outputs: [{ name: '', type: 'address' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'devWallet', outputs: [{ name: '', type: 'address' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'DEV_FEE_PERCENT', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'SELL_PERCENT', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'INCREMENT', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'buyer', type: 'address', indexed: true }, { name: 'totalTokensMinted', type: 'uint256', indexed: false }, { name: 'userReceived', type: 'uint256', indexed: false }, { name: 'devLocked', type: 'uint256', indexed: false }, { name: 'btbPaid', type: 'uint256', indexed: false }], name: 'Buy', type: 'event' },
+    { inputs: [{ name: 'seller', type: 'address', indexed: true }, { name: 'totalTokensUsed', type: 'uint256', indexed: false }, { name: 'tokensBurned', type: 'uint256', indexed: false }, { name: 'tokensLocked', type: 'uint256', indexed: false }, { name: 'btbReceived', type: 'uint256', indexed: false }], name: 'Sell', type: 'event' },
+] as const;
+
+// Wind Staking ABI (CurveTokenStaking)
+export const WIND_STAKING_ABI = [
+    { inputs: [], name: 'getGlobalInfo', outputs: [{ name: '_totalStaked', type: 'uint256' }, { name: '_rewardRate', type: 'uint256' }, { name: '_periodFinish', type: 'uint256' }, { name: '_rewardPerToken', type: 'uint256' }, { name: '_rewardPool', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'account', type: 'address' }], name: 'getUserInfo', outputs: [{ name: 'staked', type: 'uint256' }, { name: 'earnedRewards', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'getAPR', outputs: [{ name: 'apr', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'getRewardPool', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'totalStaked', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'rewardRate', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'periodFinish', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'REWARD_DURATION', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'amount', type: 'uint256' }], name: 'stake', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [{ name: 'amount', type: 'uint256' }], name: 'unstake', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [], name: 'claimRewards', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [], name: 'emergencyUnstake', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [{ name: 'user', type: 'address', indexed: true }, { name: 'amount', type: 'uint256', indexed: false }], name: 'Staked', type: 'event' },
+    { inputs: [{ name: 'user', type: 'address', indexed: true }, { name: 'amount', type: 'uint256', indexed: false }], name: 'Unstaked', type: 'event' },
+    { inputs: [{ name: 'user', type: 'address', indexed: true }, { name: 'amount', type: 'uint256', indexed: false }], name: 'RewardsClaimed', type: 'event' },
+] as const;

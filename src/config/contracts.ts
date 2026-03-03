@@ -164,6 +164,18 @@ export const LORE_MINING_CONTRACTS = {
 } as const;
 
 // ============================================
+// Wind Bonding Curve & Staking Contracts (Sei Mainnet)
+// ============================================
+export const WIND_CURVE_CONTRACTS = {
+    // WindBondingCurve UUPS Proxy (vanity address)
+    BondingCurve: '0x88888004Fd1F10C4B7b1153ae02B2b811212Adf2',
+    // CurveTokenStaking UUPS Proxy (vanity address)
+    Staking: '0x888888C440640D493A5943b7448e3C5Ee88CC5De',
+    // BTB token (reserve currency)
+    BTBToken: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
+} as const;
+
+// ============================================
 // BTB Finance Contracts (Ethereum Mainnet)
 // ============================================
 export const BTB_CONTRACTS = {
