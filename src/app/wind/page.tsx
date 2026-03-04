@@ -44,6 +44,19 @@ function fmtBps(bps: bigint | undefined): string {
     return (Number(bps) / 100).toFixed(2);
 }
 
+function fmtLockEnd(lockEnd: bigint): string {
+    if (lockEnd === 0n) return '';
+    const now = Math.floor(Date.now() / 1000);
+    const end = Number(lockEnd);
+    if (now >= end) return '';
+    const secs = end - now;
+    const days = Math.floor(secs / 86400);
+    const hours = Math.floor((secs % 86400) / 3600);
+    if (days > 0) return `${days}d ${hours}h remaining`;
+    const mins = Math.floor((secs % 3600) / 60);
+    return `${hours}h ${mins}m remaining`;
+}
+
 // ── tab types ──────────────────────────────────────────────────────────────
 
 type Tab = 'buy' | 'sell' | 'stake';
@@ -201,8 +214,8 @@ export default function WindPage() {
         (reserveHealth as [bigint, bigint, bigint, bigint, bigint] | undefined) ?? [0n, 0n, 0n, 0n, 0n];
     const [totalStaked, rewardRate, periodFinish, , rewardPool] =
         (stakingGlobal as [bigint, bigint, bigint, bigint, bigint] | undefined) ?? [0n, 0n, 0n, 0n, 0n];
-    const [stakedAmt, earnedRewards] =
-        (stakingUser as [bigint, bigint] | undefined) ?? [0n, 0n];
+    const [stakedAmt, earnedRewards, lockEnd] =
+        (stakingUser as [bigint, bigint, bigint] | undefined) ?? [0n, 0n, 0n];
     const [userBalance, wouldBurn, wouldLock, wouldReceiveBtb] =
         (userCurveInfo as [bigint, bigint, bigint, bigint] | undefined) ?? [0n, 0n, 0n, 0n];
 
@@ -477,7 +490,11 @@ export default function WindPage() {
                             {address && stakedAmt > 0n && (
                                 <div className="glass-card p-5 space-y-3">
                                     <h3 className="font-bold">Unstake WINDC</h3>
-                                    <p className="text-gray-400 text-xs">Auto-claims all pending rewards on unstake.</p>
+                                    {lockEnd > 0n && fmtLockEnd(lockEnd) ? (
+                                        <p className="text-yellow-400 text-xs">🔒 Locked — {fmtLockEnd(lockEnd)}</p>
+                                    ) : (
+                                        <p className="text-gray-400 text-xs">Auto-claims all pending rewards on unstake.</p>
+                                    )}
                                     <div>
                                         <label className="text-xs text-gray-400 mb-1 block">
                                             Amount
@@ -496,10 +513,10 @@ export default function WindPage() {
                                     <div className="flex gap-2">
                                         <button
                                             onClick={handleUnstake}
-                                            disabled={!unstakeAmountWei || unstaking}
+                                            disabled={!unstakeAmountWei || unstaking || (lockEnd > 0n && BigInt(Math.floor(Date.now() / 1000)) < lockEnd)}
                                             className="flex-1 py-3 rounded-xl font-bold btn-gradient disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                                         >
-                                            {unstaking ? 'Unstaking...' : 'Unstake'}
+                                            {unstaking ? 'Unstaking...' : lockEnd > 0n && BigInt(Math.floor(Date.now() / 1000)) < lockEnd ? '🔒 Locked' : 'Unstake'}
                                         </button>
                                         <button
                                             onClick={handleEmergencyUnstake}

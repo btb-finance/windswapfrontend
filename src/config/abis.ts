@@ -2225,7 +2225,7 @@ export const WIND_BONDING_CURVE_ABI = [
 // Wind Staking ABI (CurveTokenStaking)
 export const WIND_STAKING_ABI = [
     { inputs: [], name: 'getGlobalInfo', outputs: [{ name: '_totalStaked', type: 'uint256' }, { name: '_rewardRate', type: 'uint256' }, { name: '_periodFinish', type: 'uint256' }, { name: '_rewardPerToken', type: 'uint256' }, { name: '_rewardPool', type: 'uint256' }], stateMutability: 'view', type: 'function' },
-    { inputs: [{ name: 'account', type: 'address' }], name: 'getUserInfo', outputs: [{ name: 'staked', type: 'uint256' }, { name: 'earnedRewards', type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'account', type: 'address' }], name: 'getUserInfo', outputs: [{ name: 'staked', type: 'uint256' }, { name: 'earnedRewards', type: 'uint256' }, { name: 'lockEnd', type: 'uint256' }], stateMutability: 'view', type: 'function' },
     { inputs: [], name: 'getAPR', outputs: [{ name: 'apr', type: 'uint256' }], stateMutability: 'view', type: 'function' },
     { inputs: [], name: 'getRewardPool', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
     { inputs: [], name: 'totalStaked', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' },
