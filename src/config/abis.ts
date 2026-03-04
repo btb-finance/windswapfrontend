@@ -2236,6 +2236,8 @@ export const WIND_STAKING_ABI = [
     { inputs: [{ name: 'amount', type: 'uint256' }], name: 'unstake', outputs: [], stateMutability: 'nonpayable', type: 'function' },
     { inputs: [], name: 'claimRewards', outputs: [], stateMutability: 'nonpayable', type: 'function' },
     { inputs: [], name: 'emergencyUnstake', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+    { inputs: [], name: 'emergencyUnstakeEnabled', outputs: [{ name: '', type: 'bool' }], stateMutability: 'view', type: 'function' },
+    { inputs: [{ name: 'enabled', type: 'bool' }], name: 'setEmergencyUnstakeEnabled', outputs: [], stateMutability: 'nonpayable', type: 'function' },
     { inputs: [{ name: 'user', type: 'address', indexed: true }, { name: 'amount', type: 'uint256', indexed: false }], name: 'Staked', type: 'event' },
     { inputs: [{ name: 'user', type: 'address', indexed: true }, { name: 'amount', type: 'uint256', indexed: false }], name: 'Unstaked', type: 'event' },
     { inputs: [{ name: 'user', type: 'address', indexed: true }, { name: 'amount', type: 'uint256', indexed: false }], name: 'RewardsClaimed', type: 'event' },

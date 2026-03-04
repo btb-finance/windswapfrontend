@@ -160,6 +160,16 @@ export function useStakingGlobalInfo() {
     });
 }
 
+export function useEmergencyUnstakeEnabled() {
+    return useReadContract({
+        address: STAKING,
+        abi: WIND_STAKING_ABI,
+        functionName: 'emergencyUnstakeEnabled',
+        chainId: sei.id,
+        query: { refetchInterval: 30000 },
+    });
+}
+
 export function useStakingAPR() {
     return useReadContract({
         address: STAKING,

@@ -27,6 +27,7 @@ import {
     useUnstake,
     useClaimRewards,
     useEmergencyUnstake,
+    useEmergencyUnstakeEnabled,
 } from '@/hooks/useWindCurve';
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,7 @@ export default function WindPage() {
     const { unstake, isPending: unstaking } = useUnstake();
     const { claim, isPending: claiming } = useClaimRewards();
     const { emergencyUnstake, isPending: emergencyUnstaking } = useEmergencyUnstake();
+    const { data: emergencyEnabled } = useEmergencyUnstakeEnabled();
 
     const refetchAll = () => {
         refetchUserCurve(); refetchWindc(); refetchBTB();
@@ -518,14 +520,16 @@ export default function WindPage() {
                                         >
                                             {unstaking ? 'Unstaking...' : lockEnd > 0n && BigInt(Math.floor(Date.now() / 1000)) < lockEnd ? '🔒 Locked' : 'Unstake'}
                                         </button>
-                                        <button
-                                            onClick={handleEmergencyUnstake}
-                                            disabled={emergencyUnstaking}
-                                            className="px-4 py-3 rounded-xl font-semibold text-red-400 border border-red-400/30 hover:bg-red-400/10 disabled:opacity-40 transition-all text-sm"
-                                            title="Emergency unstake — forfeits all pending rewards"
-                                        >
-                                            {emergencyUnstaking ? '...' : '⚠ Emergency'}
-                                        </button>
+                                        {emergencyEnabled && (
+                                            <button
+                                                onClick={handleEmergencyUnstake}
+                                                disabled={emergencyUnstaking}
+                                                className="px-4 py-3 rounded-xl font-semibold text-red-400 border border-red-400/30 hover:bg-red-400/10 disabled:opacity-40 transition-all text-sm"
+                                                title="Emergency unstake — forfeits all pending rewards"
+                                            >
+                                                {emergencyUnstaking ? '...' : '⚠ Emergency'}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             )}
