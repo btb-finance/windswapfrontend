@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { WagmiProvider, http } from 'wagmi';
+import { WagmiProvider, http, fallback } from 'wagmi';
 import {
     RainbowKitProvider,
     darkTheme,
@@ -35,7 +35,11 @@ const config = getDefaultConfig({
     projectId,
     chains: [sei, ethereum, base],
     transports: {
-        [sei.id]: http('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8'),
+        [sei.id]: fallback([
+            http('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8'),
+            http('https://sei-evm-rpc.publicnode.com'),
+            http('https://evm-rpc.sei-apis.com'),
+        ]),
         [ethereum.id]: http('https://eth.llamarpc.com'),
         [base.id]: http('https://mainnet.base.org'),
     },
