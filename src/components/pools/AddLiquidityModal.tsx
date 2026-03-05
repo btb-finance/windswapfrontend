@@ -347,16 +347,28 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const depositTokenAForOneSided = (isRangeAboveCurrent && isAToken0) || (isRangeBelowCurrent && !isAToken0);
     const depositTokenBForOneSided = (isRangeAboveCurrent && !isAToken0) || (isRangeBelowCurrent && isAToken0);
 
-    // Auto-calculate Token B amount for CL using ON-CHAIN SugarHelper contract
-    // This ensures calculations match exactly what the contract will use
+    // Auto-calculate the paired token amount for CL using ON-CHAIN SugarHelper contract.
+    // Supports BOTH directions:
+    //   - A → B  (normal: user typed amountA, calc amountB)
+    //   - B → A  (reverse: user typed amountB with no amountA, calc amountA)
+    // This handles the case where the user was in single-sided mode (entered only one
+    // token), then adjusted the range so it became two-sided — without a reverse calc
+    // the other token would stay at 0 and the tx would fail.
     useEffect(() => {
-        if (poolType !== 'cl' || !currentPrice || !amountA || parseFloat(amountA) <= 0) {
-            return;
-        }
+        if (poolType !== 'cl' || !currentPrice) return;
+
+        const hasAmountA = !!amountA && parseFloat(amountA) > 0;
+        const hasAmountB = !!amountB && parseFloat(amountB) > 0;
+
+        // Determine calc direction: prefer A→B; fall back to B→A only when A is empty
+        const calcAtoB = hasAmountA;
+        const calcBtoA = !hasAmountA && hasAmountB;
+
+        if (!calcAtoB && !calcBtoA) return;
 
         if (!clPoolAddress || pLower <= 0 || pUpper <= 0 || pLower >= pUpper) {
             // Invalid range or no pool - use simple ratio for default case
-            if (pLower <= 0 && pUpper === Infinity) {
+            if (pLower <= 0 && pUpper === Infinity && calcAtoB) {
                 const amtA = parseFloat(amountA);
                 const amtB = amtA * currentPrice;
                 setAmountB(amtB.toFixed(6));
@@ -367,122 +379,111 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         // Check which tokens are needed for this range (in UI terms)
         const required = getRequiredTokens(currentPrice, pLower, pUpper);
 
-        // If A is token0 and only token1 is needed (range above current), A should be 0
-        if (isAToken0 && !required.needsToken0) {
-            return; // User should enter B instead
-        }
-        // If A is token1 and only token0 is needed (range below current), A should be 0
-        if (!isAToken0 && !required.needsToken1) {
-            return; // User should enter B instead
+        // Single-sided: only one token needed — clear the unused one and skip calc
+        if (isAToken0) {
+            if (!required.needsToken0 && !required.needsToken1) return; // degenerate
+            if (!required.needsToken0) { setAmountA('0'); return; } // range fully above
+            if (!required.needsToken1) { setAmountB('0'); return; } // range fully below
+        } else {
+            if (!required.needsToken1 && !required.needsToken0) return;
+            if (!required.needsToken1) { setAmountA('0'); return; }
+            if (!required.needsToken0) { setAmountB('0'); return; }
         }
 
         // Compute token0/token1 decimals based on pool order (needed for fallbacks too)
         const token0Decimals = isAToken0 ? (actualTokenA?.decimals || 18) : (actualTokenB?.decimals || 18);
         const token1Decimals = isAToken0 ? (actualTokenB?.decimals || 18) : (actualTokenA?.decimals || 18);
 
-        // Call on-chain SugarHelper for accurate calculation
+        // Call on-chain SugarHelper for accurate calculation.
+        // Supports A→B (calcAtoB) and B→A (calcBtoA) directions.
         const calculateOnChain = async () => {
+            // Calculate ticks from prices (in pool order)
+            const priceToTickLocal = (price: number): number => {
+                const poolPrice = isAToken0 ? price : 1 / price;
+                const adjustedPrice = poolPrice * Math.pow(10, token1Decimals - token0Decimals);
+                const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
+                return Math.round(rawTick / tickSpacing) * tickSpacing;
+            };
+            let tickLower = priceToTickLocal(pLower);
+            let tickUpper = priceToTickLocal(pUpper);
+            if (tickLower > tickUpper) [tickLower, tickUpper] = [tickUpper, tickLower];
+
+            const { encodeFunctionData } = await import('viem');
+            const { SUGAR_HELPER_ABI } = await import('@/config/abis');
+
             try {
-
-                // Parse amount to wei
-                const inputDecimals = actualTokenA?.decimals || 18;
-                const inputAmountWei = parseUnits(amountA, inputDecimals);
-
-                // Calculate ticks from prices (in pool order)
-                const priceToTickLocal = (price: number): number => {
-                    const poolPrice = isAToken0 ? price : 1 / price;
-                    const adjustedPrice = poolPrice * Math.pow(10, token1Decimals - token0Decimals);
-                    const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
-                    return Math.round(rawTick / tickSpacing) * tickSpacing;
-                };
-                let tickLower = priceToTickLocal(pLower);
-                let tickUpper = priceToTickLocal(pUpper);
-                if (tickLower > tickUpper) [tickLower, tickUpper] = [tickUpper, tickLower];
-
-
-
-                // Use viem's encodeFunctionData for proper ABI encoding
-                const { encodeFunctionData } = await import('viem');
-                const { SUGAR_HELPER_ABI } = await import('@/config/abis');
-
-                // Call SugarHelper - pass pool address to auto-fetch sqrtRatioX96
-                const calldata = encodeFunctionData({
-                    abi: SUGAR_HELPER_ABI,
-                    functionName: isAToken0 ? 'estimateAmount1' : 'estimateAmount0',
-                    args: isAToken0
-                        ? [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper]
-                        : [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
-                });
-
-                const response = await fetch(getRpcForPoolData(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'eth_call',
-                        params: [{
-                            to: CL_CONTRACTS.SugarHelper,
-                            data: calldata,
-                        }, 'latest'],
-                        id: 1,
-                    }),
-                });
-                const result = await response.json();
-
-
-
-                if (result.result && result.result !== '0x' && result.result.length > 2) {
-                    const outputAmountWei = BigInt(result.result);
-                    const outputDecimals = actualTokenB?.decimals || 18;
-                    const outputAmount = formatUnits(outputAmountWei, outputDecimals);
-
-                    // Format with max token precision
-                    const parsedOutput = parseFloat(outputAmount);
-                    if (parsedOutput > 0 && isFinite(parsedOutput)) {
-                        setAmountB(parsedOutput.toFixed(outputDecimals).replace(/\.?0+$/, ''));
+                if (calcAtoB) {
+                    // A → B: estimate token1 from token0 (or token0 from token1 if !isAToken0)
+                    const inputDecimals = actualTokenA?.decimals || 18;
+                    const inputAmountWei = parseUnits(amountA, inputDecimals);
+                    const fnName = isAToken0 ? 'estimateAmount1' : 'estimateAmount0';
+                    const calldata = encodeFunctionData({
+                        abi: SUGAR_HELPER_ABI,
+                        functionName: fnName,
+                        args: [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
+                    });
+                    const res = await fetch(getRpcForPoolData(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: CL_CONTRACTS.SugarHelper, data: calldata }, 'latest'], id: 1 }),
+                    });
+                    const result = await res.json();
+                    if (result.result && result.result !== '0x' && result.result.length > 2) {
+                        const outputDecimals = actualTokenB?.decimals || 18;
+                        const parsed = parseFloat(formatUnits(BigInt(result.result), outputDecimals));
+                        setAmountB(parsed > 0 && isFinite(parsed) ? parsed.toFixed(outputDecimals).replace(/\.?0+$/, '') : '0');
                     } else {
-                        setAmountB('0');
+                        // Fallback to frontend calc
+                        const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                        const r = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
+                        const out = isAToken0 ? r.amount1 : r.amount0;
+                        const dec = isAToken0 ? token1Decimals : token0Decimals;
+                        setAmountB(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                     }
                 } else {
-
-                    // Fallback to frontend calculation if on-chain call fails
-                    const position = {
-                        currentPrice,
-                        priceLower: pLower,
-                        priceUpper: pUpper,
-                        token0Decimals,
-                        token1Decimals,
-                        tickSpacing,
-                        isToken0Base: isAToken0,
-                    };
-                    const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
-                    const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
-                    if (outputAmount > 0 && isFinite(outputAmount)) {
-                        const outputDecimals = isAToken0 ? token1Decimals : token0Decimals;
-                        setAmountB(outputAmount.toFixed(outputDecimals).replace(/\.?0+$/, ''));
+                    // B → A: estimate token0 from token1 (or token1 from token0 if !isAToken0)
+                    const inputDecimals = actualTokenB?.decimals || 18;
+                    const inputAmountWei = parseUnits(amountB, inputDecimals);
+                    const fnName = isAToken0 ? 'estimateAmount0' : 'estimateAmount1';
+                    const calldata = encodeFunctionData({
+                        abi: SUGAR_HELPER_ABI,
+                        functionName: fnName,
+                        args: [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
+                    });
+                    const res = await fetch(getRpcForPoolData(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: CL_CONTRACTS.SugarHelper, data: calldata }, 'latest'], id: 1 }),
+                    });
+                    const result = await res.json();
+                    if (result.result && result.result !== '0x' && result.result.length > 2) {
+                        const outputDecimals = actualTokenA?.decimals || 18;
+                        const parsed = parseFloat(formatUnits(BigInt(result.result), outputDecimals));
+                        setAmountA(parsed > 0 && isFinite(parsed) ? parsed.toFixed(outputDecimals).replace(/\.?0+$/, '') : '0');
                     } else {
-                        setAmountB('0');
+                        // Fallback to frontend calc
+                        const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                        const r = calculateOptimalAmounts(parseFloat(amountB), !isAToken0, position);
+                        const out = isAToken0 ? r.amount0 : r.amount1;
+                        const dec = isAToken0 ? token0Decimals : token1Decimals;
+                        setAmountA(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                     }
                 }
             } catch (error) {
                 console.error('Error calling SugarHelper:', error);
                 // Fallback to frontend calculation
-                const position = {
-                    currentPrice,
-                    priceLower: pLower,
-                    priceUpper: pUpper,
-                    token0Decimals,
-                    token1Decimals,
-                    tickSpacing,
-                    isToken0Base: isAToken0,
-                };
-                const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
-                const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
-                if (outputAmount > 0 && isFinite(outputAmount)) {
-                    const outputDecimals = isAToken0 ? token1Decimals : token0Decimals;
-                    setAmountB(outputAmount.toFixed(outputDecimals).replace(/\.?0+$/, ''));
+                if (calcAtoB) {
+                    const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                    const r = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
+                    const out = isAToken0 ? r.amount1 : r.amount0;
+                    const dec = isAToken0 ? token1Decimals : token0Decimals;
+                    setAmountB(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                 } else {
-                    setAmountB('0');
+                    const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                    const r = calculateOptimalAmounts(parseFloat(amountB), !isAToken0, position);
+                    const out = isAToken0 ? r.amount0 : r.amount1;
+                    const dec = isAToken0 ? token0Decimals : token1Decimals;
+                    setAmountA(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                 }
             }
         };
@@ -490,6 +491,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         // Debounce the on-chain call
         const timeoutId = setTimeout(calculateOnChain, 300);
         return () => clearTimeout(timeoutId);
+    // NOTE: amountB is intentionally excluded from deps to avoid infinite loops.
+    // B→A only fires when amountA is empty and priceLower/priceUpper changes —
+    // the effect reads amountB via closure but doesn't react to its own output.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [poolType, clPoolPrice, clPoolAddress, initialPrice, amountA, priceLower, priceUpper, isAToken0, actualTokenA, actualTokenB, tickSpacing]);
 
     // Handle V2 liquidity add
