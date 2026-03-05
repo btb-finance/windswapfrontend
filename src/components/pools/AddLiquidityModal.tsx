@@ -950,6 +950,25 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         }
     };
 
+    // Move a price boundary by exactly ONE tick in the given direction.
+    // Steps are 1 tick (~0.01% per step) regardless of tickSpacing.
+    // The mint code snaps to tickSpacing at submit time — fine granularity here is intentional.
+    // Direction is corrected for pool token ordering: when !isAToken0 the pool tick and
+    // UI price are inversely related, so the logical direction must be flipped.
+    const adjustPriceByOneTick = (price: number, direction: 1 | -1): number => {
+        if (!actualTokenA || !actualTokenB) return price;
+        const t0Dec = isAToken0 ? actualTokenA.decimals : actualTokenB.decimals;
+        const t1Dec = isAToken0 ? actualTokenB.decimals : actualTokenA.decimals;
+        const poolPrice = isAToken0 ? price : 1 / price;
+        const adjustedPrice = poolPrice * Math.pow(10, t1Dec - t0Dec);
+        const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
+        const currentTick = Math.round(rawTick);
+        // Invert tick direction when pool ordering is opposite to UI ordering
+        const tickDir = isAToken0 ? direction : -direction as 1 | -1;
+        const newTick = currentTick + tickDir;
+        return tickToPrice(newTick, t0Dec, t1Dec, isAToken0);
+    };
+
     const setPresetRange = (percent: number) => {
         const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
         if (currentPrice) {
@@ -1732,7 +1751,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                         </div>
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
-                                                                onClick={() => setPriceLower((parseFloat(priceLower || '0') * 0.95).toFixed(6))}
+                                                                onClick={() => { const p = parseFloat(priceLower || '0'); if (p > 0) setPriceLower(formatSmartPrice(adjustPriceByOneTick(p, -1))); }}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
                                                             <input
@@ -1749,7 +1768,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 placeholder="0"
                                                             />
                                                             <button
-                                                                onClick={() => setPriceLower((parseFloat(priceLower || '0') * 1.05).toFixed(6))}
+                                                                onClick={() => { const p = parseFloat(priceLower || '0'); if (p > 0) setPriceLower(formatSmartPrice(adjustPriceByOneTick(p, 1))); }}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >+</button>
                                                         </div>
@@ -1769,7 +1788,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                         </div>
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
-                                                                onClick={() => setPriceUpper((parseFloat(priceUpper || '999999') * 0.95).toFixed(6))}
+                                                                onClick={() => { const p = parseFloat(priceUpper || '0'); if (p > 0) setPriceUpper(formatSmartPrice(adjustPriceByOneTick(p, -1))); }}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >−</button>
                                                             <input
@@ -1786,7 +1805,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                                 placeholder="Max"
                                                             />
                                                             <button
-                                                                onClick={() => setPriceUpper((parseFloat(priceUpper || '1') * 1.05).toFixed(6))}
+                                                                onClick={() => { const p = parseFloat(priceUpper || '0'); if (p > 0) setPriceUpper(formatSmartPrice(adjustPriceByOneTick(p, 1))); }}
                                                                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg"
                                                             >+</button>
                                                         </div>
