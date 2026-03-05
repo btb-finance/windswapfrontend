@@ -104,7 +104,7 @@ export function useGovernance() {
         })();
     }, []);
 
-    // Fetch proposals from subgraph (fast!)
+    // Fetch proposals from subgraph (fast!) then enrich with live RPC state
     const fetchProposals = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -162,13 +162,35 @@ export function useGovernance() {
 
             console.log(`[Governance] Loaded ${parsedProposals.length} proposals from subgraph`);
             setProposals(parsedProposals);
+
+            // Enrich with live on-chain state to fix stale subgraph state (e.g. stuck Pending)
+            if (publicClient && parsedProposals.length > 0) {
+                const liveStates = await Promise.all(
+                    parsedProposals.map(async (p) => {
+                        try {
+                            const s = await publicClient.readContract({
+                                address: V2_CONTRACTS.ProtocolGovernor as Address,
+                                abi: GOVERNOR_ABI,
+                                functionName: 'state',
+                                args: [p.id],
+                            });
+                            return s as ProposalState;
+                        } catch {
+                            return p.state; // fallback to subgraph state on error
+                        }
+                    })
+                );
+                const enriched = parsedProposals.map((p, i) => ({ ...p, state: liveStates[i] }));
+                console.log('[Governance] Enriched proposals with live state:', enriched.map(p => ({ id: p.id.toString(), state: p.state })));
+                setProposals(enriched);
+            }
         } catch (err: unknown) {
             console.error('[Governance] Error fetching proposals:', err);
             setError('Failed to fetch proposals');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [publicClient]);
 
     // Fetch proposals on mount
     useEffect(() => {
