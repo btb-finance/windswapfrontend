@@ -2,6 +2,11 @@
 // Single RPC endpoint (Alchemy) for all categories
 
 const DEFAULT_ALCHEMY_SEI_RPC = 'https://sei-evm-rpc.publicnode.com';
+const FALLBACK_RPCS = [
+    'https://sei-evm-rpc.publicnode.com',
+    'https://sei.drpc.org',
+    'https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8',
+];
 
 function getAlchemyRpc(): string {
     // Prefer explicit env var. Next.js exposes NEXT_PUBLIC_* to the client.
@@ -53,31 +58,49 @@ export async function rpcCall<T = unknown>(
     params: unknown[],
     preferredRpc?: string
 ): Promise<T> {
-    const rpc = preferredRpc || getAlchemyRpc();
-    const response = await fetch(rpc, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            jsonrpc: '2.0',
-            method,
-            params,
-            id: 1,
-        }),
-    });
+    const rpcs = preferredRpc
+        ? [preferredRpc, ...FALLBACK_RPCS.filter(r => r !== preferredRpc)]
+        : [getAlchemyRpc(), ...FALLBACK_RPCS.filter(r => r !== getAlchemyRpc())];
 
-    const text = await response.text();
-    let result: { error?: { message?: string }; result: T };
-    try {
-        result = JSON.parse(text) as typeof result;
-    } catch {
-        const ct = response.headers.get('content-type') || '';
-        const snippet = text.slice(0, 200);
-        throw new Error(`RPC returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
+    let lastError: Error = new Error('No RPC endpoints available');
+    for (const rpc of rpcs) {
+        try {
+            const response = await fetch(rpc, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method,
+                    params,
+                    id: 1,
+                }),
+            });
+
+            if (response.status === 504 || response.status === 502 || response.status === 503) {
+                lastError = new Error(`RPC gateway error (status=${response.status}) from ${rpc}`);
+                continue;
+            }
+
+            const text = await response.text();
+            let result: { error?: { message?: string }; result: T };
+            try {
+                result = JSON.parse(text) as typeof result;
+            } catch {
+                const ct = response.headers.get('content-type') || '';
+                const snippet = text.slice(0, 200);
+                lastError = new Error(`RPC returned non-JSON response (status=${response.status}, content-type=${ct}): ${snippet}`);
+                continue;
+            }
+            if (result.error) {
+                throw new Error(result.error.message || 'RPC error');
+            }
+            return result.result;
+        } catch (err) {
+            if (err instanceof Error && !err.message.startsWith('RPC')) throw err; // contract errors — don't retry
+            lastError = err instanceof Error ? err : new Error(String(err));
+        }
     }
-    if (result.error) {
-        throw new Error(result.error.message || 'RPC error');
-    }
-    return result.result;
+    throw lastError;
 }
 
 /**

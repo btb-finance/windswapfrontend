@@ -819,101 +819,116 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             toast.success('Liquidity position created successfully!');
 
             // If auto-stake is enabled and this pool has a gauge, stake the NFT
+            // NOTE: staking errors are caught separately — a failed stake does NOT
+            // roll back the successfully minted position.
             if (autoStake && gaugeAddress) {
-                // Wait for mint transaction to confirm and get the tokenId from logs
-                let tokenId: bigint | null = null;
-                for (let i = 0; i < 30; i++) {
-                    const receipt = await fetch(getRpcForPoolData(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                            params: [mintHash],
-                            id: 1
-                        })
-                    }).then(r => r.json());
+                try {
+                    // Wait for mint transaction to confirm and get the tokenId from logs
+                    let tokenId: bigint | null = null;
+                    for (let i = 0; i < 30; i++) {
+                        const receipt = await fetch(getRpcForPoolData(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                params: [mintHash],
+                                id: 1
+                            })
+                        }).then(r => r.json());
 
-                    if (receipt.result && receipt.result.status === '0x1') {
-                        // Parse logs to find Transfer event (NFT mint)
-                        // Transfer event signature: Transfer(address,address,uint256)
-                        const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-                        const transferLog = receipt.result.logs?.find((log: any) =>
-                            log.topics[0] === transferTopic &&
-                            log.address.toLowerCase() === CL_CONTRACTS.NonfungiblePositionManager.toLowerCase()
-                        );
-                        if (transferLog && transferLog.topics[3]) {
-                            tokenId = BigInt(transferLog.topics[3]);
-                        }
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-
-                if (tokenId) {
-                    // Try to batch approve NFT + stake together
-                    const nftApproveCall = encodeContractCall(
-                        CL_CONTRACTS.NonfungiblePositionManager as Address,
-                        [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                        'approve',
-                        [gaugeAddress as Address, tokenId]
-                    );
-
-                    const stakeCall = encodeContractCall(
-                        gaugeAddress as Address,
-                        [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                        'deposit',
-                        [tokenId]
-                    );
-
-                    setTxProgress('staking');
-                    const stakeBatchResult = await executeBatch([nftApproveCall, stakeCall]);
-
-                    if (stakeBatchResult.usedBatching && stakeBatchResult.success) {
-                        // Both approve NFT + stake in one popup!
-                        toast.success('Position staked! Earning WIND rewards');
-                    } else {
-                        // Fall back to sequential
-                        setTxProgress('approving_nft');
-                        const approveNftHash = await writeContractAsync({
-                            address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                            abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                            functionName: 'approve',
-                            args: [gaugeAddress as Address, tokenId],
-                        });
-
-                        // Wait for NFT approval to confirm
-                        let approvalConfirmed = false;
-                        for (let i = 0; i < 30; i++) {
-                            const receipt = await fetch(getRpcForPoolData(), {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                                    params: [approveNftHash],
-                                    id: 1
-                                })
-                            }).then(r => r.json());
-
-                            if (receipt.result && receipt.result.status === '0x1') {
-                                approvalConfirmed = true;
-                                break;
+                        if (receipt.result && receipt.result.status === '0x1') {
+                            // Parse logs to find Transfer event (NFT mint)
+                            // Transfer event signature: Transfer(address,address,uint256)
+                            const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+                            const transferLog = receipt.result.logs?.find((log: any) =>
+                                log.topics[0] === transferTopic &&
+                                log.address.toLowerCase() === CL_CONTRACTS.NonfungiblePositionManager.toLowerCase()
+                            );
+                            if (transferLog && transferLog.topics[3]) {
+                                tokenId = BigInt(transferLog.topics[3]);
                             }
-                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            break;
                         }
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
 
-                        if (!approvalConfirmed) {
-                            toast.error('NFT approval to gauge failed. Position not staked.');
-                        } else {
-                            setTxProgress('staking');
-                            await writeContractAsync({
-                                address: gaugeAddress as Address,
-                                abi: [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                                functionName: 'deposit',
-                                args: [tokenId],
-                            });
+                    if (tokenId) {
+                        // Try to batch approve NFT + stake together
+                        const nftApproveCall = encodeContractCall(
+                            CL_CONTRACTS.NonfungiblePositionManager as Address,
+                            [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                            'approve',
+                            [gaugeAddress as Address, tokenId]
+                        );
+
+                        const stakeCall = encodeContractCall(
+                            gaugeAddress as Address,
+                            [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                            'deposit',
+                            [tokenId]
+                        );
+
+                        setTxProgress('staking');
+                        const stakeBatchResult = await executeBatch([nftApproveCall, stakeCall]);
+
+                        if (stakeBatchResult.usedBatching && stakeBatchResult.success) {
+                            // Both approve NFT + stake in one popup!
                             toast.success('Position staked! Earning WIND rewards');
+                        } else {
+                            // Fall back to sequential
+                            setTxProgress('approving_nft');
+                            const approveNftHash = await writeContractAsync({
+                                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                                abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                                functionName: 'approve',
+                                args: [gaugeAddress as Address, tokenId],
+                            });
+
+                            // Wait for NFT approval to confirm
+                            let approvalConfirmed = false;
+                            for (let i = 0; i < 30; i++) {
+                                const receipt = await fetch(getRpcForPoolData(), {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                        params: [approveNftHash],
+                                        id: 1
+                                    })
+                                }).then(r => r.json());
+
+                                if (receipt.result && receipt.result.status === '0x1') {
+                                    approvalConfirmed = true;
+                                    break;
+                                }
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                            }
+
+                            if (!approvalConfirmed) {
+                                toast.error('NFT approval to gauge failed. Position not staked.');
+                            } else {
+                                setTxProgress('staking');
+                                await writeContractAsync({
+                                    address: gaugeAddress as Address,
+                                    abi: [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                                    functionName: 'deposit',
+                                    args: [tokenId],
+                                });
+                                toast.success('Position staked! Earning WIND rewards');
+                            }
                         }
                     }
+                } catch (stakeErr: unknown) {
+                    // Staking failed (user rejected, network error, etc.)
+                    // LP position was already created — do NOT mark the whole flow as failed.
+                    console.warn('Auto-stake failed (position still created):', stakeErr);
+                    const msg = stakeErr instanceof Error ? stakeErr.message : '';
+                    const isRejected = /rejected|denied|cancelled|cancel/i.test(msg);
+                    toast.error(
+                        isRejected
+                            ? 'Staking cancelled. Your LP position was created — stake it from Portfolio anytime.'
+                            : 'Staking failed. Your LP position was created — stake it from Portfolio anytime.'
+                    );
                 }
             }
 

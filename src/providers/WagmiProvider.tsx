@@ -38,6 +38,7 @@ const config = getDefaultConfig({
         [sei.id]: fallback([
             http('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8'),
             http('https://sei-evm-rpc.publicnode.com'),
+            http('https://sei.drpc.org'),
             http('https://evm-rpc.sei-apis.com'),
         ]),
         [ethereum.id]: http('https://eth.llamarpc.com'),
