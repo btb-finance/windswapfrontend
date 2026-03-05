@@ -688,9 +688,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
             }
 
-            // Add 1% slippage protection (amountMin is 99% of desired)
-            const amount0Min = (amount0Wei * BigInt(99)) / BigInt(100);
-            const amount1Min = (amount1Wei * BigInt(99)) / BigInt(100);
+            // 5% slippage tolerance for CL positions.
+            // CL amounts are determined by the exact on-chain tick at mint time, which can
+            // shift between UI calculation and mining. 1% was too tight and caused PSC reverts
+            // when the tick moved naturally (e.g. near the edge of the selected range).
+            const amount0Min = (amount0Wei * BigInt(95)) / BigInt(100);
+            const amount1Min = (amount1Wei * BigInt(95)) / BigInt(100);
 
             console.log('CL Mint params:', {
                 token0: token0.address,
