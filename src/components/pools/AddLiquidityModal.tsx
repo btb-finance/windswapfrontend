@@ -1868,11 +1868,20 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {depositTokenBForOneSided ? (
                                                         <span className="text-green-400">You Deposit</span>
                                                     ) : poolType === 'cl' ? (
-                                                        depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
+                                                        depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'You Deposit'
                                                     ) : 'You Deposit'}
                                                 </label>
                                                 <button
-                                                    onClick={() => rawBalanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(rawBalanceB)}
+                                                    onClick={() => {
+                                                        if (!rawBalanceB) return;
+                                                        if (poolType !== 'cl' || depositTokenBForOneSided) {
+                                                            setAmountB(rawBalanceB);
+                                                        } else {
+                                                            // Two-sided CL: typing B clears A so B→A fires
+                                                            setAmountB(rawBalanceB);
+                                                            setAmountA('');
+                                                        }
+                                                    }}
                                                     className="text-[10px] text-gray-400 hover:text-primary transition-colors"
                                                 >
                                                     Bal: {balanceB || '--'}
@@ -1883,10 +1892,18 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     type="text"
                                                     inputMode="decimal"
                                                     value={amountB}
-                                                    onChange={(e) => (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(e.target.value)}
-                                                    readOnly={poolType === 'cl' && !depositTokenBForOneSided}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (poolType === 'cl' && !depositTokenBForOneSided) {
+                                                            // Two-sided CL: user is editing B, clear A to trigger B→A calc
+                                                            setAmountB(val);
+                                                            setAmountA('');
+                                                        } else {
+                                                            setAmountB(val);
+                                                        }
+                                                    }}
                                                     placeholder={poolType === 'cl' ? (depositTokenBForOneSided ? '0.0' : 'Auto') : '0.0'}
-                                                    className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' && !depositTokenBForOneSided ? 'text-gray-400' : ''}`}
+                                                    className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
                                                 />
                                                 <button
                                                     onClick={() => setSelectorOpen('B')}
@@ -1898,18 +1915,20 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
                                                 </button>
                                             </div>
-                                            {/* Quick percentage buttons - only show when it's the deposit token */}
-                                            {rawBalanceB && parseFloat(rawBalanceB) > 0 && depositTokenBForOneSided && (
+                                            {/* Quick percentage buttons for token B */}
+                                            {rawBalanceB && parseFloat(rawBalanceB) > 0 && (depositTokenBForOneSided || poolType === 'cl') && (
                                                 <div className="flex gap-1 mt-2">
                                                     {[25, 50, 75, 100].map(pct => (
                                                         <button
                                                             key={pct}
                                                             onClick={() => {
-                                                                if (pct === 100) {
-                                                                    setAmountB(rawBalanceB);
-                                                                } else {
-                                                                    const calc = bigIntPercentage(rawBigIntB, pct);
-                                                                    setAmountB(formatUnits(calc, tokenB?.decimals ?? 18));
+                                                                const val = pct === 100
+                                                                    ? rawBalanceB
+                                                                    : formatUnits(bigIntPercentage(rawBigIntB, pct), tokenB?.decimals ?? 18);
+                                                                setAmountB(val);
+                                                                // In two-sided CL, editing B drives the calc; clear A to trigger B→A
+                                                                if (poolType === 'cl' && !depositTokenBForOneSided) {
+                                                                    setAmountA('');
                                                                 }
                                                             }}
                                                             className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
