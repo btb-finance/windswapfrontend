@@ -347,16 +347,28 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const depositTokenAForOneSided = (isRangeAboveCurrent && isAToken0) || (isRangeBelowCurrent && !isAToken0);
     const depositTokenBForOneSided = (isRangeAboveCurrent && !isAToken0) || (isRangeBelowCurrent && isAToken0);
 
-    // Auto-calculate Token B amount for CL using ON-CHAIN SugarHelper contract
-    // This ensures calculations match exactly what the contract will use
+    // Auto-calculate the paired token amount for CL using ON-CHAIN SugarHelper contract.
+    // Supports BOTH directions:
+    //   - A → B  (normal: user typed amountA, calc amountB)
+    //   - B → A  (reverse: user typed amountB with no amountA, calc amountA)
+    // This handles the case where the user was in single-sided mode (entered only one
+    // token), then adjusted the range so it became two-sided — without a reverse calc
+    // the other token would stay at 0 and the tx would fail.
     useEffect(() => {
-        if (poolType !== 'cl' || !currentPrice || !amountA || parseFloat(amountA) <= 0) {
-            return;
-        }
+        if (poolType !== 'cl' || !currentPrice) return;
+
+        const hasAmountA = !!amountA && parseFloat(amountA) > 0;
+        const hasAmountB = !!amountB && parseFloat(amountB) > 0;
+
+        // Determine calc direction: prefer A→B; fall back to B→A only when A is empty
+        const calcAtoB = hasAmountA;
+        const calcBtoA = !hasAmountA && hasAmountB;
+
+        if (!calcAtoB && !calcBtoA) return;
 
         if (!clPoolAddress || pLower <= 0 || pUpper <= 0 || pLower >= pUpper) {
             // Invalid range or no pool - use simple ratio for default case
-            if (pLower <= 0 && pUpper === Infinity) {
+            if (pLower <= 0 && pUpper === Infinity && calcAtoB) {
                 const amtA = parseFloat(amountA);
                 const amtB = amtA * currentPrice;
                 setAmountB(amtB.toFixed(6));
@@ -367,122 +379,111 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         // Check which tokens are needed for this range (in UI terms)
         const required = getRequiredTokens(currentPrice, pLower, pUpper);
 
-        // If A is token0 and only token1 is needed (range above current), A should be 0
-        if (isAToken0 && !required.needsToken0) {
-            return; // User should enter B instead
-        }
-        // If A is token1 and only token0 is needed (range below current), A should be 0
-        if (!isAToken0 && !required.needsToken1) {
-            return; // User should enter B instead
+        // Single-sided: only one token needed — clear the unused one and skip calc
+        if (isAToken0) {
+            if (!required.needsToken0 && !required.needsToken1) return; // degenerate
+            if (!required.needsToken0) { setAmountA('0'); return; } // range fully above
+            if (!required.needsToken1) { setAmountB('0'); return; } // range fully below
+        } else {
+            if (!required.needsToken1 && !required.needsToken0) return;
+            if (!required.needsToken1) { setAmountA('0'); return; }
+            if (!required.needsToken0) { setAmountB('0'); return; }
         }
 
         // Compute token0/token1 decimals based on pool order (needed for fallbacks too)
         const token0Decimals = isAToken0 ? (actualTokenA?.decimals || 18) : (actualTokenB?.decimals || 18);
         const token1Decimals = isAToken0 ? (actualTokenB?.decimals || 18) : (actualTokenA?.decimals || 18);
 
-        // Call on-chain SugarHelper for accurate calculation
+        // Call on-chain SugarHelper for accurate calculation.
+        // Supports A→B (calcAtoB) and B→A (calcBtoA) directions.
         const calculateOnChain = async () => {
+            // Calculate ticks from prices (in pool order)
+            const priceToTickLocal = (price: number): number => {
+                const poolPrice = isAToken0 ? price : 1 / price;
+                const adjustedPrice = poolPrice * Math.pow(10, token1Decimals - token0Decimals);
+                const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
+                return Math.round(rawTick / tickSpacing) * tickSpacing;
+            };
+            let tickLower = priceToTickLocal(pLower);
+            let tickUpper = priceToTickLocal(pUpper);
+            if (tickLower > tickUpper) [tickLower, tickUpper] = [tickUpper, tickLower];
+
+            const { encodeFunctionData } = await import('viem');
+            const { SUGAR_HELPER_ABI } = await import('@/config/abis');
+
             try {
-
-                // Parse amount to wei
-                const inputDecimals = actualTokenA?.decimals || 18;
-                const inputAmountWei = parseUnits(amountA, inputDecimals);
-
-                // Calculate ticks from prices (in pool order)
-                const priceToTickLocal = (price: number): number => {
-                    const poolPrice = isAToken0 ? price : 1 / price;
-                    const adjustedPrice = poolPrice * Math.pow(10, token1Decimals - token0Decimals);
-                    const rawTick = Math.log(adjustedPrice) / Math.log(1.0001);
-                    return Math.round(rawTick / tickSpacing) * tickSpacing;
-                };
-                let tickLower = priceToTickLocal(pLower);
-                let tickUpper = priceToTickLocal(pUpper);
-                if (tickLower > tickUpper) [tickLower, tickUpper] = [tickUpper, tickLower];
-
-
-
-                // Use viem's encodeFunctionData for proper ABI encoding
-                const { encodeFunctionData } = await import('viem');
-                const { SUGAR_HELPER_ABI } = await import('@/config/abis');
-
-                // Call SugarHelper - pass pool address to auto-fetch sqrtRatioX96
-                const calldata = encodeFunctionData({
-                    abi: SUGAR_HELPER_ABI,
-                    functionName: isAToken0 ? 'estimateAmount1' : 'estimateAmount0',
-                    args: isAToken0
-                        ? [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper]
-                        : [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
-                });
-
-                const response = await fetch(getRpcForPoolData(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'eth_call',
-                        params: [{
-                            to: CL_CONTRACTS.SugarHelper,
-                            data: calldata,
-                        }, 'latest'],
-                        id: 1,
-                    }),
-                });
-                const result = await response.json();
-
-
-
-                if (result.result && result.result !== '0x' && result.result.length > 2) {
-                    const outputAmountWei = BigInt(result.result);
-                    const outputDecimals = actualTokenB?.decimals || 18;
-                    const outputAmount = formatUnits(outputAmountWei, outputDecimals);
-
-                    // Format with max token precision
-                    const parsedOutput = parseFloat(outputAmount);
-                    if (parsedOutput > 0 && isFinite(parsedOutput)) {
-                        setAmountB(parsedOutput.toFixed(outputDecimals).replace(/\.?0+$/, ''));
+                if (calcAtoB) {
+                    // A → B: estimate token1 from token0 (or token0 from token1 if !isAToken0)
+                    const inputDecimals = actualTokenA?.decimals || 18;
+                    const inputAmountWei = parseUnits(amountA, inputDecimals);
+                    const fnName = isAToken0 ? 'estimateAmount1' : 'estimateAmount0';
+                    const calldata = encodeFunctionData({
+                        abi: SUGAR_HELPER_ABI,
+                        functionName: fnName,
+                        args: [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
+                    });
+                    const res = await fetch(getRpcForPoolData(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: CL_CONTRACTS.SugarHelper, data: calldata }, 'latest'], id: 1 }),
+                    });
+                    const result = await res.json();
+                    if (result.result && result.result !== '0x' && result.result.length > 2) {
+                        const outputDecimals = actualTokenB?.decimals || 18;
+                        const parsed = parseFloat(formatUnits(BigInt(result.result), outputDecimals));
+                        setAmountB(parsed > 0 && isFinite(parsed) ? parsed.toFixed(outputDecimals).replace(/\.?0+$/, '') : '0');
                     } else {
-                        setAmountB('0');
+                        // Fallback to frontend calc
+                        const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                        const r = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
+                        const out = isAToken0 ? r.amount1 : r.amount0;
+                        const dec = isAToken0 ? token1Decimals : token0Decimals;
+                        setAmountB(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                     }
                 } else {
-
-                    // Fallback to frontend calculation if on-chain call fails
-                    const position = {
-                        currentPrice,
-                        priceLower: pLower,
-                        priceUpper: pUpper,
-                        token0Decimals,
-                        token1Decimals,
-                        tickSpacing,
-                        isToken0Base: isAToken0,
-                    };
-                    const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
-                    const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
-                    if (outputAmount > 0 && isFinite(outputAmount)) {
-                        const outputDecimals = isAToken0 ? token1Decimals : token0Decimals;
-                        setAmountB(outputAmount.toFixed(outputDecimals).replace(/\.?0+$/, ''));
+                    // B → A: estimate token0 from token1 (or token1 from token0 if !isAToken0)
+                    const inputDecimals = actualTokenB?.decimals || 18;
+                    const inputAmountWei = parseUnits(amountB, inputDecimals);
+                    const fnName = isAToken0 ? 'estimateAmount0' : 'estimateAmount1';
+                    const calldata = encodeFunctionData({
+                        abi: SUGAR_HELPER_ABI,
+                        functionName: fnName,
+                        args: [inputAmountWei, clPoolAddress as Address, BigInt(0), tickLower, tickUpper],
+                    });
+                    const res = await fetch(getRpcForPoolData(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to: CL_CONTRACTS.SugarHelper, data: calldata }, 'latest'], id: 1 }),
+                    });
+                    const result = await res.json();
+                    if (result.result && result.result !== '0x' && result.result.length > 2) {
+                        const outputDecimals = actualTokenA?.decimals || 18;
+                        const parsed = parseFloat(formatUnits(BigInt(result.result), outputDecimals));
+                        setAmountA(parsed > 0 && isFinite(parsed) ? parsed.toFixed(outputDecimals).replace(/\.?0+$/, '') : '0');
                     } else {
-                        setAmountB('0');
+                        // Fallback to frontend calc
+                        const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                        const r = calculateOptimalAmounts(parseFloat(amountB), !isAToken0, position);
+                        const out = isAToken0 ? r.amount0 : r.amount1;
+                        const dec = isAToken0 ? token0Decimals : token1Decimals;
+                        setAmountA(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                     }
                 }
             } catch (error) {
                 console.error('Error calling SugarHelper:', error);
                 // Fallback to frontend calculation
-                const position = {
-                    currentPrice,
-                    priceLower: pLower,
-                    priceUpper: pUpper,
-                    token0Decimals,
-                    token1Decimals,
-                    tickSpacing,
-                    isToken0Base: isAToken0,
-                };
-                const calcResult = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
-                const outputAmount = isAToken0 ? calcResult.amount1 : calcResult.amount0;
-                if (outputAmount > 0 && isFinite(outputAmount)) {
-                    const outputDecimals = isAToken0 ? token1Decimals : token0Decimals;
-                    setAmountB(outputAmount.toFixed(outputDecimals).replace(/\.?0+$/, ''));
+                if (calcAtoB) {
+                    const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                    const r = calculateOptimalAmounts(parseFloat(amountA), isAToken0, position);
+                    const out = isAToken0 ? r.amount1 : r.amount0;
+                    const dec = isAToken0 ? token1Decimals : token0Decimals;
+                    setAmountB(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                 } else {
-                    setAmountB('0');
+                    const position = { currentPrice, priceLower: pLower, priceUpper: pUpper, token0Decimals, token1Decimals, tickSpacing, isToken0Base: isAToken0 };
+                    const r = calculateOptimalAmounts(parseFloat(amountB), !isAToken0, position);
+                    const out = isAToken0 ? r.amount0 : r.amount1;
+                    const dec = isAToken0 ? token0Decimals : token1Decimals;
+                    setAmountA(out > 0 && isFinite(out) ? out.toFixed(dec).replace(/\.?0+$/, '') : '0');
                 }
             }
         };
@@ -490,6 +491,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         // Debounce the on-chain call
         const timeoutId = setTimeout(calculateOnChain, 300);
         return () => clearTimeout(timeoutId);
+    // NOTE: amountB is intentionally excluded from deps to avoid infinite loops.
+    // B→A only fires when amountA is empty and priceLower/priceUpper changes —
+    // the effect reads amountB via closure but doesn't react to its own output.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [poolType, clPoolPrice, clPoolAddress, initialPrice, amountA, priceLower, priceUpper, isAToken0, actualTokenA, actualTokenB, tickSpacing]);
 
     // Handle V2 liquidity add
@@ -688,9 +693,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
             }
 
-            // Add 1% slippage protection (amountMin is 99% of desired)
-            const amount0Min = (amount0Wei * BigInt(99)) / BigInt(100);
-            const amount1Min = (amount1Wei * BigInt(99)) / BigInt(100);
+            // 5% slippage tolerance for CL positions.
+            // CL amounts are determined by the exact on-chain tick at mint time, which can
+            // shift between UI calculation and mining. 1% was too tight and caused PSC reverts
+            // when the tick moved naturally (e.g. near the edge of the selected range).
+            const amount0Min = (amount0Wei * BigInt(95)) / BigInt(100);
+            const amount1Min = (amount1Wei * BigInt(95)) / BigInt(100);
 
             console.log('CL Mint params:', {
                 token0: token0.address,
@@ -819,101 +827,116 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             toast.success('Liquidity position created successfully!');
 
             // If auto-stake is enabled and this pool has a gauge, stake the NFT
+            // NOTE: staking errors are caught separately — a failed stake does NOT
+            // roll back the successfully minted position.
             if (autoStake && gaugeAddress) {
-                // Wait for mint transaction to confirm and get the tokenId from logs
-                let tokenId: bigint | null = null;
-                for (let i = 0; i < 30; i++) {
-                    const receipt = await fetch(getRpcForPoolData(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                            params: [mintHash],
-                            id: 1
-                        })
-                    }).then(r => r.json());
+                try {
+                    // Wait for mint transaction to confirm and get the tokenId from logs
+                    let tokenId: bigint | null = null;
+                    for (let i = 0; i < 30; i++) {
+                        const receipt = await fetch(getRpcForPoolData(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                params: [mintHash],
+                                id: 1
+                            })
+                        }).then(r => r.json());
 
-                    if (receipt.result && receipt.result.status === '0x1') {
-                        // Parse logs to find Transfer event (NFT mint)
-                        // Transfer event signature: Transfer(address,address,uint256)
-                        const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-                        const transferLog = receipt.result.logs?.find((log: any) =>
-                            log.topics[0] === transferTopic &&
-                            log.address.toLowerCase() === CL_CONTRACTS.NonfungiblePositionManager.toLowerCase()
-                        );
-                        if (transferLog && transferLog.topics[3]) {
-                            tokenId = BigInt(transferLog.topics[3]);
-                        }
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-
-                if (tokenId) {
-                    // Try to batch approve NFT + stake together
-                    const nftApproveCall = encodeContractCall(
-                        CL_CONTRACTS.NonfungiblePositionManager as Address,
-                        [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                        'approve',
-                        [gaugeAddress as Address, tokenId]
-                    );
-
-                    const stakeCall = encodeContractCall(
-                        gaugeAddress as Address,
-                        [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                        'deposit',
-                        [tokenId]
-                    );
-
-                    setTxProgress('staking');
-                    const stakeBatchResult = await executeBatch([nftApproveCall, stakeCall]);
-
-                    if (stakeBatchResult.usedBatching && stakeBatchResult.success) {
-                        // Both approve NFT + stake in one popup!
-                        toast.success('Position staked! Earning WIND rewards');
-                    } else {
-                        // Fall back to sequential
-                        setTxProgress('approving_nft');
-                        const approveNftHash = await writeContractAsync({
-                            address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                            abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                            functionName: 'approve',
-                            args: [gaugeAddress as Address, tokenId],
-                        });
-
-                        // Wait for NFT approval to confirm
-                        let approvalConfirmed = false;
-                        for (let i = 0; i < 30; i++) {
-                            const receipt = await fetch(getRpcForPoolData(), {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
-                                    params: [approveNftHash],
-                                    id: 1
-                                })
-                            }).then(r => r.json());
-
-                            if (receipt.result && receipt.result.status === '0x1') {
-                                approvalConfirmed = true;
-                                break;
+                        if (receipt.result && receipt.result.status === '0x1') {
+                            // Parse logs to find Transfer event (NFT mint)
+                            // Transfer event signature: Transfer(address,address,uint256)
+                            const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+                            const transferLog = receipt.result.logs?.find((log: any) =>
+                                log.topics[0] === transferTopic &&
+                                log.address.toLowerCase() === CL_CONTRACTS.NonfungiblePositionManager.toLowerCase()
+                            );
+                            if (transferLog && transferLog.topics[3]) {
+                                tokenId = BigInt(transferLog.topics[3]);
                             }
-                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            break;
                         }
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
 
-                        if (!approvalConfirmed) {
-                            toast.error('NFT approval to gauge failed. Position not staked.');
-                        } else {
-                            setTxProgress('staking');
-                            await writeContractAsync({
-                                address: gaugeAddress as Address,
-                                abi: [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                                functionName: 'deposit',
-                                args: [tokenId],
-                            });
+                    if (tokenId) {
+                        // Try to batch approve NFT + stake together
+                        const nftApproveCall = encodeContractCall(
+                            CL_CONTRACTS.NonfungiblePositionManager as Address,
+                            [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                            'approve',
+                            [gaugeAddress as Address, tokenId]
+                        );
+
+                        const stakeCall = encodeContractCall(
+                            gaugeAddress as Address,
+                            [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                            'deposit',
+                            [tokenId]
+                        );
+
+                        setTxProgress('staking');
+                        const stakeBatchResult = await executeBatch([nftApproveCall, stakeCall]);
+
+                        if (stakeBatchResult.usedBatching && stakeBatchResult.success) {
+                            // Both approve NFT + stake in one popup!
                             toast.success('Position staked! Earning WIND rewards');
+                        } else {
+                            // Fall back to sequential
+                            setTxProgress('approving_nft');
+                            const approveNftHash = await writeContractAsync({
+                                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                                abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                                functionName: 'approve',
+                                args: [gaugeAddress as Address, tokenId],
+                            });
+
+                            // Wait for NFT approval to confirm
+                            let approvalConfirmed = false;
+                            for (let i = 0; i < 30; i++) {
+                                const receipt = await fetch(getRpcForPoolData(), {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                        params: [approveNftHash],
+                                        id: 1
+                                    })
+                                }).then(r => r.json());
+
+                                if (receipt.result && receipt.result.status === '0x1') {
+                                    approvalConfirmed = true;
+                                    break;
+                                }
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                            }
+
+                            if (!approvalConfirmed) {
+                                toast.error('NFT approval to gauge failed. Position not staked.');
+                            } else {
+                                setTxProgress('staking');
+                                await writeContractAsync({
+                                    address: gaugeAddress as Address,
+                                    abi: [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                                    functionName: 'deposit',
+                                    args: [tokenId],
+                                });
+                                toast.success('Position staked! Earning WIND rewards');
+                            }
                         }
                     }
+                } catch (stakeErr: unknown) {
+                    // Staking failed (user rejected, network error, etc.)
+                    // LP position was already created — do NOT mark the whole flow as failed.
+                    console.warn('Auto-stake failed (position still created):', stakeErr);
+                    const msg = stakeErr instanceof Error ? stakeErr.message : '';
+                    const isRejected = /rejected|denied|cancelled|cancel/i.test(msg);
+                    toast.error(
+                        isRejected
+                            ? 'Staking cancelled. Your LP position was created — stake it from Portfolio anytime.'
+                            : 'Staking failed. Your LP position was created — stake it from Portfolio anytime.'
+                    );
                 }
             }
 
@@ -1845,11 +1868,20 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {depositTokenBForOneSided ? (
                                                         <span className="text-green-400">You Deposit</span>
                                                     ) : poolType === 'cl' ? (
-                                                        depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
+                                                        depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'You Deposit'
                                                     ) : 'You Deposit'}
                                                 </label>
                                                 <button
-                                                    onClick={() => rawBalanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(rawBalanceB)}
+                                                    onClick={() => {
+                                                        if (!rawBalanceB) return;
+                                                        if (poolType !== 'cl' || depositTokenBForOneSided) {
+                                                            setAmountB(rawBalanceB);
+                                                        } else {
+                                                            // Two-sided CL: typing B clears A so B→A fires
+                                                            setAmountB(rawBalanceB);
+                                                            setAmountA('');
+                                                        }
+                                                    }}
                                                     className="text-[10px] text-gray-400 hover:text-primary transition-colors"
                                                 >
                                                     Bal: {balanceB || '--'}
@@ -1860,10 +1892,18 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     type="text"
                                                     inputMode="decimal"
                                                     value={amountB}
-                                                    onChange={(e) => (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(e.target.value)}
-                                                    readOnly={poolType === 'cl' && !depositTokenBForOneSided}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (poolType === 'cl' && !depositTokenBForOneSided) {
+                                                            // Two-sided CL: user is editing B, clear A to trigger B→A calc
+                                                            setAmountB(val);
+                                                            setAmountA('');
+                                                        } else {
+                                                            setAmountB(val);
+                                                        }
+                                                    }}
                                                     placeholder={poolType === 'cl' ? (depositTokenBForOneSided ? '0.0' : 'Auto') : '0.0'}
-                                                    className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' && !depositTokenBForOneSided ? 'text-gray-400' : ''}`}
+                                                    className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
                                                 />
                                                 <button
                                                     onClick={() => setSelectorOpen('B')}
@@ -1875,18 +1915,20 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
                                                 </button>
                                             </div>
-                                            {/* Quick percentage buttons - only show when it's the deposit token */}
-                                            {rawBalanceB && parseFloat(rawBalanceB) > 0 && depositTokenBForOneSided && (
+                                            {/* Quick percentage buttons for token B */}
+                                            {rawBalanceB && parseFloat(rawBalanceB) > 0 && (depositTokenBForOneSided || poolType === 'cl') && (
                                                 <div className="flex gap-1 mt-2">
                                                     {[25, 50, 75, 100].map(pct => (
                                                         <button
                                                             key={pct}
                                                             onClick={() => {
-                                                                if (pct === 100) {
-                                                                    setAmountB(rawBalanceB);
-                                                                } else {
-                                                                    const calc = bigIntPercentage(rawBigIntB, pct);
-                                                                    setAmountB(formatUnits(calc, tokenB?.decimals ?? 18));
+                                                                const val = pct === 100
+                                                                    ? rawBalanceB
+                                                                    : formatUnits(bigIntPercentage(rawBigIntB, pct), tokenB?.decimals ?? 18);
+                                                                setAmountB(val);
+                                                                // In two-sided CL, editing B drives the calc; clear A to trigger B→A
+                                                                if (poolType === 'cl' && !depositTokenBForOneSided) {
+                                                                    setAmountA('');
                                                                 }
                                                             }}
                                                             className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
