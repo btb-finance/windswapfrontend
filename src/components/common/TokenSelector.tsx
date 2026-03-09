@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Token, DEFAULT_TOKEN_LIST } from '@/config/tokens';
@@ -198,6 +199,11 @@ export function TokenSelector({
         setCustomToken(null);
     };
 
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     // Swipe to dismiss for mobile
     const { handlers: swipeHandlers, style: swipeStyle } = useSwipeToDismiss({
         onDismiss: onClose,
@@ -205,198 +211,201 @@ export function TokenSelector({
         direction: 'down',
     });
 
-    if (!isOpen) return null;
+    if (!mounted) return null;
 
-    return (
+    return createPortal(
         <AnimatePresence>
-            <motion.div
-                className="fixed inset-0 z-50 flex items-center justify-center"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-            >
-                {/* Backdrop */}
+            {isOpen && (
                 <motion.div
-                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                    onClick={onClose}
+                    className="fixed inset-0 z-[110] flex items-center justify-center"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                />
-
-                {/* Modal with Swipe to Dismiss */}
-                <motion.div
-                    className="relative w-full max-w-md mx-4 touch-pan-y"
-                    initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                    {...swipeHandlers}
-                    style={swipeStyle}
                 >
-                    {/* Drag Handle for Mobile */}
-                    <div className="md:hidden w-full flex justify-center pt-2 pb-1">
-                        <div className="w-12 h-1 rounded-full bg-white/20" />
-                    </div>
-                    <div className="glass-card p-6 pt-4">
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold">Select Token</h2>
-                            <button
-                                onClick={onClose}
-                                className="p-2 rounded-lg hover:bg-white/5 transition"
-                            >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                    {/* Backdrop */}
+                    <motion.div
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        onClick={onClose}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    />
+
+                    {/* Modal with Swipe to Dismiss */}
+                    <motion.div
+                        className="relative w-full max-w-md mx-4 touch-auto flex flex-col max-h-[90vh]"
+                        initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                        exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                        {...swipeHandlers}
+                        style={swipeStyle}
+                    >
+                        {/* Drag Handle for Mobile */}
+                        <div className="md:hidden w-full flex justify-center pt-2 pb-1 shrink-0">
+                            <div className="w-12 h-1 rounded-full bg-white/20" />
                         </div>
-
-                        {/* Search */}
-                        <div className="mb-4">
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search by name or paste address"
-                                className="input-field text-base"
-                            />
-                        </div>
-
-                        {/* Custom Token Import */}
-                        {loadingCustom && (
-                            <div className="mb-4 p-4 rounded-xl bg-primary/10 border border-primary/20">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                    <span className="text-sm">Loading token info...</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {customError && (
-                            <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-                                <p className="text-sm text-red-400">{customError}</p>
-                            </div>
-                        )}
-
-                        {customToken && (
-                            <div className="mb-4 p-1 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30">
+                        <div className="glass-card p-6 pt-4 flex flex-col flex-1 min-h-0">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-4 shrink-0">
+                                <h2 className="text-xl font-semibold">Select Token</h2>
                                 <button
-                                    onClick={() => handleSelect(customToken)}
-                                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition"
+                                    onClick={onClose}
+                                    className="p-2 rounded-lg hover:bg-white/5 transition"
                                 >
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500/30 to-orange-500/30 flex items-center justify-center">
-                                        <span className="text-lg font-bold text-yellow-400">{customToken.symbol[0]}</span>
-                                    </div>
-                                    <div className="flex-1 text-left">
-                                        <div className="flex items-center gap-2">
-                                            <p className="font-semibold">{customToken.symbol}</p>
-                                            <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">Import</span>
-                                        </div>
-                                        <p className="text-sm text-gray-400">{customToken.name}</p>
-                                        <p className="text-xs text-gray-500 font-mono">{customToken.address.slice(0, 10)}...{customToken.address.slice(-8)}</p>
-                                    </div>
-                                    {/* View Token / Share button */}
-                                    <button
-                                        onClick={(e) => openTokenPage(e, customToken)}
-                                        className="p-2 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary transition"
-                                        title={`View ${customToken.symbol} info & share`}
-                                    >
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                        </svg>
-                                    </button>
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
                                 </button>
                             </div>
-                        )}
 
-                        {/* Token List */}
-                        <div
-                            className="max-h-[50vh] md:max-h-72 overflow-y-scroll space-y-2 overscroll-contain"
-                            style={{
-                                WebkitOverflowScrolling: 'touch',
-                                touchAction: 'pan-y',
-                                overscrollBehavior: 'contain'
-                            }}
-                        >
-                            {filteredTokens.length === 0 && !customToken ? (
-                                <div className="text-center py-8 text-gray-400">
-                                    {isValidAddress(search) ? 'Checking address...' : 'No tokens found'}
+                            {/* Search */}
+                            <div className="mb-4 shrink-0">
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search by name or paste address"
+                                    className="input-field text-base"
+                                />
+                            </div>
+
+                            {/* Custom Token Import */}
+                            {loadingCustom && (
+                                <div className="mb-4 p-4 rounded-xl bg-primary/10 border border-primary/20 shrink-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                        <span className="text-sm">Loading token info...</span>
+                                    </div>
                                 </div>
-                            ) : (
-                                filteredTokens.map((token) => (
-                                    <button
-                                        key={token.address}
-                                        onClick={() => handleSelect(token)}
-                                        className={`w-full flex items-center gap-3 p-3 rounded-xl transition hover:bg-white/5 ${selectedToken?.address === token.address
-                                            ? 'bg-primary/10 border border-primary/30'
-                                            : ''
-                                            }`}
-                                    >
-                                        {/* Token Icon */}
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                                            {token.logoURI ? (
-                                                <img
-                                                    src={token.logoURI}
-                                                    alt={token.symbol}
-                                                    className="w-8 h-8 rounded-full"
-                                                    loading="lazy"
-                                                    onError={(e) => {
-                                                        (e.target as HTMLImageElement).style.display = 'none';
-                                                    }}
-                                                />
-                                            ) : (
-                                                <span className="text-lg font-bold">{token.symbol[0]}</span>
-                                            )}
-                                        </div>
-
-                                        {/* Token Info */}
-                                        <div className="flex-1 text-left">
-                                            <p className="font-semibold">{token.symbol}</p>
-                                            <p className="text-sm text-gray-400">{token.name}</p>
-                                        </div>
-
-                                        {/* Balance */}
-                                        {(() => {
-                                            const balanceInfo = getBalance(token.address);
-                                            const bal = balanceInfo?.formatted || '0';
-                                            const numBal = parseFloat(bal);
-                                            return numBal > 0 ? (
-                                                <p className="text-sm text-white font-medium">
-                                                    {numBal > 1000 ? numBal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : numBal.toFixed(4)}
-                                                </p>
-                                            ) : (
-                                                <p className="text-sm text-gray-500">0</p>
-                                            );
-                                        })()}
-
-                                        {/* Share/Info Icon */}
-                                        {!token.isNative && (
-                                            <div
-                                                onClick={(e) => openTokenPage(e, token)}
-                                                className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-primary transition cursor-pointer"
-                                                title={`View ${token.symbol} info & share`}
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                                </svg>
-                                            </div>
-                                        )}
-                                    </button>
-                                ))
                             )}
-                        </div>
 
-                        {/* Help Text */}
-                        <div className="mt-4 pt-4 border-t border-white/5 text-center">
-                            <p className="text-sm text-gray-400">
-                                Paste a token contract address to import any ERC-20 token
-                            </p>
+                            {customError && (
+                                <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 shrink-0">
+                                    <p className="text-sm text-red-400">{customError}</p>
+                                </div>
+                            )}
+
+                            {customToken && (
+                                <div className="mb-4 p-1 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30 shrink-0">
+                                    <button
+                                        onClick={() => handleSelect(customToken)}
+                                        className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition"
+                                    >
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500/30 to-orange-500/30 flex items-center justify-center">
+                                            <span className="text-lg font-bold text-yellow-400">{customToken.symbol[0]}</span>
+                                        </div>
+                                        <div className="flex-1 text-left">
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-semibold">{customToken.symbol}</p>
+                                                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">Import</span>
+                                            </div>
+                                            <p className="text-sm text-gray-400">{customToken.name}</p>
+                                            <p className="text-xs text-gray-500 font-mono">{customToken.address.slice(0, 10)}...{customToken.address.slice(-8)}</p>
+                                        </div>
+                                        {/* View Token / Share button */}
+                                        <button
+                                            onClick={(e) => openTokenPage(e, customToken)}
+                                            className="p-2 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary transition"
+                                            title={`View ${customToken.symbol} info & share`}
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                            </svg>
+                                        </button>
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Token List */}
+                            <div
+                                className="flex-1 overflow-y-auto overscroll-y-auto space-y-2 pb-4 min-h-[0px]"
+                                onWheel={(e) => e.stopPropagation()}
+                                style={{
+                                    WebkitOverflowScrolling: 'touch',
+                                    overscrollBehavior: 'contain'
+                                }}
+                            >
+                                {filteredTokens.length === 0 && !customToken ? (
+                                    <div className="text-center py-8 text-gray-400">
+                                        {isValidAddress(search) ? 'Checking address...' : 'No tokens found'}
+                                    </div>
+                                ) : (
+                                    filteredTokens.map((token) => (
+                                        <button
+                                            key={token.address}
+                                            onClick={() => handleSelect(token)}
+                                            className={`w-full flex items-center gap-3 p-3 rounded-xl transition hover:bg-white/5 ${selectedToken?.address === token.address
+                                                ? 'bg-primary/10 border border-primary/30'
+                                                : ''
+                                                }`}
+                                        >
+                                            {/* Token Icon */}
+                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+                                                {token.logoURI ? (
+                                                    <img
+                                                        src={token.logoURI}
+                                                        alt={token.symbol}
+                                                        className="w-8 h-8 rounded-full"
+                                                        loading="lazy"
+                                                        onError={(e) => {
+                                                            (e.target as HTMLImageElement).style.display = 'none';
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <span className="text-lg font-bold">{token.symbol[0]}</span>
+                                                )}
+                                            </div>
+
+                                            {/* Token Info */}
+                                            <div className="flex-1 text-left">
+                                                <p className="font-semibold">{token.symbol}</p>
+                                                <p className="text-sm text-gray-400">{token.name}</p>
+                                            </div>
+
+                                            {/* Balance */}
+                                            {(() => {
+                                                const balanceInfo = getBalance(token.address);
+                                                const bal = balanceInfo?.formatted || '0';
+                                                const numBal = parseFloat(bal);
+                                                return numBal > 0 ? (
+                                                    <p className="text-sm text-white font-medium">
+                                                        {numBal > 1000 ? numBal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : numBal.toFixed(4)}
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-sm text-gray-500">0</p>
+                                                );
+                                            })()}
+
+                                            {/* Share/Info Icon */}
+                                            {!token.isNative && (
+                                                <div
+                                                    onClick={(e) => openTokenPage(e, token)}
+                                                    className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-primary transition cursor-pointer"
+                                                    title={`View ${token.symbol} info & share`}
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* Help Text */}
+                            <div className="mt-4 pt-4 border-t border-white/5 text-center shrink-0">
+                                <p className="text-sm text-gray-400">
+                                    Paste a token contract address to import any ERC-20 token
+                                </p>
+                            </div>
                         </div>
-                    </div>
+                    </motion.div>
                 </motion.div>
-            </motion.div>
-        </AnimatePresence>
+            )}
+        </AnimatePresence>,
+        document.body
     );
 }
 
