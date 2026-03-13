@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAccount, usePublicClient } from 'wagmi';
+import { usePublicClient } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { Address, encodeFunctionData, keccak256, toBytes, parseUnits } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
@@ -67,7 +67,6 @@ export interface Proposal {
 }
 
 export function useGovernance() {
-    const { address, isConnected } = useAccount();
     const publicClient = usePublicClient();
     const { writeContractAsync, isPending } = useWriteContract();
 

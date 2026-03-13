@@ -112,6 +112,10 @@ export default function VotePage() {
     const [votingRewards, setVotingRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
     const [isLoadingVotingRewards, setIsLoadingVotingRewards] = useState(false);
 
+    // Epoch bribes: { gaugeId: bribe[] }
+    type EpochBribe = { gauge: { id: string }; token: { id: string; symbol: string; decimals: number }; totalAmount: string; totalAmountUSD: string };
+    const [epochBribes, setEpochBribes] = useState<Record<string, EpochBribe[]>>({});
+
     // Vote status from subgraph veVotes (more reliable than hasVoted)
     const [veNftHasVotes, setVeNftHasVotes] = useState<Record<string, boolean>>({});
 
@@ -353,6 +357,38 @@ export default function VotePage() {
     useEffect(() => {
         fetchVeNftVoteStatus();
     }, [fetchVeNftVoteStatus]);
+
+    // Fetch epoch bribes from subgraph for current epoch
+    useEffect(() => {
+        if (!activePeriod) return;
+        const epoch = activePeriod.toString();
+        const query = `{
+            gaugeEpochBribes(where: { epoch: "${epoch}" }, first: 100) {
+                gauge { id }
+                epoch
+                token { id symbol decimals }
+                totalAmount
+                totalAmountUSD
+            }
+        }`;
+        fetch(SUBGRAPH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query }),
+        })
+            .then(r => r.json())
+            .then(result => {
+                const bribes: EpochBribe[] = result?.data?.gaugeEpochBribes || [];
+                const byGauge: Record<string, EpochBribe[]> = {};
+                for (const b of bribes) {
+                    const gId = b.gauge.id.toLowerCase();
+                    if (!byGauge[gId]) byGauge[gId] = [];
+                    byGauge[gId].push(b);
+                }
+                setEpochBribes(byGauge);
+            })
+            .catch(() => {/* silent */});
+    }, [activePeriod]);
 
     // Claim voting rewards for a specific veNFT and gauge
     const [isClaimingVotingRewards, setIsClaimingVotingRewards] = useState<string | null>(null);
@@ -1313,20 +1349,31 @@ export default function VotePage() {
                                                                     <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Off</span>
                                                                 )}
                                                             </div>
-                                                            {/* Fees inline */}
+                                                            {/* Fees + bribes inline */}
                                                             <div className="text-[10px] text-gray-400 mt-0.5 truncate">
-                                                                {gauge.rewardTokens && gauge.rewardTokens.length > 0 ? (
-                                                                    <span className="text-green-400/80">
-                                                                        {gauge.rewardTokens.map((reward, idx) => (
-                                                                            <span key={reward.address}>
-                                                                                {parseFloat(formatUnits(reward.amount, reward.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} {reward.symbol}
-                                                                                {idx < gauge.rewardTokens.length - 1 && ' + '}
-                                                                            </span>
-                                                                        ))}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-gray-600">No fees yet</span>
-                                                                )}
+                                                                {(() => {
+                                                                    const fees = gauge.rewardTokens ?? [];
+                                                                    const bribes = epochBribes[gauge.gauge?.toLowerCase() ?? ''] ?? [];
+                                                                    const hasFees = fees.length > 0;
+                                                                    const hasBribes = bribes.length > 0;
+                                                                    if (!hasFees && !hasBribes) return <span className="text-gray-600">No fees yet</span>;
+                                                                    return (
+                                                                        <span className="text-green-400/80">
+                                                                            {fees.map((reward, idx) => (
+                                                                                <span key={reward.address}>
+                                                                                    {parseFloat(formatUnits(reward.amount, reward.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} {reward.symbol}
+                                                                                    {(idx < fees.length - 1 || hasBribes) && ' + '}
+                                                                                </span>
+                                                                            ))}
+                                                                            {bribes.map((b, i) => (
+                                                                                <span key={b.token.id}>
+                                                                                    {parseFloat(b.totalAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })} {b.token.symbol}
+                                                                                    {i < bribes.length - 1 && ' + '}
+                                                                                </span>
+                                                                            ))}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                             </div>
                                                         </div>
                                                     </div>
