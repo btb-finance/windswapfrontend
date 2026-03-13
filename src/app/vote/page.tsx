@@ -51,6 +51,7 @@ export default function VotePage() {
     const [incentiveToken, setIncentiveToken] = useState<typeof DEFAULT_TOKEN_LIST[0] | null>(null);
     const [incentiveAmount, setIncentiveAmount] = useState('');
     const [isAddingIncentive, setIsAddingIncentive] = useState(false);
+    const [incentiveTokenSearch, setIncentiveTokenSearch] = useState('');
 
     // Hooks
     const {
@@ -87,6 +88,7 @@ export default function VotePage() {
     const { activePeriod, epochCount } = usePoolData();
 
     const { balance: windBalance, raw: rawWindBalance, formatted: formattedWindBalance } = useTokenBalance(WIND);
+    const { balance: incentiveTokenBalance, formatted: incentiveTokenBalanceFormatted } = useTokenBalance(incentiveToken ?? undefined);
 
     // Calculate epoch times
     const epochStartDate = activePeriod ? new Date(Number(activePeriod) * 1000) : null;
@@ -1630,6 +1632,7 @@ export default function VotePage() {
                                         setIncentivePool(null);
                                         setIncentiveToken(null);
                                         setIncentiveAmount('');
+                                        setIncentiveTokenSearch('');
                                     }}
                                     className="text-gray-400 hover:text-white"
                                 >
@@ -1644,8 +1647,21 @@ export default function VotePage() {
 
                             <div className="mb-4">
                                 <label className="text-xs text-gray-400 mb-2 block">Select Token</label>
-                                <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
-                                    {DEFAULT_TOKEN_LIST.slice(0, 12).map((token) => (
+                                <input
+                                    type="text"
+                                    placeholder="Search token..."
+                                    onChange={(e) => {
+                                        const q = e.target.value.toLowerCase();
+                                        setIncentiveTokenSearch(q);
+                                    }}
+                                    className="w-full mb-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs outline-none focus:border-purple-500/50 placeholder-gray-600"
+                                />
+                                <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                                    {DEFAULT_TOKEN_LIST.filter(t =>
+                                        !incentiveTokenSearch ||
+                                        t.symbol.toLowerCase().includes(incentiveTokenSearch) ||
+                                        t.name.toLowerCase().includes(incentiveTokenSearch)
+                                    ).map((token) => (
                                         <button
                                             key={token.address}
                                             onClick={() => setIncentiveToken(token)}
@@ -1669,7 +1685,12 @@ export default function VotePage() {
 
                             {incentiveToken && (
                                 <div className="mb-4">
-                                    <label className="text-xs text-gray-400 mb-2 block">Amount</label>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-xs text-gray-400">Amount</label>
+                                        <span className="text-xs text-gray-400">
+                                            Balance: <span className="text-white font-medium">{incentiveTokenBalanceFormatted ?? '0'} {incentiveToken.symbol}</span>
+                                        </span>
+                                    </div>
                                     <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                                         <div className="flex items-center gap-2">
                                             <input
@@ -1679,6 +1700,12 @@ export default function VotePage() {
                                                 placeholder="0.0"
                                                 className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
                                             />
+                                            <button
+                                                onClick={() => incentiveTokenBalance && setIncentiveAmount(incentiveTokenBalance)}
+                                                className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition"
+                                            >
+                                                MAX
+                                            </button>
                                             <span className="text-sm text-gray-400">{incentiveToken.symbol}</span>
                                         </div>
                                     </div>
