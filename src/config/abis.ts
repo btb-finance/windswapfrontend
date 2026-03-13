@@ -1730,6 +1730,7 @@ export const GOVERNOR_ABI = [
             { name: 'values', type: 'uint256[]' },
             { name: 'calldatas', type: 'bytes[]' },
             { name: 'descriptionHash', type: 'bytes32' },
+            { name: 'proposer', type: 'address' },
         ],
         name: 'execute',
         outputs: [{ name: '', type: 'uint256' }],
@@ -1776,7 +1777,7 @@ export const GOVERNOR_ABI = [
         type: 'function',
     },
     {
-        inputs: [{ name: 'proposalId', type: 'uint256' }, { name: 'account', type: 'address' }],
+        inputs: [{ name: 'proposalId', type: 'uint256' }, { name: 'tokenId', type: 'uint256' }],
         name: 'hasVoted',
         outputs: [{ name: '', type: 'bool' }],
         stateMutability: 'view',

@@ -157,7 +157,7 @@ export function useGovernance() {
                 endBlock: BigInt(p.voteEnd),
                 targets: p.targets as Address[],
                 values: (p.values || []).map((v: string) => BigInt(v)),
-                calldatas: p.calldatas as `0x${string}`[],
+                calldatas: p.calldatas.map((c: string) => (c.startsWith('0x') ? c : `0x${c}`) as `0x${string}`),
             }));
 
             console.log(`[Governance] Loaded ${parsedProposals.length} proposals from subgraph`);
@@ -324,7 +324,8 @@ export function useGovernance() {
         targets: Address[],
         values: bigint[],
         calldatas: `0x${string}`[],
-        description: string
+        description: string,
+        proposer: Address
     ) => {
         setError(null);
         try {
@@ -334,7 +335,7 @@ export function useGovernance() {
                 address: V2_CONTRACTS.ProtocolGovernor as Address,
                 abi: GOVERNOR_ABI,
                 functionName: 'execute',
-                args: [targets, values, calldatas, descriptionHash],
+                args: [targets, values, calldatas, descriptionHash, proposer],
             });
 
             return { hash };
@@ -344,22 +345,22 @@ export function useGovernance() {
         }
     }, [writeContractAsync]);
 
-    // Check if user has voted on a proposal
-    const checkHasVoted = useCallback(async (proposalId: bigint): Promise<boolean> => {
-        if (!address || !publicClient) return false;
+    // Check if user has voted on a proposal (tokenId-based)
+    const checkHasVoted = useCallback(async (proposalId: bigint, tokenId: bigint): Promise<boolean> => {
+        if (!publicClient) return false;
 
         try {
             const hasVoted = await publicClient.readContract({
                 address: V2_CONTRACTS.ProtocolGovernor as Address,
                 abi: GOVERNOR_ABI,
                 functionName: 'hasVoted',
-                args: [proposalId, address],
+                args: [proposalId, tokenId],
             });
             return hasVoted;
         } catch {
             return false;
         }
-    }, [address, publicClient]);
+    }, [publicClient]);
 
     // Get proposal state
     const getProposalState = useCallback(async (proposalId: bigint): Promise<ProposalState | null> => {

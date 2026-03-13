@@ -370,7 +370,8 @@ export default function GovernancePage() {
                                                     proposal.targets,
                                                     proposal.values,
                                                     proposal.calldatas,
-                                                    proposal.description
+                                                    proposal.description,
+                                                    proposal.proposer
                                                 )}
                                                 className="w-full py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-400 hover:to-emerald-400 transition"
                                             >
