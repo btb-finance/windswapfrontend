@@ -114,6 +114,9 @@ function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, 
     const [deadline, setDeadline] = useState<number>(30);
     const [slippageError, setSlippageError] = useState<string | null>(null);
 
+    // Price impact & high-impact acknowledgment
+    const [priceImpactAccepted, setPriceImpactAccepted] = useState(false);
+
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
     const [isApproving, setIsApproving] = useState(false);
@@ -383,6 +386,24 @@ function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, 
         },
     });
 
+    // Price impact state — computed inside the route-finding effect
+    const [spotRate, setSpotRate] = useState<number | null>(null);
+
+    // Calculate price impact from spot rate vs execution rate
+    const priceImpact = (() => {
+        if (!spotRate || !amountIn || !amountOut || parseFloat(amountIn) <= 0) return null;
+        const execRate = parseFloat(amountOut) / parseFloat(amountIn);
+        const impact = ((spotRate - execRate) / spotRate) * 100;
+        return impact > 0 ? impact : 0;
+    })();
+
+    const highPriceImpact = priceImpact !== null && priceImpact > 2;
+
+    // Reset acceptance when amounts/tokens change
+    useEffect(() => {
+        setPriceImpactAccepted(false);
+    }, [amountIn, amountOut, tokenIn, tokenOut]);
+
     // ===== Find Best Route (V2 + V3) =====
     useEffect(() => {
         const findBestRoute = async () => {
@@ -541,6 +562,19 @@ function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, 
                         setBestRoute(best);
                         setAmountIn(best.amountInComputed || '');
                     }
+
+                    // Fetch spot rate with a small reference amount for price impact
+                    try {
+                        const refAmount = '0.01';
+                        const spotRoute = await findMultiHopRoute(tokenIn, tokenOut, refAmount);
+                        if (spotRoute && parseFloat(spotRoute.amountOut) > 0) {
+                            setSpotRate(parseFloat(spotRoute.amountOut) / parseFloat(refAmount));
+                        } else {
+                            setSpotRate(null);
+                        }
+                    } catch {
+                        setSpotRate(null);
+                    }
                 } else {
                     setBestRoute(null);
                     if (independentField === 'INPUT') setAmountOut('');
@@ -608,7 +642,9 @@ function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, 
         bestRoute &&
         parseFloat(bestRoute.amountOut) > 0 &&
         // For exact output, check amountInComputed
-        (independentField === 'INPUT' ? true : (bestRoute.amountInComputed && parseFloat(bestRoute.amountInComputed) > 0));
+        (independentField === 'INPUT' ? true : (bestRoute.amountInComputed && parseFloat(bestRoute.amountInComputed) > 0)) &&
+        // Require acceptance for high price impact
+        (!highPriceImpact || priceImpactAccepted);
 
     // Calculate rate
     const rate = amountIn && amountOut && parseFloat(amountIn) > 0
@@ -809,6 +845,34 @@ function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, 
                         <span className="text-gray-400">Min. received</span>
                         <span>{parseFloat(amountOutMin).toFixed(4)} {tokenOut.symbol}</span>
                     </div>
+                    {priceImpact !== null && (
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">Price Impact</span>
+                            <span className={priceImpact > 5 ? 'text-red-500 font-bold' : priceImpact > 2 ? 'text-orange-400 font-semibold' : 'text-green-400'}>
+                                {priceImpact < 0.01 ? '<0.01' : priceImpact.toFixed(2)}%
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* High Price Impact Warning */}
+            {highPriceImpact && (
+                <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/40">
+                    <p className="text-red-400 text-xs font-semibold mb-2">
+                        Price impact is {priceImpact!.toFixed(2)}% — you may lose a significant portion of your funds due to low liquidity.
+                    </p>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={priceImpactAccepted}
+                            onChange={(e) => setPriceImpactAccepted(e.target.checked)}
+                            className="mt-0.5 accent-red-500"
+                        />
+                        <span className="text-xs text-red-300">
+                            I understand that this swap has high price impact and I may receive significantly fewer tokens than expected. I accept the risk of potential loss.
+                        </span>
+                    </label>
                 </div>
             )}
 
@@ -837,7 +901,11 @@ function SwapInterfaceInner({ initialTokenIn, initialTokenOut, onTokenInChange, 
                                 ? 'No Route Found'
                                 : !amountIn
                                     ? 'Enter Amount'
-                                    : 'Swap'}
+                                    : highPriceImpact && !priceImpactAccepted
+                                        ? 'Accept Price Impact to Swap'
+                                        : highPriceImpact
+                                            ? 'Swap Anyway'
+                                            : 'Swap'}
                 </button>
             )}
 

@@ -39,7 +39,12 @@ export const ethereum = defineChain({
     },
     rpcUrls: {
         default: {
-            http: ['https://eth.llamarpc.com'],
+            http: [
+                'https://eth.llamarpc.com',
+                'https://eth.merkle.io',
+                'https://rpc.eth.gateway.fm',
+                'https://eth.meowrpc.com',
+            ],
         },
     },
     blockExplorers: {
