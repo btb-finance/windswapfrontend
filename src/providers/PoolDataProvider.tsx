@@ -604,6 +604,11 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         ? 0
                         : rawVolume24h;
 
+                    const sym0 = (known0?.symbol || p.token0.symbol).toUpperCase();
+                    const sym1 = (known1?.symbol || p.token1.symbol).toUpperCase();
+                    const STABLES = ['USDC', 'USDT', 'USDT0', 'USDC.N', 'DAI', 'FRAX', 'BUSD', 'LUSD', 'TUSD', 'CUSD', 'IUSDC'];
+                    const isStable = STABLES.includes(sym0) && STABLES.includes(sym1);
+
                     return {
                         address: p.id as Address,
                         token0: {
@@ -619,7 +624,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             logoURI: known1?.logoURI,
                         },
                         poolType: 'CL' as const,
-                        stable: false,
+                        stable: isStable,
                         tickSpacing: typeof p.tickSpacing === 'number' ? p.tickSpacing : parseInt(String(p.tickSpacing)) || 0,
                         reserve0: '0', // Subgraph doesn't give individual reserves
                         reserve1: '0',

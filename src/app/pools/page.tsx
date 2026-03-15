@@ -164,9 +164,11 @@ export default function PoolsPage() {
     };
 
     // Helper to check if pool is in a category
+    const STABLECOINS = ['USDC', 'USDT', 'USDC.N', 'DAI', 'FRAX', 'BUSD', 'LUSD', 'TUSD', 'UST', 'CUSD', 'IUSDC'];
     const isStablePool = (pool: typeof allPools[0]) => {
+        if (pool.stable) return true;
         const symbols = [pool.token0.symbol, pool.token1.symbol].map(s => s.toUpperCase());
-        return symbols.includes('USDC') && (symbols.includes('USDT') || symbols.includes('USDC.N'));
+        return symbols.every(s => STABLECOINS.includes(s));
     };
     const isWindPool = (pool: typeof allPools[0]) => {
         return pool.token0.symbol.toUpperCase() === 'WIND' || pool.token1.symbol.toUpperCase() === 'WIND';
@@ -191,10 +193,13 @@ export default function PoolsPage() {
 
         if (search) {
             const searchLower = search.toLowerCase();
-            return (
-                pool.token0.symbol.toLowerCase().includes(searchLower) ||
-                pool.token1.symbol.toLowerCase().includes(searchLower)
-            );
+            const matchesToken = pool.token0.symbol.toLowerCase().includes(searchLower) ||
+                pool.token1.symbol.toLowerCase().includes(searchLower);
+            const matchesType = ('stable'.includes(searchLower) && pool.stable) ||
+                ('volatile'.includes(searchLower) && pool.poolType === 'V2' && !pool.stable) ||
+                (pool.poolType.toLowerCase().includes(searchLower));
+            const matchesAddress = pool.address.toLowerCase().includes(searchLower);
+            return matchesToken || matchesType || matchesAddress;
         }
         return true;
     });
