@@ -88,7 +88,7 @@ function TokenInputComponent({
                         onChange={handleAmountChange}
                         placeholder="0.0"
                         disabled={disabled}
-                        className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600"
+                        className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none border-none ring-0 focus:outline-none focus:ring-0 focus:border-none placeholder-gray-600"
                         aria-label={`Enter ${label.toLowerCase()} amount`}
                     />
 
