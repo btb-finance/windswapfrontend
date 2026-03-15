@@ -653,7 +653,12 @@ export default function VotePage() {
             );
         })
         .sort((a, b) => {
-            // Primary sort by user preference
+            // 1. Pools user voted on come first
+            const aVoted = existingVotes[a.pool.toLowerCase()] && existingVotes[a.pool.toLowerCase()] > BigInt(0) ? 1 : 0;
+            const bVoted = existingVotes[b.pool.toLowerCase()] && existingVotes[b.pool.toLowerCase()] > BigInt(0) ? 1 : 0;
+            if (bVoted !== aVoted) return bVoted - aVoted;
+
+            // 2. Sort by user preference
             if (gaugeSortBy === 'rewards') {
                 const aRewards = a.rewardTokens?.reduce((sum, r) => sum + Number(formatUnits(r.amount, r.decimals)), 0) || 0;
                 const bRewards = b.rewardTokens?.reduce((sum, r) => sum + Number(formatUnits(r.amount, r.decimals)), 0) || 0;
@@ -664,12 +669,19 @@ export default function VotePage() {
                 if (bWeight !== aWeight) return bWeight - aWeight;
             }
 
-            // Secondary sort: Active gauges first, then alive gauges
+            // 3. Active gauges first, then alive gauges
             if (a.gauge && !b.gauge) return -1;
             if (!a.gauge && b.gauge) return 1;
             if (a.isAlive && !b.isAlive) return -1;
             if (!a.isAlive && b.isAlive) return 1;
-            return 0;
+
+            // 4. Lower fee pools first (V2 Stable < V2 Volatile < CL)
+            const feeRank = (g: typeof a) => {
+                if (g.poolType === 'V2' && g.isStable) return 0;
+                if (g.poolType === 'V2') return 1;
+                return 2; // CL
+            };
+            return feeRank(a) - feeRank(b);
         });
 
     return (
@@ -1420,7 +1432,7 @@ export default function VotePage() {
                                                                 value={voteWeights[gauge.pool] || ''}
                                                                 onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
                                                                 disabled={!selectedVeNFT || !gauge.isAlive}
-                                                                className="w-10 h-6 py-0 px-1 rounded bg-white/5 text-center text-[10px] leading-6 outline-none focus:ring-1 focus:ring-primary disabled:opacity-40 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                className="w-10 px-1 py-1 rounded bg-white/5 text-center text-[10px] outline-none disabled:opacity-40 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                                                             />
                                                             {voteWeights[gauge.pool] > 0 && (
                                                                 <span className="text-[10px] text-cyan-400">

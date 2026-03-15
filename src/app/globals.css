@@ -864,11 +864,9 @@ select:focus {
     padding: 0.875rem;
   }
 
-  /* Better touch targets for vote buttons */
+  /* Prevent iOS zoom on number inputs */
   input[type="number"] {
-    min-height: 44px;
     font-size: 16px;
-    /* Prevents iOS zoom */
   }
 }
 
