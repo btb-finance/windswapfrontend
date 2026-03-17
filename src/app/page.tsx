@@ -108,7 +108,7 @@ export default function Home() {
             <span className="gradient-text">Wind Swap</span>
           </h1>
           <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-4 md:mb-6 px-2">
-            The Next-Gen DEX on Sei Network
+            The Next-Gen DEX on Sei and Base Network
           </p>
           <p className="text-sm md:text-lg text-gray-400 max-w-3xl mx-auto mb-6 md:mb-8 px-2">
             Trade with the best rates, earn rewards as a liquidity provider, and shape the protocol by voting on pool incentives.
