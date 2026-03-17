@@ -26,7 +26,14 @@ export function Header() {
 
     return (
         <header className="fixed top-0 left-0 right-0 z-50">
-            <div className="glass-header">
+            {/* Base Network Banner */}
+            <div className="bg-[#0052FF] text-white text-xs sm:text-sm py-1.5 px-4 text-center font-medium flex justify-center items-center gap-2">
+                <span>🌟 WindSwap on Base is LIVE!</span>
+                <a href="https://base.windswap.org/" target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-white/80 transition-colors flex items-center gap-1">
+                    Explore now <span aria-hidden="true">&rarr;</span>
+                </a>
+            </div>
+            <div className="glass-header border-t border-white/10">
                 <div className="container mx-auto px-3 md:px-6 py-2 md:py-4">
                     <div className="flex items-center justify-between">
                         {/* Logo - text hidden on mobile */}
