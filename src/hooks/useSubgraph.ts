@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { fetchSubgraph, SUBGRAPH_URL } from '@/config/subgraph';
+import { fetchSubgraph, SUBGRAPH_URL, SUBGRAPH_HEADERS } from '@/config/subgraph';
 
 // Types matching subgraph schema
 export interface SubgraphToken {
@@ -543,6 +543,6 @@ export function useUserPositions(userAddress: string | undefined) {
     };
 }
 
-// Export the subgraph URL for direct use
-export { SUBGRAPH_URL };
+// Export the subgraph URL and headers for direct use
+export { SUBGRAPH_URL, SUBGRAPH_HEADERS };
 

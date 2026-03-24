@@ -1,119 +1,124 @@
 // Wind Swap Contract Addresses - Sei Mainnet
+// V2 deployed via windv2, V3/CL via windv3swap (CreateX CREATE3)
 // All contracts verified on SeiScan
 
 // ============================================
-// V2 Core Contracts
+// V2 Core Contracts (new deployment - bug fixes)
 // ============================================
 export const V2_CONTRACTS = {
     // Protocol Token (WIND)
-    WIND: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
-    YAKA: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421', // Legacy alias
+    WIND: '0x888a4F89aF7dD0Be836cA367C9FF5490c0F6e888',
+    YAKA: '0x888a4F89aF7dD0Be836cA367C9FF5490c0F6e888', // Legacy alias
 
     // Core Voting Escrow
-    VotingEscrow: '0x9312A9702c3F0105246e12874c4A0EdC6aD07593',
+    VotingEscrow: '0x88889C4Be508cA88eba6ad802340C0563891D426',
 
     // Router for V2 swaps and liquidity
-    Router: '0x5f401E565ed095eeC0EFAf1970E4B60ba5aa8995',
+    Router: '0x88883154C9F8eb3bd34fb760bda1EB7556a20e14',
 
     // Voter for gauge voting
-    Voter: '0x4B7e64A935aEAc6f1837a57bdA329c797Fa2aD22',
+    Voter: '0x88881EB4b5dD3461fC0CFBc44606E3b401197E38',
 
     // Token minter
-    Minter: '0xD56369432BBb4F40143f8C930D96c83c10c68aEE',
+    Minter: '0x8888a8585d2Ab886800409fF97Ce84564CbFeF47',
 
     // V2 Pool Factory
-    PoolFactory: '0xeE6476aa1B912f7c3Ab45b73990f26B840c42069',
+    PoolFactory: '0x88880e3dA8676C879c3D019EDE0b5a74586813be',
 
     // Pool implementation
-    Pool: '0x41B5fD249039e4ab492227dB014DDbA79c2a1B92',
+    Pool: '0x888846064b562b1d41F0CbA3B55e28699B1F6d86',
 
     // Rewards distributor for veNFT rebases
-    RewardsDistributor: '0x2ac111A4647708781f797F0a8794b0aEC43ED854',
+    RewardsDistributor: '0x8888f1e8908F7B268439289091b3Fd1dE2B4c124',
 
     // Factory registry
-    FactoryRegistry: '0x168df826C17d245187f74bD67008aE623e4496f9',
+    FactoryRegistry: '0x8888220B5E60586D09bc1D0738d964B3c73b3AC1',
 
     // Gauge Factory
-    GaugeFactory: '0x5137eF6b4FB51E482aafDFE4B82E2618f6DE499a',
+    GaugeFactory: '0x88886e546d9024C53Cfb0FbD87DE83FA9BF9e857',
 
     // Voting Rewards Factory
-    VotingRewardsFactory: '0xD121d8f547F15ca30ECfC928D8313a6E49921f67',
+    VotingRewardsFactory: '0x8888Cc3Dc53BDdA5F8E97E10d9d2bD881662BA31',
 
     // Managed Rewards Factory
-    ManagedRewardsFactory: '0x425b61141356F2Ae2d9710FD7fA6718f0D3De958',
+    ManagedRewardsFactory: '0x8888f67c3A3d7F1F1F4B5440184c3D26e3eD4143',
 
     // VeArt Proxy for NFT art
-    VeArtProxy: '0x7292f11B204D5B3fB0CC7D10E0C10a26540359D5',
+    VeArtProxy: '0x888855bf9D1C6e575Ec0e7916D848E225D51BAe9',
 
     // Airdrop Distributor
-    AirdropDistributor: '0x9726ec2930C452594f1FAccA5112a8B57790A5A4',
+    AirdropDistributor: '0x8888d1016C41c6Fe72F968939B02F055284b200e',
 
     // Forwarder
-    Forwarder: '0x2EB4C1f3Dd12947dF49f5e7E399B4250d4640692',
+    Forwarder: '0x888823B4514D65c035f4528255d0e514C2A57b98',
 
-    // Governance
-    ProtocolGovernor: '0x70123139AAe07Ce9d7734E92Cd1D658d6d9Ce3d2',
-    EpochGovernor: '0x8Fc6107ba0b72cd72ad840Ab0Bcce94b30262b44',
+    // Governance (stubs)
+    ProtocolGovernor: '0x0000000000000000000000000000000000000000',
+    EpochGovernor: '0x0000000000000000000000000000000000000000',
 
-    // Stablecoin Zap helper
-    StablecoinZap: '0x8dfbAC3C691BEACD54949bBd43FF8bBe869e8930',
+    // Stablecoin Zap helper (stub, old one removed)
+    StablecoinZap: '0x0000000000000000000000000000000000000000',
 } as const;
 
 // ============================================
-// V2 Libraries
+// V2 Libraries (new deployment - bug fixes)
 // ============================================
 export const V2_LIBRARIES = {
-    PerlinNoise: '0xa1FB21086A696CdBF40D20fbEF7F5b4fC5091398',
-    Trig: '0x53A64478C875B521d4fc7A9AdA3f7269137f7F80',
-    BalanceLogicLibrary: '0x7ae7DF0efA84607606e830Bbd9181327b7Cd77c4',
-    DelegationLogicLibrary: '0x1b3A8866763f4144b5f574166573BfC5352A6812',
+    BalanceLogicLibrary: '0x8888957497A69F02004aB78834279E37e66D790A',
+    DelegationLogicLibrary: '0x88885ce56AD5836629466AD0429c386a47676FD8',
 } as const;
 
 // ============================================
-// Slipstream (Concentrated Liquidity) Contracts
+// Slipstream (Concentrated Liquidity) Contracts (new deployment - bug fixes)
 // ============================================
 export const CL_CONTRACTS = {
     // CL Factory for creating pools
-    CLFactory: '0xA0E081764Ed601074C1B370eb117413145F5e8Cc',
+    CLFactory: '0x8888A3D87EF6aBC5F50572661E4729A45b255cF6',
 
     // CL Pool implementation
-    CLPool: '0x4aDA3B73188649D7af11eb00464E789220077800',
+    CLPool: '0x8888125154253b50bE0958EDE6648524f92DcEBe',
 
     // CL Gauge Factory
-    CLGaugeFactory: '0xbb24DA8eDAD6324a6f58485702588eFF08b3Cd64',
+    CLGaugeFactory: '0x8888B7b5731EBB4E7962cC20b186C92C94bCAFbd',
 
     // CL Gauge implementation
-    CLGauge: '0xb24D93B3f9C48E05879B1Be77e88489950E16982',
+    CLGauge: '0x88889Dc37A0829d2c5f0F59363ba1De6b6E4E7c8',
 
     // Swap Router for CL swaps
-    SwapRouter: '0x960cDB8A41FC53eD72750F6b5E81DEAEBADCF818',
+    SwapRouter: '0x8888EEA5C97AF36f764259557d2D4CA23e6b19Ff',
 
     // NFT Position Manager for CL positions
-    NonfungiblePositionManager: '0x0e98B82C5FAec199DfAFe2b151d51d40522e7f35',
+    NonfungiblePositionManager: '0x8888bB79b80e6B48014493819656Ffc1444d7687',
 
     // Token Position Descriptor (NFT metadata)
-    NonfungibleTokenPositionDescriptor: '0xe4C6586B13EebB8a8d05A35e147784b0Fa7F077e',
+    NonfungibleTokenPositionDescriptor: '0x8888e88A64CF0404b523944f8cf7182947D4261d',
 
     // Quoter for getting swap quotes
-    QuoterV2: '0x4A42169A43c148674708622583682dA668B8b43D',
+    QuoterV2: '0x888831E6a70C71009765bAa1C3d86031539d6B15',
 
     // Mixed Route Quoter (supports V2 + CL routes)
-    MixedRouteQuoterV1: '0xCC4Af1C94AfC5eA71Fee618A880c271E0416F9a4',
+    MixedRouteQuoterV1: '0x88884631783f44261ba37da9a37ffa65dcB1A676',
 
     // Sugar Helper for data aggregation
-    SugarHelper: '0x1057B7121E75E3df8fb78aA8bdD71d78a850Cf6B',
+    SugarHelper: '0x8888F211bC93753a9287f64bdD45a7184C1766Ad',
 
     // Custom Swap Fee Module
-    CustomSwapFeeModule: '0xa63203F534539e85175B813db14C4a701FDE0a15',
+    CustomSwapFeeModule: '0x8888397cA7c951f700CAFc2E8B657761B92D2aDe',
 
     // Custom Unstaked Fee Module
-    CustomUnstakedFeeModule: '0x4D464AaE5AA2cE4012c32daF8B58C952dA731463',
+    CustomUnstakedFeeModule: '0x88889731C6faDb268e0BB34d9f104B54e6d32154',
 
     // NFT Descriptor Library
-    NFTDescriptor: '0x30D2CcF8Bf963Ce8D8905c8Eac8Bfff0De805024',
+    NFTDescriptor: '0x88881883ff4d81C6E72978673104934D0852a44a',
 
     // NFT SVG Library
-    NFTSVG: '0x974bbfc2DE0EfEd83A950fcB323c429d29c288F3',
+    NFTSVG: '0x8888719B0870570DAaCc37473c2290635F37D5E9',
+
+    // Tick Lens
+    TickLens: '0x8888C63496a29A46c8E005983886D2552d4c3D03',
+
+    // CL Interface Multicall
+    CLInterfaceMulticall: '0x8888Ce7DE18b513DBe6935E0C82aAaE08ADc6127',
 } as const;
 
 // ============================================

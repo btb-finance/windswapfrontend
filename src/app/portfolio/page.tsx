@@ -17,7 +17,8 @@ import { usePoolData } from '@/providers/PoolDataProvider';
 import { getRpcForPoolData } from '@/utils/rpc';
 import { useToast } from '@/providers/ToastProvider';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { SUBGRAPH_URL } from '@/config/subgraph';
+import { SUBGRAPH_URL, SUBGRAPH_HEADERS } from '@/config/subgraph';
+import MigrationBanner from '@/components/common/MigrationBanner';
 
 async function fetchGaugeAddressByPool(poolId: string): Promise<string | null> {
     try {
@@ -29,7 +30,7 @@ async function fetchGaugeAddressByPool(poolId: string): Promise<string | null> {
 
         const response = await fetch(SUBGRAPH_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: SUBGRAPH_HEADERS,
             body: JSON.stringify({ query, variables: { pool: poolId.toLowerCase() } }),
         });
 
@@ -1420,6 +1421,8 @@ export default function PortfolioPage() {
                     </div>
                 )}
             </motion.div>
+
+            <MigrationBanner />
 
             {/* Tabs - Compact */}
             <div className="flex gap-1 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
