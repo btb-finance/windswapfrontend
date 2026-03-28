@@ -2,6 +2,9 @@
   command = "bun install --frozen-lockfile && bun run build"
   publish = ".next"
 
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
 [build.environment]
   NODE_VERSION = "25"
   # Use bun for faster builds
