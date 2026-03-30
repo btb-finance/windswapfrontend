@@ -8,6 +8,7 @@ import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { MainContent } from "@/components/layout/MainContent";
 import { PWAInstallPrompt } from "@/components/common/PWAInstallPrompt";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+import { MigrationPopup } from "@/components/common/MigrationPopup";
 
 
 const geistSans = Geist({
@@ -117,6 +118,9 @@ export default function RootLayout({
           <div className="hidden md:block">
             <Footer />
           </div>
+
+          {/* Migration Popup */}
+          <MigrationPopup />
 
           {/* PWA Install Prompt */}
           <PWAInstallPrompt />
