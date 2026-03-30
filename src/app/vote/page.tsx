@@ -112,6 +112,8 @@ export default function VotePage() {
 
     // Claimable voting rewards state: { tokenId: { gaugePool: { token: amount } } }
     const [votingRewards, setVotingRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
+    // Claimable bribe rewards state: { tokenId: { gaugePool: { token: amount } } }
+    const [bribeRewards, setBribeRewards] = useState<Record<string, Record<string, Record<string, bigint>>>>({});
     const [isLoadingVotingRewards, setIsLoadingVotingRewards] = useState(false);
 
     // Epoch bribes: { gaugeId: bribe[] }
@@ -150,7 +152,8 @@ export default function VotePage() {
         if (gauges.length === 0) return;
 
         const FIVE_MINUTES = 5 * 60 * 1000;
-        const key = `${address.toLowerCase()}|${positionsTokenIdsKey}|${gauges.length}`;
+        const bribeGaugeCount = Object.keys(epochBribes).length;
+        const key = `${address.toLowerCase()}|${positionsTokenIdsKey}|${gauges.length}|bribes:${bribeGaugeCount}`;
         const now = Date.now();
 
         if (rewardsFetchRef.current.inFlight) return;
@@ -159,10 +162,11 @@ export default function VotePage() {
         setIsLoadingVotingRewards(true);
         rewardsFetchRef.current.inFlight = true;
         try {
-            // Step 1: Get active votes for each veNFT to know which pools they voted for
+            // Step 1: Get ALL votes (including inactive/past epochs) for each veNFT
+            // Rewards accumulate across ALL epochs where user voted, not just current active votes
             const tokenIds = positions.map(p => p.tokenId.toString());
             const votesQuery = `query VeVotesForRewards($tokenIds: [ID!]) {
-                veVotes(where: { veNFT_in: $tokenIds, isActive: true }, first: 1000) {
+                veVotes(where: { veNFT_in: $tokenIds }, first: 1000) {
                     veNFT { id }
                     pool { id token0 { id decimals } token1 { id decimals } }
                 }
@@ -188,45 +192,66 @@ export default function VotePage() {
                 return;
             }
 
-            // Step 2: Build list of (tokenId, feeRewardContract, token, decimals) to call earned()
+            // Step 2: Build deduplicated list of (tokenId, rewardContract, token, decimals, rewardType) to call earned()
+            // Query BOTH fee and bribe reward contracts so users can claim all earned rewards
+            // Deduplicate by (veNFTId, feeReward, token, rewardType) since same pool appears across epochs
             type EarnedCall = {
                 veNFTId: string;
                 poolId: string;
                 feeReward: string;
                 token: string;
                 decimals: number;
+                rewardType: 'fee' | 'bribe';
             };
+            const seenCalls = new Set<string>();
             const calls: EarnedCall[] = [];
 
             for (const vote of veVotes) {
                 const poolId = vote.pool?.id?.toLowerCase();
                 if (!poolId) continue;
 
-                // Find gauge for this pool to get feeReward address
+                // Find gauge for this pool to get feeReward and bribeReward addresses
                 const gauge = gauges.find(g => g.pool.toLowerCase() === poolId);
-                if (!gauge || !gauge.feeReward || gauge.feeReward === '0x0000000000000000000000000000000000000000') continue;
+                if (!gauge) continue;
 
                 const veNFTId = vote.veNFT?.id;
                 if (!veNFTId) continue;
 
-                // Add calls for token0 and token1
-                if (vote.pool.token0?.id) {
-                    calls.push({
-                        veNFTId,
-                        poolId,
-                        feeReward: gauge.feeReward,
-                        token: vote.pool.token0.id,
-                        decimals: vote.pool.token0.decimals || 18,
-                    });
+                // Fee rewards (pool token0/token1 trading fees)
+                if (gauge.feeReward && gauge.feeReward !== '0x0000000000000000000000000000000000000000') {
+                    for (const poolToken of [vote.pool.token0, vote.pool.token1]) {
+                        if (!poolToken?.id) continue;
+                        const dedupeKey = `${veNFTId}-${gauge.feeReward}-${poolToken.id}-fee`;
+                        if (seenCalls.has(dedupeKey)) continue;
+                        seenCalls.add(dedupeKey);
+                        calls.push({
+                            veNFTId,
+                            poolId,
+                            feeReward: gauge.feeReward,
+                            token: poolToken.id,
+                            decimals: poolToken.decimals || 18,
+                            rewardType: 'fee',
+                        });
+                    }
                 }
-                if (vote.pool.token1?.id) {
-                    calls.push({
-                        veNFTId,
-                        poolId,
-                        feeReward: gauge.feeReward,
-                        token: vote.pool.token1.id,
-                        decimals: vote.pool.token1.decimals || 18,
-                    });
+
+                // Bribe rewards (incentive tokens) - query all tokens from epoch bribes for this gauge
+                if (gauge.bribeReward && gauge.bribeReward !== '0x0000000000000000000000000000000000000000') {
+                    const gaugeBribes = epochBribes[gauge.gauge?.toLowerCase() ?? ''] ?? [];
+                    const bribeTokens = [...new Map(gaugeBribes.map(b => [b.token.id, b.token])).entries()];
+                    for (const [tokenIdStr, tokenInfo] of bribeTokens) {
+                        const dedupeKey = `${veNFTId}-${gauge.bribeReward}-${tokenIdStr}-bribe`;
+                        if (seenCalls.has(dedupeKey)) continue;
+                        seenCalls.add(dedupeKey);
+                        calls.push({
+                            veNFTId,
+                            poolId,
+                            feeReward: gauge.bribeReward,
+                            token: tokenIdStr,
+                            decimals: tokenInfo.decimals || 18,
+                            rewardType: 'bribe',
+                        });
+                    }
                 }
             }
 
@@ -269,8 +294,9 @@ export default function VotePage() {
                 }
             }));
 
-            // Step 4: Aggregate results into votingRewards structure
-            const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
+            // Step 4: Aggregate results into separate fee and bribe reward structures
+            const newFeeRewards: Record<string, Record<string, Record<string, bigint>>> = {};
+            const newBribeRewards: Record<string, Record<string, Record<string, bigint>>> = {};
 
             for (const r of results) {
                 if (r.earned <= BigInt(0)) continue;
@@ -278,13 +304,15 @@ export default function VotePage() {
                 const tokenId = r.veNFTId;
                 const poolId = r.poolId.toLowerCase();
                 const tokenAddr = r.token.toLowerCase();
+                const target = r.rewardType === 'bribe' ? newBribeRewards : newFeeRewards;
 
-                if (!newRewards[tokenId]) newRewards[tokenId] = {};
-                if (!newRewards[tokenId][poolId]) newRewards[tokenId][poolId] = {};
-                newRewards[tokenId][poolId][tokenAddr] = r.earned;
+                if (!target[tokenId]) target[tokenId] = {};
+                if (!target[tokenId][poolId]) target[tokenId][poolId] = {};
+                target[tokenId][poolId][tokenAddr] = r.earned;
             }
 
-            setVotingRewards(newRewards);
+            setVotingRewards(newFeeRewards);
+            setBribeRewards(newBribeRewards);
 
             rewardsFetchRef.current.lastKey = key;
             rewardsFetchRef.current.lastTs = now;
@@ -294,7 +322,7 @@ export default function VotePage() {
             rewardsFetchRef.current.inFlight = false;
             setIsLoadingVotingRewards(false);
         }
-    }, [positions, address, positionsTokenIdsKey, gauges]);
+    }, [positions, address, positionsTokenIdsKey, gauges, epochBribes]);
 
 
     const fetchVeNftVoteStatus = useCallback(async () => {
@@ -360,36 +388,77 @@ export default function VotePage() {
         fetchVeNftVoteStatus();
     }, [fetchVeNftVoteStatus]);
 
-    // Fetch epoch bribes from subgraph for current epoch
+    // Fetch epoch bribes from subgraph for current epoch (for display) AND all epochs (for earned() token discovery)
     useEffect(() => {
-        if (!activePeriod) return;
-        const epoch = activePeriod.toString();
-        const query = `{
-            gaugeEpochBribes(where: { epoch: "${epoch}" }, first: 100) {
-                gauge { id }
-                epoch
-                token { id symbol decimals }
-                totalAmount
-                totalAmountUSD
-            }
-        }`;
-        fetch(SUBGRAPH_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
-        })
-            .then(r => r.json())
-            .then(result => {
-                const bribes: EpochBribe[] = result?.data?.gaugeEpochBribes || [];
+        const fetchBribes = async () => {
+            try {
+                // Fetch current epoch bribes for display in the vote tab
+                let currentEpochBribes: EpochBribe[] = [];
+                if (activePeriod) {
+                    const epoch = activePeriod.toString();
+                    const currentQuery = `{
+                        gaugeEpochBribes(where: { epoch: "${epoch}" }, first: 100) {
+                            gauge { id }
+                            epoch
+                            token { id symbol decimals }
+                            totalAmount
+                            totalAmountUSD
+                        }
+                    }`;
+                    const currentRes = await fetch(SUBGRAPH_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: currentQuery }),
+                    });
+                    const currentJson = await currentRes.json();
+                    currentEpochBribes = currentJson?.data?.gaugeEpochBribes || [];
+                }
+
+                // Fetch ALL epoch bribes to discover all bribe tokens for earned() calls
+                const allQuery = `{
+                    gaugeEpochBribes(first: 1000, orderBy: epoch, orderDirection: desc) {
+                        gauge { id }
+                        epoch
+                        token { id symbol decimals }
+                        totalAmount
+                        totalAmountUSD
+                    }
+                }`;
+                const allRes = await fetch(SUBGRAPH_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: allQuery }),
+                });
+                const allJson = await allRes.json();
+                const allBribes: EpochBribe[] = allJson?.data?.gaugeEpochBribes || [];
+
+                // Merge: current epoch bribes for display, all bribes for token discovery
                 const byGauge: Record<string, EpochBribe[]> = {};
-                for (const b of bribes) {
+
+                // Add current epoch bribes first (for display)
+                for (const b of currentEpochBribes) {
                     const gId = b.gauge.id.toLowerCase();
                     if (!byGauge[gId]) byGauge[gId] = [];
                     byGauge[gId].push(b);
                 }
+
+                // Add all other epoch bribes (for token discovery in earned() calls)
+                // Only add tokens not already present for this gauge
+                for (const b of allBribes) {
+                    const gId = b.gauge.id.toLowerCase();
+                    if (!byGauge[gId]) byGauge[gId] = [];
+                    const existingTokens = new Set(byGauge[gId].map(x => x.token.id.toLowerCase()));
+                    if (!existingTokens.has(b.token.id.toLowerCase())) {
+                        byGauge[gId].push(b);
+                    }
+                }
+
                 setEpochBribes(byGauge);
-            })
-            .catch(() => {/* silent */});
+            } catch {
+                /* silent */
+            }
+        };
+        fetchBribes();
     }, [activePeriod]);
 
     // Claim voting rewards for a specific veNFT and gauge
@@ -1625,6 +1694,81 @@ export default function VotePage() {
                                                 <div className="text-[10px] mt-1">Vote for pools to earn trading fees</div>
                                             </div>
                                         )}
+                                </div>
+
+                                {/* Bribe Rewards - Personal Claimable */}
+                                <div className="glass-card p-3 sm:p-4 mt-3">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-sm font-semibold">Bribe Rewards</h3>
+                                        <span className="text-xs text-purple-400">Incentive tokens</span>
+                                    </div>
+                                    {positions.map((position) => {
+                                        const tokenIdStr = position.tokenId.toString();
+                                        const positionBribes = bribeRewards[tokenIdStr] || {};
+                                        const hasBribes = Object.keys(positionBribes).some(pool =>
+                                            Object.keys(positionBribes[pool] || {}).length > 0
+                                        );
+
+                                        if (!hasBribes) return null;
+
+                                        return (
+                                            <div key={tokenIdStr} className="mb-3">
+                                                <div className="text-xs text-gray-400 mb-2">veNFT #{tokenIdStr}</div>
+                                                <div className="space-y-2">
+                                                    {Object.entries(positionBribes).map(([poolAddress, tokens]) => {
+                                                        if (Object.keys(tokens).length === 0) return null;
+                                                        const gauge = gauges.find(g => g.pool === poolAddress);
+                                                        if (!gauge) return null;
+
+                                                        return (
+                                                            <div key={poolAddress} className="p-2 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs font-medium">{gauge.symbol0}/{gauge.symbol1}</span>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleClaimVotingRewards(
+                                                                            position.tokenId,
+                                                                            gauge.bribeReward as Address,
+                                                                            Object.keys(tokens) as Address[]
+                                                                        )}
+                                                                        disabled={isClaimingVotingRewards === `${position.tokenId}-${gauge.bribeReward}`}
+                                                                        className="px-2 py-1 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition disabled:opacity-50"
+                                                                    >
+                                                                        {isClaimingVotingRewards === `${position.tokenId}-${gauge.bribeReward}` ? '...' : 'Claim'}
+                                                                    </button>
+                                                                </div>
+                                                                <div className="text-xs text-purple-400">
+                                                                    {Object.entries(tokens).map(([tokenAddr, amount], idx) => {
+                                                                        const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === tokenAddr.toLowerCase());
+                                                                        const decimals = token?.decimals || 18;
+                                                                        const symbol = token?.symbol || tokenAddr.slice(0, 6);
+                                                                        return (
+                                                                            <span key={tokenAddr}>
+                                                                                {parseFloat(formatUnits(amount, decimals)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {symbol}
+                                                                                {idx < Object.keys(tokens).length - 1 && ' + '}
+                                                                            </span>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {!isLoadingVotingRewards && Object.keys(bribeRewards).every(tid =>
+                                        Object.keys(bribeRewards[tid] || {}).every(pool =>
+                                            Object.keys(bribeRewards[tid][pool] || {}).length === 0
+                                        )
+                                    ) && (
+                                        <div className="text-center text-gray-500 text-xs py-4">
+                                            <div className="text-2xl mb-2">🎁</div>
+                                            <div>No bribe rewards to claim</div>
+                                            <div className="text-[10px] mt-1">Bribes appear when incentives are added to pools you voted for</div>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}
