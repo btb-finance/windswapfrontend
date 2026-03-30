@@ -118,7 +118,8 @@ export default function VotePage() {
 
     // Epoch bribes: { gaugeId: bribe[] }
     type EpochBribe = { gauge: { id: string }; token: { id: string; symbol: string; decimals: number }; totalAmount: string; totalAmountUSD: string };
-    const [epochBribes, setEpochBribes] = useState<Record<string, EpochBribe[]>>({});
+    const [currentEpochBribes, setCurrentEpochBribes] = useState<Record<string, EpochBribe[]>>({}); // Current epoch only - for vote tab display
+    const [allEpochBribes, setAllEpochBribes] = useState<Record<string, EpochBribe[]>>({}); // All epochs - for earned() token discovery
 
     // Vote status from subgraph veVotes (more reliable than hasVoted)
     const [veNftHasVotes, setVeNftHasVotes] = useState<Record<string, boolean>>({});
@@ -152,7 +153,7 @@ export default function VotePage() {
         if (gauges.length === 0) return;
 
         const FIVE_MINUTES = 5 * 60 * 1000;
-        const bribeGaugeCount = Object.keys(epochBribes).length;
+        const bribeGaugeCount = Object.keys(allEpochBribes).length;
         const key = `${address.toLowerCase()}|${positionsTokenIdsKey}|${gauges.length}|bribes:${bribeGaugeCount}`;
         const now = Date.now();
 
@@ -237,7 +238,7 @@ export default function VotePage() {
 
                 // Bribe rewards (incentive tokens) - query all tokens from epoch bribes for this gauge
                 if (gauge.bribeReward && gauge.bribeReward !== '0x0000000000000000000000000000000000000000') {
-                    const gaugeBribes = epochBribes[gauge.gauge?.toLowerCase() ?? ''] ?? [];
+                    const gaugeBribes = allEpochBribes[gauge.gauge?.toLowerCase() ?? ''] ?? [];
                     const bribeTokens = [...new Map(gaugeBribes.map(b => [b.token.id, b.token])).entries()];
                     for (const [tokenIdStr, tokenInfo] of bribeTokens) {
                         const dedupeKey = `${veNFTId}-${gauge.bribeReward}-${tokenIdStr}-bribe`;
@@ -322,7 +323,7 @@ export default function VotePage() {
             rewardsFetchRef.current.inFlight = false;
             setIsLoadingVotingRewards(false);
         }
-    }, [positions, address, positionsTokenIdsKey, gauges, epochBribes]);
+    }, [positions, address, positionsTokenIdsKey, gauges, allEpochBribes]);
 
 
     const fetchVeNftVoteStatus = useCallback(async () => {
@@ -432,28 +433,27 @@ export default function VotePage() {
                 const allJson = await allRes.json();
                 const allBribes: EpochBribe[] = allJson?.data?.gaugeEpochBribes || [];
 
-                // Merge: current epoch bribes for display, all bribes for token discovery
-                const byGauge: Record<string, EpochBribe[]> = {};
-
-                // Add current epoch bribes first (for display)
+                // Current epoch bribes - for vote tab display only
+                const currentByGauge: Record<string, EpochBribe[]> = {};
                 for (const b of currentEpochBribes) {
                     const gId = b.gauge.id.toLowerCase();
-                    if (!byGauge[gId]) byGauge[gId] = [];
-                    byGauge[gId].push(b);
+                    if (!currentByGauge[gId]) currentByGauge[gId] = [];
+                    currentByGauge[gId].push(b);
                 }
 
-                // Add all other epoch bribes (for token discovery in earned() calls)
-                // Only add tokens not already present for this gauge
+                // All epoch bribes - for earned() token discovery (deduplicated by token)
+                const allByGauge: Record<string, EpochBribe[]> = {};
                 for (const b of allBribes) {
                     const gId = b.gauge.id.toLowerCase();
-                    if (!byGauge[gId]) byGauge[gId] = [];
-                    const existingTokens = new Set(byGauge[gId].map(x => x.token.id.toLowerCase()));
+                    if (!allByGauge[gId]) allByGauge[gId] = [];
+                    const existingTokens = new Set(allByGauge[gId].map(x => x.token.id.toLowerCase()));
                     if (!existingTokens.has(b.token.id.toLowerCase())) {
-                        byGauge[gId].push(b);
+                        allByGauge[gId].push(b);
                     }
                 }
 
-                setEpochBribes(byGauge);
+                setCurrentEpochBribes(currentByGauge);
+                setAllEpochBribes(allByGauge);
             } catch {
                 /* silent */
             }
@@ -1436,7 +1436,7 @@ export default function VotePage() {
                                                             <div className="text-[10px] text-gray-400 mt-0.5 truncate">
                                                                 {(() => {
                                                                     const fees = gauge.rewardTokens ?? [];
-                                                                    const bribes = epochBribes[gauge.gauge?.toLowerCase() ?? ''] ?? [];
+                                                                    const bribes = currentEpochBribes[gauge.gauge?.toLowerCase() ?? ''] ?? [];
                                                                     const hasFees = fees.length > 0;
                                                                     const hasBribes = bribes.length > 0;
                                                                     if (!hasFees && !hasBribes) return <span className="text-gray-600">No fees yet</span>;
