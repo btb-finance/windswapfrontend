@@ -16,6 +16,7 @@ const navLinks = [
     { href: '/btb', label: 'BTB' },
     { href: '/mining', label: 'Mining' },
     { href: '/wind', label: 'Wind' },
+    { href: '/migrate', label: 'Migrate' },
 ];
 
 export function Header() {

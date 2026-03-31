@@ -7,7 +7,7 @@ export function MigrationPopup() {
 
     useEffect(() => {
         try {
-            const dismissed = localStorage.getItem('windswap_popup_dismissed');
+            const dismissed = localStorage.getItem('windswap_popup_v2_dismissed');
             if (dismissed !== 'true') {
                 // Show popup after a short delay so page loads first
                 const timer = setTimeout(() => setShow(true), 1500);
@@ -19,7 +19,7 @@ export function MigrationPopup() {
     const handleDismiss = () => {
         setShow(false);
         try {
-            localStorage.setItem('windswap_popup_dismissed', 'true');
+            localStorage.setItem('windswap_popup_v2_dismissed', 'true');
         } catch {}
     };
 
@@ -44,48 +44,41 @@ export function MigrationPopup() {
 
                 {/* Content */}
                 <div className="text-center">
-                    <div className="text-4xl mb-3">🏠</div>
-                    <h2 className="text-xl font-bold mb-2 gradient-text">WindSwap is now on Base!</h2>
+                    <h2 className="text-xl font-bold mb-2 gradient-text">Migrate Your veNFTs to Base</h2>
                     <p className="text-sm text-gray-300 mb-4">
-                        We are shifting focus to <span className="font-bold text-white">Base</span> as our primary chain.
+                        Wind Swap is moving to <span className="font-bold text-white">Base</span>. Migrate your locked WIND positions before the Sei frontend shuts down.
                     </p>
 
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 mb-4 text-left">
-                        <div className="flex items-start gap-2">
-                            <span className="text-lg">🎁</span>
-                            <div>
-                                <div className="text-sm font-bold text-amber-300 mb-1">veWIND 1:1 Airdrop</div>
-                                <div className="text-xs text-amber-100/80">
-                                    If you hold veWIND on WindSwap (Sei), you are eligible for a <span className="font-bold text-white">1:1 veWIND airdrop</span> on Base.
-                                </div>
-                            </div>
+                        <div className="text-sm font-bold text-amber-300 mb-1">veWIND 1:1 Migration</div>
+                        <div className="text-xs text-amber-100/80">
+                            Your veWIND on Sei migrates 1:1 to a max-locked veWIND on Base — same amount, full voting power.
                         </div>
                     </div>
 
                     <div className="p-3 rounded-xl bg-white/5 border border-white/10 mb-5 text-left">
                         <div className="text-xs text-gray-400 space-y-1">
-                            <div>• <span className="text-white font-medium">Sei frontend</span> sunsets on <span className="font-bold text-amber-400">May 1, 2026</span></div>
-                            <div>• Contracts on Sei remain live — anyone can host them</div>
-                            <div>• All future development focused on Base</div>
+                            <div>• Sei frontend shuts down on <span className="font-bold text-amber-400">May 1, 2026</span></div>
+                            <div>• Contracts on Sei remain live after shutdown</div>
+                            <div>• All future development is on Base</div>
+                            <div className="pt-1 text-amber-300 font-medium">Migrate before May 1, 2026 to avoid missing the window</div>
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-2">
                         <a
-                            href="https://discord.gg/pF7duV83Y"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full py-3 rounded-xl font-bold text-sm bg-[#5865F2] text-white hover:bg-[#4752C4] transition text-center"
+                            href="/migrate"
+                            className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 transition text-center"
                         >
-                            💬 Read the Discord Announcement
+                            Migrate Your veNFTs Now
                         </a>
                         <a
                             href="https://base.windswap.org/"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 transition text-center"
+                            className="w-full py-3 rounded-xl font-bold text-sm bg-white/10 border border-white/20 text-white hover:bg-white/15 transition text-center"
                         >
-                            🌟 Explore WindSwap on Base →
+                            Explore WindSwap on Base
                         </a>
                         <button
                             onClick={handleDismiss}

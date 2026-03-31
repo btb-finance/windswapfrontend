@@ -176,6 +176,16 @@ export const WIND_CURVE_CONTRACTS = {
 } as const;
 
 // ============================================
+// Migration Contracts (SEI → Base via Hyperlane)
+// ============================================
+export const MIGRATION_CONTRACTS = {
+    // WindMigrationSender on SEI mainnet (v2 — supports isPermanent)
+    Sender: '0x8b89f97f01502D67e081945eBF16D9Bc40B6eff9',
+    // WindMigrationReceiver on Base mainnet (v2 — calls lockPermanent when needed)
+    Receiver: '0x6b9BaB89057747bE9ecb579B5B79a5a423Af2Ca9',
+} as const;
+
+// ============================================
 // BTB Finance Contracts (Ethereum Mainnet)
 // ============================================
 export const BTB_CONTRACTS = {

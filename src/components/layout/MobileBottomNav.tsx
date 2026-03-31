@@ -25,9 +25,9 @@ const PortfolioIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
-const BridgeIcon = ({ className }: { className?: string }) => (
+const MigrateIcon = ({ className }: { className?: string }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
     </svg>
 );
 
@@ -37,11 +37,6 @@ const VoteIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
-const BTBIcon = ({ className }: { className?: string }) => (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-);
 
 const MiningIcon = ({ className }: { className?: string }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -63,7 +58,7 @@ const navItems = [
     { href: '/portfolio', label: 'Portfolio', Icon: PortfolioIcon, isMain: true },
     { href: '/wind', label: 'Curve', Icon: WindIcon },
     { href: '/vote', label: 'Vote', Icon: VoteIcon },
-    { href: '/btb', label: 'BTB', Icon: BTBIcon },
+    { href: '/migrate', label: 'Migrate', Icon: MigrateIcon },
     { href: '/mining', label: 'Mining', Icon: MiningIcon },
 ];
 
