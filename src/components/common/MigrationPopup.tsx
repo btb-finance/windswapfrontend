@@ -73,7 +73,7 @@ export function MigrationPopup() {
                             Migrate Your veNFTs Now
                         </a>
                         <a
-                            href="https://base.windswap.org/"
+                            href="https://windswap.org/"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full py-3 rounded-xl font-bold text-sm bg-white/10 border border-white/20 text-white hover:bg-white/15 transition text-center"

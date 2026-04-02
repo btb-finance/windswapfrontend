@@ -30,7 +30,7 @@ export function Header() {
             {/* Base Network Banner */}
             <div className="bg-[#0052FF] text-white text-xs sm:text-sm py-1.5 px-4 text-center font-medium flex justify-center items-center gap-2">
                 <span>🌟 WindSwap on Base is LIVE!</span>
-                <a href="https://base.windswap.org/" target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-white/80 transition-colors flex items-center gap-1">
+                <a href="https://windswap.org/" target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-white/80 transition-colors flex items-center gap-1">
                     Explore now <span aria-hidden="true">&rarr;</span>
                 </a>
             </div>

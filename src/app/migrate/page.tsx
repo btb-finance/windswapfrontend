@@ -278,7 +278,7 @@ export default function MigratePage() {
                             <MigrateIcon className="w-12 h-12 mx-auto mb-3 opacity-30" />
                             <p className="text-sm">No veNFTs found in this wallet</p>
                             <a
-                                href="https://base.windswap.org/"
+                                href="https://windswap.org/"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 mt-3 text-primary text-sm hover:underline"
@@ -316,12 +316,12 @@ export default function MigratePage() {
                 >
                     <p className="text-white/40 text-sm mb-2">After migration, check your veNFTs on Base:</p>
                     <a
-                        href="https://base.windswap.org/vote"
+                        href="https://windswap.org/vote"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 text-primary font-medium hover:underline text-sm"
                     >
-                        base.windswap.org/vote <ArrowRightIcon className="w-4 h-4" />
+                        windswap.org/vote <ArrowRightIcon className="w-4 h-4" />
                     </a>
                 </motion.div>
 
