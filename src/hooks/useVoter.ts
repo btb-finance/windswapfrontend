@@ -109,6 +109,19 @@ export function useVoter() {
     const vote = async (tokenId: bigint, poolVotes: { pool: Address; weight: number }[]) => {
         if (!address || poolVotes.length === 0) return;
 
+        // Voter.vote() reverts outside the voting window:
+        //  - first hour of an epoch  -> DistributeWindow()
+        //  - last hour of an epoch   -> NotWhitelistedNFT() (only whitelisted NFTs may vote then)
+        // Epochs flip every Thursday 00:00 UTC.
+        const WEEK = 7 * 24 * 3600;
+        const HOUR = 3600;
+        const now = Math.floor(Date.now() / 1000);
+        const intoEpoch = now % WEEK;
+        if (intoEpoch < HOUR || intoEpoch >= WEEK - HOUR) {
+            setError('Voting is closed during the hour before and after the weekly epoch flip (Thursday 00:00 UTC). Please try again after 01:00 UTC Thursday.');
+            return null;
+        }
+
         setError(null);
         try {
             const pools = poolVotes.map(v => v.pool);
